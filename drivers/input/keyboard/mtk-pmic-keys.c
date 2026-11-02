@@ -405,7 +405,12 @@ static int mtk_pmic_keys_probe(struct platform_device *pdev)
 		return error;
 	}
 
-	mtk_pmic_keys_lp_reset_setup(keys, mtk_pmic_regs);
+	/* Preserve the bootloader's manual recovery path during bring-up. */
+	if (IS_ENABLED(CONFIG_ARM64_OP6893_BRINGUP) &&
+	    of_machine_is_compatible("realme,op6893"))
+		dev_info(keys->dev, "preserving LK long-press reset configuration\n");
+	else
+		mtk_pmic_keys_lp_reset_setup(keys, mtk_pmic_regs);
 
 	platform_set_drvdata(pdev, keys);
 

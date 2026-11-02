@@ -1,0 +1,242 @@
+// SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+/*
+ * Realme GT Neo / X7 Max 5G (RMX3031 / RMX3033), board codename op6893.
+ *
+ * Memory layout and reserved regions are taken from the runtime FDT the stock
+ * bootloader produces for this unit; the 12 GiB /memory size matches the
+ * 0x40000000..0x340000000 window the bootloader reports.
+ *
+ * Boot chain: LK fastboot boot -> uniLoader (embedded Image + this DTB +
+ * initramfs) -> kernel, with the DTB handed over in x2.  Nothing here relies
+ * on the FDT that LK builds for Android.
+ */
+
+/dts-v1/;
+#include "mt6893.dtsi"
+
+/ {
+	model = "Realme GT Neo (RMX3031)";
+	compatible = "realme,op6893", "mediatek,mt6893";
+
+	chosen {
+		#address-cells = <2>;
+		#size-cells = <2>;
+
+		bootargs = "console=ttyGS0 loglevel=8 ignore_loglevel panic=10 fw_devlink=permissive";
+
+		framebuffer@796fc000 {
+			compatible = "simple-framebuffer";
+			reg = <0 0x796fc000 0 0x9f6000>;
+			width = <1080>;
+			height = <2400>;
+			stride = <4352>;
+			format = "a8r8g8b8";
+		};
+	};
+
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0 0x40000000 0x3 0x00000000>;
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/* BL31 + BL32 (Trustonic) live here. */
+		atf@48c00000 {
+			reg = <0 0x48c00000 0 0x200000>;
+			no-map;
+		};
+
+		/* AEE debug-kinfo block written by the bootloader. */
+		aee-debug-kinfo@48080000 {
+			reg = <0 0x48080000 0 0x10000>;
+			no-map;
+		};
+
+		/* minirdump is consumed by the vendor ramdump tooling. */
+		minirdump@48170000 {
+			reg = <0 0x48170000 0 0x10000>;
+			no-map;
+		};
+
+		ramoops@48090000 {
+			compatible = "ramoops";
+			reg = <0 0x48090000 0 0xe0000>;
+			record-size = <0x20000>;
+			console-size = <0x40000>;
+			pmsg-size = <0x10000>;
+			no-map;
+		};
+
+		/* PICACHU / DRAM scramble seed handed over by the bootloader. */
+		picachu@5ff00000 {
+			reg = <0 0x5ff00000 0 0x80000>;
+			no-map;
+		};
+
+		adsp@74000000 {
+			reg = <0 0x74000000 0 0xe30000>;
+			no-map;
+		};
+
+		spm@76900000 {
+			reg = <0 0x76900000 0 0x10000>;
+			no-map;
+		};
+
+		/*
+		 * Three 0x9f6000 scanout buffers.  The UEFI/uniLoader port and
+		 * fastboot both treat the third one (0x796fc000) as active.
+		 */
+		framebuffer@78310000 {
+			reg = <0 0x78310000 0 0x1df0000>;
+			no-map;
+		};
+
+		mcupm@7a100000 {
+			reg = <0 0x7a100000 0 0x100000>;
+			no-map;
+		};
+
+		tee@7a200000 {
+			reg = <0 0x7a200000 0 0x5800000>;
+			no-map;
+		};
+
+		tee-secmem@7fa00000 {
+			reg = <0 0x7fa00000 0 0x400000>;
+			no-map;
+		};
+
+		sspm@7feb0000 {
+			reg = <0 0x7feb0000 0 0x100000>;
+			no-map;
+		};
+
+		log-store@7ffbf000 {
+			reg = <0 0x7ffbf000 0 0x40000>;
+		};
+
+		emi-mbist@7ffff000 {
+			reg = <0 0x7ffff000 0 0x1000>;
+			no-map;
+		};
+
+		md-c-smem@88000000 {
+			reg = <0 0x88000000 0 0x4960000>;
+			no-map;
+		};
+
+		md-nc-smem@8e000000 {
+			reg = <0 0x8e000000 0 0x1800000>;
+			no-map;
+		};
+
+		scp@9fa00000 {
+			reg = <0 0x9fa00000 0 0x500000>;
+			no-map;
+		};
+
+		vpu-binary@bd6b0000 {
+			reg = <0 0xbd6b0000 0 0x2750000>;
+			no-map;
+		};
+
+		atf-log@bfe00000 {
+			reg = <0 0xbfe00000 0 0x40000>;
+			no-map;
+		};
+
+		ccci-tag@bff70000 {
+			reg = <0 0xbff70000 0 0x10000>;
+			no-map;
+		};
+
+		atf-ramdump@bff80000 {
+			reg = <0 0xbff80000 0 0x80000>;
+			no-map;
+		};
+
+		rkp@d0000000 {
+			reg = <0 0xd0000000 0 0x200000>;
+			no-map;
+		};
+
+		rkp-ns@d0200000 {
+			reg = <0 0xd0200000 0 0x200000>;
+		};
+
+		md-mem@e0000000 {
+			reg = <0 0xe0000000 0 0x1ff0000>;
+			no-map;
+		};
+
+		md-mem@e3000000 {
+			reg = <0 0xe3000000 0 0x150000>;
+			no-map;
+		};
+
+		md-mem@e4000000 {
+			reg = <0 0xe4000000 0 0x7a50000>;
+			no-map;
+		};
+
+		md-mem@fa850000 {
+			reg = <0 0xfa850000 0 0x37b0000>;
+			no-map;
+		};
+
+		dpm@ffe60000 {
+			reg = <0 0xffe60000 0 0x190000>;
+			no-map;
+		};
+
+		dramc-rk0@13ffff000 {
+			reg = <0x1 0x3ffff000 0 0x1000>;
+			no-map;
+		};
+
+		dramc-rk1@33ffff000 {
+			reg = <0x3 0x3ffff000 0 0x1000>;
+			no-map;
+		};
+	};
+
+	/*
+	 * Bring-up stand-in for the MT6359 VUSB LDO.  The real regulator needs
+	 * pwrap and the PMIC driver, which are not part of the first milestone;
+	 * the rail is already up when the bootloader hands over, and mtu3 only
+	 * needs the supply to exist.
+	 */
+	vusb33: regulator-vusb33 {
+		compatible = "regulator-fixed";
+		regulator-name = "vusb33";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+	};
+};
+
+&watchdog {
+	status = "okay";
+};
+
+&tphy {
+	status = "okay";
+};
+
+&u2port0 {
+	status = "okay";
+};
+
+&u3port0 {
+	status = "okay";
+};
+
+&usb0 {
+	vusb33-supply = <&vusb33>;
+	status = "okay";
+};

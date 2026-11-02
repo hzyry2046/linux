@@ -1,0 +1,62 @@
+[
+  {
+    "path": "/data/src/mikuui/vendor/oplus/op6893/proprietary/vendor/bin/wlan_assistant",
+    "size": 15360,
+    "sha256": "7ca456c570ceaada7483cbf9bafe983d5e67fac4be6bd8ee3d7d40c78da84c1d"
+  },
+  {
+    "path": "/data/src/mikuui/vendor/oplus/op6893/proprietary/vendor/lib64/libwifi-hal-mtk.so",
+    "size": 201112,
+    "sha256": "d86e2605d678a239033f458e00bfdd3fc180ce34e189f1d49b49419121ff421e"
+  },
+  {
+    "path": "/data/src/mikuui/vendor/oplus/op6893/proprietary/vendor/lib64/libnvram.so",
+    "size": 216033,
+    "sha256": "79f76350f99d564a56b6f77445cc4683ae9c89fc41c24e2c373c7abf28d54bd0"
+  },
+  {
+    "path": "/data/src/mikuui/vendor/oplus/op6893/proprietary/vendor/lib64/libcustom_nvram.so",
+    "size": 163856,
+    "sha256": "2dcd6c170a48168ac0d302587638d359159e48c70154235b930f505d5ccaae15"
+  },
+  {
+    "path": "/data/src/mikuui/vendor/oplus/op6893/proprietary/vendor/firmware/conninfra.cfg",
+    "size": 32,
+    "sha256": "47985608830ebb4038ea7b8645e5244dabe848f5033b3493b73a5ea9467993d9"
+  },
+  {
+    "path": "/data/src/mikuui/vendor/oplus/op6893/proprietary/vendor/firmware/BT_FW.cfg",
+    "size": 443,
+    "sha256": "7696bb23a111a4632acdcf700ff9160d8eeaac8b07239719df968c2a8bf966b7"
+  },
+  {
+    "path": "/data/src/mikuui/vendor/oplus/op6893/proprietary/vendor/firmware/WIFI_RAM_CODE_soc3_0_1a_1.bin",
+    "size": 973648,
+    "sha256": "c8689aace6c3b2f8d9ee49be358452e4d7359748ba2d564935e38cff0faafbf2"
+  },
+  {
+    "path": "/data/src/mikuui/vendor/oplus/op6893/proprietary/vendor/firmware/soc3_0_ram_wmmcu_1a_1_hdr.bin",
+    "size": 49868,
+    "sha256": "f95dd956a050f3c82c705d3b16a267c8fea0b37d8c6eff4a0200b435a5e42e12"
+  },
+  {
+    "path": "/data/src/mikuui/vendor/oplus/op6893/proprietary/vendor/firmware/soc3_0_ram_wifi_1a_1_hdr.bin",
+    "size": 296916,
+    "sha256": "16e8c8d5fbf47495711019b0cdae6e685d53cbbe53bc1969ce34db33163955ac"
+  },
+  {
+    "path": "/data/src/mikuui/vendor/oplus/op6893/proprietary/vendor/firmware/soc3_0_patch_wmmcu_1a_1_hdr.bin",
+    "size": 5726,
+    "sha256": "4fc5a6bcbbdd0a12c48a61a26768bc48c82da61f6083481771d81757e21b3750"
+  },
+  {
+    "path": "/data/src/mikuui/vendor/oplus/op6893/proprietary/vendor/firmware/soc3_0_ram_mcu_1a_1_hdr.bin",
+    "size": 165376,
+    "sha256": "a82b48735f9e8d21562a8317943844e75880ccec6f64802af581215441e9c3eb"
+  },
+  {
+    "path": "/data/src/mikuui/vendor/oplus/op6893/proprietary/vendor/firmware/soc3_0_ram_bt_1a_1_hdr.bin",
+    "size": 672040,
+    "sha256": "40636d230df19264a4b187a6f4399103be2215c00c9ad09a93b677013bcb5510"
+  }
+]

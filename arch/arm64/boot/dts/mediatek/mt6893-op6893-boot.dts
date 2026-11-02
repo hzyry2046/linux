@@ -1,0 +1,173 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+/dts-v1/;
+#include "mt6893.dtsi"
+#include "mt6893-pinfunc.h"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/reset/ti-syscon.h>
+#include <dt-bindings/clock/mt6893-clk.h>
+
+/ {
+	model = "Realme GT Neo op6893 (direct LK bring-up)";
+	compatible = "realme,op6893", "mediatek,mt6893";
+
+	/* ACK nominal rate; oscillator calibration/control remain inherited. */
+	ulposc: oscillator-ulposc {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <260000000>;
+		clock-output-names = "mt6893_ulposc";
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+		pinctrl-names = "default";
+		pinctrl-0 = <&volume_down_pins>;
+
+		key-volume-down {
+			label = "Volume Down";
+			linux,code = <KEY_VOLUMEDOWN>;
+			gpios = <&pio 155 GPIO_ACTIVE_LOW>;
+			debounce-interval = <32>;
+		};
+	};
+
+	/* Experimental: LK leaves the PMIC rail on; no PMIC control yet. */
+	vusb33_boot: regulator-vusb33-boot {
+		compatible = "regulator-fixed";
+		regulator-name = "vusb33-lk-inherited";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-always-on;
+	};
+
+	/* RAM and reservations are imported from this boot's LK FDT. */
+	chosen {
+		bootargs = "rdinit=/init maxcpus=8 loglevel=8 ignore_loglevel initcall_debug clk_ignore_unused regulator_ignore_unused fw_devlink=off panic=0 ramoops.mem_address=0x48090000 ramoops.mem_size=0xe0000 ramoops.record_size=0x20000 ramoops.console_size=0x40000 ramoops.pmsg_size=0x10000 ramoops.ftrace_size=0x1000 ramoops.ecc=0";
+	};
+};
+
+&watchdog {
+	timeout-sec = <30>;
+	status = "okay";
+};
+
+&usb0 {
+	/* Existing clock placeholders rely on LK leaving real gates enabled. */
+	vusb33-supply = <&vusb33_boot>;
+	phys = <&u2port0 PHY_TYPE_USB2>;
+	phy-names = "usb2-phy";
+	mediatek,u3p-dis-msk = <1>;
+	status = "okay";
+};
+
+&tphy {
+	status = "okay";
+};
+
+&u2port0 {
+	clocks = <&clk26m>;
+	clock-names = "ref";
+	mediatek,eye-vrt = <6>;
+	mediatek,eye-term = <6>;
+	status = "okay";
+};
+
+&{/soc} {
+	apmixedsys: clock-controller@1000c000 {
+		compatible = "mediatek,mt6893-apmixedsys";
+		reg = <0 0x1000c000 0 0x1000>;
+		#clock-cells = <1>;
+		clocks = <&clk26m>;
+		clock-names = "clk26m";
+	};
+
+	topckgen: clock-controller@10000000 {
+		compatible = "mediatek,mt6893-topckgen", "syscon";
+		reg = <0 0x10000000 0 0x1000>;
+		#clock-cells = <1>;
+		clocks = <&ulposc>, <&clk26m>, <&apmixedsys CLK_APMIXED_MAINPLL>;
+		clock-names = "ulposc", "clk26m", "mainpll";
+	};
+
+	/* Diagnostic transport: SPI setup and clock rates remain inherited. */
+	pwrap: pwrap@10026000 {
+		compatible = "mediatek,mt6885-pwrap";
+		reg = <0 0x10026000 0 0x1000>,
+		      <0 0x10028000 0 0x1000>;
+		reg-names = "pwrap", "spi_mst";
+		interrupts = <GIC_SPI 220 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&ufs_infracfg CLK_IFRAO_PMIC_AP>,
+			 <&ufs_infracfg CLK_IFRAO_PMIC_TMR>,
+			 <&topckgen CLK_TOP_PWRAP_ULPOSC_SEL>,
+			 <&topckgen CLK_TOP_OSC_D10>;
+		clock-names = "spi", "wrap", "ulposc", "ulposc_osc";
+
+		pmic {
+			compatible = "mediatek,mt6359";
+			interrupt-parent = <&pio>;
+			interrupts = <222 IRQ_TYPE_LEVEL_HIGH>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+
+			adc {
+				compatible = "mediatek,mt6359-auxadc";
+				#io-channel-cells = <1>;
+			};
+
+			keys {
+				compatible = "mediatek,mt6359-keys";
+
+				power {
+					linux,keycodes = <KEY_POWER>;
+				};
+
+				home {
+					linux,keycodes = <KEY_VOLUMEUP>;
+				};
+			};
+		};
+	};
+
+	/* Reset register/bit mapping from the running ACK device tree. */
+	ufs_infracfg: syscon@10001000 {
+		compatible = "mediatek,mt6893-infracfg_ao", "syscon", "simple-mfd";
+		reg = <0 0x10001000 0 0x1000>;
+		#clock-cells = <1>;
+		clocks = <&topckgen CLK_TOP_FPWRAP_ULPOSC>, <&topckgen CLK_TOP_AXI>;
+		clock-names = "pwrap", "axi";
+
+		ufs_reset: reset-controller {
+			compatible = "ti,syscon-reset";
+			#reset-cells = <1>;
+			ti,reset-bits =
+				<0x130 15 0x134 15 0 0
+				 (ASSERT_SET | DEASSERT_SET | STATUS_NONE)>,
+				<0x140 7 0x144 7 0 0
+				 (ASSERT_SET | DEASSERT_SET | STATUS_NONE)>,
+				<0x150 21 0x154 21 0 0
+				 (ASSERT_SET | DEASSERT_SET | STATUS_NONE)>;
+		};
+	};
+
+	ufs: ufs@11270000 {
+		compatible = "mediatek,mt8183-ufshci";
+		reg = <0 0x11270000 0 0x2300>;
+		interrupts = <GIC_SPI 105 IRQ_TYPE_LEVEL_HIGH>;
+		resets = <&ufs_reset 0>, <&ufs_reset 1>, <&ufs_reset 2>;
+		reset-names = "hci_rst", "unipro_rst", "crypto_rst";
+		/* Experimental: clocks, rails and PHY are inherited from LK. */
+		mediatek,ufs-disable-ah8;
+		/* Legacy controller reports the reserved LSDBS bit as set. */
+		mediatek,ufs-disable-mcq;
+	};
+};
+
+&pio {
+	volume_down_pins: volume-down-pins {
+		pins-key {
+			pinmux = <PINMUX_GPIO155__FUNC_GPIO155>;
+			input-enable;
+		};
+	};
+};

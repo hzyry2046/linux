@@ -1298,6 +1298,16 @@ static int ufs_mtk_init(struct ufs_hba *hba)
 	if (host->caps & UFS_MTK_CAP_DISABLE_MCQ)
 		hba->quirks |= UFSHCD_QUIRK_BROKEN_LSDBS_CAP;
 
+	/* Keep the LK-inherited resources on during op6893 storage bring-up. */
+	if (IS_ENABLED(CONFIG_ARM64_OP6893_BRINGUP) &&
+	    of_machine_is_compatible("realme,op6893")) {
+		hba->caps &= ~(UFSHCD_CAP_RPM_AUTOSUSPEND |
+			       UFSHCD_CAP_CLK_GATING | UFSHCD_CAP_CRYPTO |
+			       UFSHCD_CAP_WB_EN | UFSHCD_CAP_CLK_SCALING |
+			       UFSHCD_CAP_HIBERN8_WITH_CLK_GATING);
+		dev_info(dev, "op6893: inherited resources, no gating/scaling/WB\n");
+	}
+
 	ufs_mtk_init_clocks(hba);
 
 	/*

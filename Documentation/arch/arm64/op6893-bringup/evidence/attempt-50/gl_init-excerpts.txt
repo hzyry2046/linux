@@ -1,0 +1,122 @@
+wlan/core/gen4m/os/linux/gl_init.c:180: module_param_named(p2p, gprifnamep2p, charp, 0000);
+wlan/core/gen4m/os/linux/gl_init.c:181: module_param_named(ap, gprifnameap, charp, 0000);
+wlan/core/gen4m/os/linux/gl_init.c:182: #endif /* CFG_DRIVER_INF_NAME_CHANGE */
+wlan/core/gen4m/os/linux/gl_init.c:183:
+wlan/core/gen4m/os/linux/gl_init.c:184: char *gprifnamenvram = "";
+wlan/core/gen4m/os/linux/gl_init.c:185: module_param_named(nvram, gprifnamenvram, charp, 0000);
+wlan/core/gen4m/os/linux/gl_init.c:186:
+wlan/core/gen4m/os/linux/gl_init.c:187: #if CFG_SUPPORT_XONVRAM
+wlan/core/gen4m/os/linux/gl_init.c:188: char *gprifnamexonv = "";
+wlan/core/gen4m/os/linux/gl_init.c:189: module_param_named(xonvram, gprifnamexonv, charp, 0000);
+wlan/core/gen4m/os/linux/gl_init.c:190: #endif
+wlan/core/gen4m/os/linux/gl_init.c:2657: static void glLoadNvram(struct GLUE_INFO *prGlueInfo,
+wlan/core/gen4m/os/linux/gl_init.c:2658: 	struct REG_INFO *prRegInfo)
+wlan/core/gen4m/os/linux/gl_init.c:2659: {
+wlan/core/gen4m/os/linux/gl_init.c:2660: 	struct WIFI_CFG_PARAM_STRUCT *prNvramSettings;
+wlan/core/gen4m/os/linux/gl_init.c:2661: 	const struct firmware *fw = NULL;
+wlan/core/gen4m/os/linux/gl_init.c:2662: 	int err = 0;
+wlan/core/gen4m/os/linux/gl_init.c:2663:
+wlan/core/gen4m/os/linux/gl_init.c:2664: 	ASSERT(prRegInfo);
+wlan/core/gen4m/os/linux/gl_init.c:2665: 	ASSERT(prGlueInfo);
+wlan/core/gen4m/os/linux/gl_init.c:2666:
+wlan/core/gen4m/os/linux/gl_init.c:2667: 	/*
+wlan/core/gen4m/os/linux/gl_init.c:2668: 	* In Linux scenario, bring nvram by insmod
+wlan/core/gen4m/os/linux/gl_init.c:2669: 	* If there is both exit nvram in wmtWifi & insmod,
+wlan/core/gen4m/os/linux/gl_init.c:2670: 	* it will apply insomd nvram
+wlan/core/gen4m/os/linux/gl_init.c:2671: 	*/
+wlan/core/gen4m/os/linux/gl_init.c:2672: 	if (gprifnamenvram != NULL) {
+wlan/core/gen4m/os/linux/gl_init.c:2673: 		err = request_firmware(&fw, gprifnamenvram, prGlueInfo->prDev);
+wlan/core/gen4m/os/linux/gl_init.c:2674:
+wlan/core/gen4m/os/linux/gl_init.c:2675: 		if (!err) {
+wlan/core/gen4m/os/linux/gl_init.c:2676: 			DBGLOG(INIT, INFO,
+wlan/core/gen4m/os/linux/gl_init.c:2677: 				"Find nvram file: %s by insmod data:0x%p,size:%lu\n",
+wlan/core/gen4m/os/linux/gl_init.c:2678: 				gprifnamenvram,
+wlan/core/gen4m/os/linux/gl_init.c:2679: 				fw->data,
+wlan/core/gen4m/os/linux/gl_init.c:2680: 				fw->size);
+wlan/core/gen4m/os/linux/gl_init.c:2681:
+wlan/core/gen4m/os/linux/gl_init.c:2682: 			/*
+wlan/core/gen4m/os/linux/gl_init.c:2683: 			*  No need to handle CRC
+wlan/core/gen4m/os/linux/gl_init.c:2684: 			*  WlanLoadManufactureData will parse nvram by TLV
+wlan/core/gen4m/os/linux/gl_init.c:2685: 			*/
+wlan/core/gen4m/os/linux/gl_init.c:2686: 			if (fw->size > 0 && fw->size <= sizeof(g_aucNvram)) {
+wlan/core/gen4m/os/linux/gl_init.c:2687: 				kalMemCopy(g_aucNvram, fw->data, fw->size);
+wlan/core/gen4m/os/linux/gl_init.c:2688: 				g_NvramFsm = NVRAM_STATE_READY;
+wlan/core/gen4m/os/linux/gl_init.c:2689: 				DBGLOG(INIT, INFO, "Set NVRAM state[%d]\n",
+wlan/core/gen4m/os/linux/gl_init.c:2690: 					g_NvramFsm);
+wlan/core/gen4m/os/linux/gl_init.c:2691: #if CFG_MTK_ANDROID_WMT
+wlan/core/gen4m/os/linux/gl_init.c:2692: 				if (!g_IsPlatCbsRegistered) {
+wlan/core/gen4m/os/linux/gl_init.c:2693: 					register_plat_connsys_cbs();
+wlan/core/gen4m/os/linux/gl_init.c:2694: 					g_IsPlatCbsRegistered = TRUE;
+wlan/core/gen4m/os/linux/gl_init.c:2695: 				}
+wlan/core/gen4m/os/linux/gl_init.c:2696: #endif
+wlan/core/gen4m/os/linux/gl_init.c:2697: 			}
+wlan/core/gen4m/os/linux/gl_init.c:2698: 			release_firmware(fw);
+wlan/core/gen4m/os/linux/gl_init.c:2699: 		}
+wlan/core/gen4m/os/linux/gl_init.c:2700: 	}
+wlan/core/gen4m/os/linux/gl_init.c:2701:
+wlan/core/gen4m/os/linux/gl_init.c:2702: 	DBGLOG(INIT, INFO, "g_NvramFsm = %d\n", g_NvramFsm);
+wlan/core/gen4m/os/linux/gl_init.c:2703: 	if (g_NvramFsm != NVRAM_STATE_READY) {
+wlan/core/gen4m/os/linux/gl_init.c:2704: 		DBGLOG(INIT, WARN, "Nvram not available\n");
+wlan/core/gen4m/os/linux/gl_init.c:2705: 		return;
+wlan/core/gen4m/os/linux/gl_init.c:4740: static uint8_t wlanNvramBufHandler(void *ctx,
+wlan/core/gen4m/os/linux/gl_init.c:4741: 			const char *buf,
+wlan/core/gen4m/os/linux/gl_init.c:4742: 			uint16_t length)
+wlan/core/gen4m/os/linux/gl_init.c:4743: {
+wlan/core/gen4m/os/linux/gl_init.c:4744: 	DBGLOG(INIT, INFO, "buf = %p, length = %u\n", buf, length);
+wlan/core/gen4m/os/linux/gl_init.c:4745: 	if (buf == NULL || length <= 0)
+wlan/core/gen4m/os/linux/gl_init.c:4746: 		return -EFAULT;
+wlan/core/gen4m/os/linux/gl_init.c:4747:
+wlan/core/gen4m/os/linux/gl_init.c:4748: 	if (length > sizeof(g_aucNvram)) {
+wlan/core/gen4m/os/linux/gl_init.c:4749: 		DBGLOG(INIT, ERROR, "is over nvrm size %zu\n",
+wlan/core/gen4m/os/linux/gl_init.c:4750: 			sizeof(g_aucNvram));
+wlan/core/gen4m/os/linux/gl_init.c:4751: 		return -EINVAL;
+wlan/core/gen4m/os/linux/gl_init.c:4752: 	}
+wlan/core/gen4m/os/linux/gl_init.c:4753:
+wlan/core/gen4m/os/linux/gl_init.c:4754: 	kalMemZero(&g_aucNvram, sizeof(g_aucNvram));
+wlan/core/gen4m/os/linux/gl_init.c:4755: 	kalMemZero(&g_aucNvram_OnlyPreCal, sizeof(g_aucNvram_OnlyPreCal));
+wlan/core/gen4m/os/linux/gl_init.c:4756: 	if (copy_from_user(g_aucNvram, buf, length)) {
+wlan/core/gen4m/os/linux/gl_init.c:4757: 		DBGLOG(INIT, ERROR, "copy nvram fail\n");
+wlan/core/gen4m/os/linux/gl_init.c:4758: 		g_NvramFsm = NVRAM_STATE_INIT;
+wlan/core/gen4m/os/linux/gl_init.c:4759: 		return -EINVAL;
+wlan/core/gen4m/os/linux/gl_init.c:4760: 	}
+wlan/core/gen4m/os/linux/gl_init.c:4761:
+wlan/core/gen4m/os/linux/gl_init.c:4762: 	g_NvramFsm = NVRAM_STATE_READY;
+wlan/core/gen4m/os/linux/gl_init.c:4763: 	DBGLOG(INIT, INFO, "Set NVRAM state[%d]\n", g_NvramFsm);
+wlan/core/gen4m/os/linux/gl_init.c:4764: #if CFG_MTK_ANDROID_WMT
+wlan/core/gen4m/os/linux/gl_init.c:4765: 	if (!g_IsPlatCbsRegistered) {
+wlan/core/gen4m/os/linux/gl_init.c:4766: 		register_plat_connsys_cbs();
+wlan/core/gen4m/os/linux/gl_init.c:4767: 		g_IsPlatCbsRegistered = TRUE;
+wlan/core/gen4m/os/linux/gl_init.c:4768: 	}
+wlan/core/gen4m/os/linux/gl_init.c:4769: #endif
+wlan/core/gen4m/os/linux/gl_init.c:4770:
+wlan/core/gen4m/os/linux/gl_init.c:4771:
+wlan/core/gen4m/os/linux/gl_init.c:4772: 	/*do nvram update on test mode then driver sent new NVRAM to FW*/
+wlan/core/gen4m/os/linux/gl_init.c:5048: 	gprWdev[u4Idx] = prWdev[u4Idx];
+wlan/core/gen4m/os/linux/gl_init.c:5049:
+wlan/core/gen4m/os/linux/gl_init.c:5050: #if CFG_WLAN_ASSISTANT_NVRAM
+wlan/core/gen4m/os/linux/gl_init.c:5051: 	register_file_buf_handler(wlanXonvBufHandler, (void *)NULL,
+wlan/core/gen4m/os/linux/gl_init.c:5052: 			ENUM_BUF_TYPE_XONV);
+wlan/core/gen4m/os/linux/gl_init.c:5053: 	register_file_buf_handler(wlanNvramBufHandler, (void *)NULL,
+wlan/core/gen4m/os/linux/gl_init.c:5054: 			ENUM_BUF_TYPE_NVRAM);
+wlan/core/gen4m/os/linux/gl_init.c:5055: #endif
+wlan/core/gen4m/os/linux/gl_init.c:5056:
+wlan/core/gen4m/os/linux/gl_init.c:5057: #if ((CFG_MTK_ANDROID_WMT) && (CFG_TESTMODE_WMT_WIFI_ON_SUPPORT))
+wlan/core/gen4m/os/linux/gl_init.c:5058: 	register_is_wifi_in_test_mode_handler(glIsWifiInTestMode);
+wlan/core/gen4m/os/linux/gl_init.c:5059: #endif
+wlan/core/gen4m/os/linux/gl_init.c:5060:
+wlan/core/gen4m/os/linux/gl_init.c:7515: 	*pprRegInfo = &prGlueInfo->rRegInfo;
+wlan/core/gen4m/os/linux/gl_init.c:7516:
+wlan/core/gen4m/os/linux/gl_init.c:7517: 	/* P_REG_INFO_T prRegInfo = (P_REG_INFO_T) kmalloc(
+wlan/core/gen4m/os/linux/gl_init.c:7518: 	 *				sizeof(REG_INFO_T), GFP_KERNEL);
+wlan/core/gen4m/os/linux/gl_init.c:7519: 	 */
+wlan/core/gen4m/os/linux/gl_init.c:7520: 	kalMemSet(*pprRegInfo, 0, sizeof(struct REG_INFO));
+wlan/core/gen4m/os/linux/gl_init.c:7521:
+wlan/core/gen4m/os/linux/gl_init.c:7522: 	/* Trigger the action of switching Pwr state to drv_own */
+wlan/core/gen4m/os/linux/gl_init.c:7523: 	prAdapter->fgIsFwOwn = TRUE;
+wlan/core/gen4m/os/linux/gl_init.c:7524:
+wlan/core/gen4m/os/linux/gl_init.c:7525: 	/* Load NVRAM content to REG_INFO_T */
+wlan/core/gen4m/os/linux/gl_init.c:7526: 	glLoadNvram(prGlueInfo, *pprRegInfo);
+wlan/core/gen4m/os/linux/gl_init.c:7527:
+wlan/core/gen4m/os/linux/gl_init.c:7528: 	/* kalMemCopy(&prGlueInfo->rRegInfo, prRegInfo,
+wlan/core/gen4m/os/linux/gl_init.c:7529: 	 *            sizeof(REG_INFO_T));
+wlan/core/gen4m/os/linux/gl_init.c:7530: 	 */

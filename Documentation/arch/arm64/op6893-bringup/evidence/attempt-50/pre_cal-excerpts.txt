@@ -1,0 +1,63 @@
+wlan/core/gen4m/chips/common/pre_cal.c:1454: int wlan_precal_pwron_v1(void)
+wlan/core/gen4m/chips/common/pre_cal.c:1455: {
+wlan/core/gen4m/chips/common/pre_cal.c:1456: 	DBGLOG(INIT, INFO, "ever = %d\n", g_fgEverCal);
+wlan/core/gen4m/chips/common/pre_cal.c:1457:
+wlan/core/gen4m/chips/common/pre_cal.c:1458: 	if (g_fgEverCal == TRUE)
+wlan/core/gen4m/chips/common/pre_cal.c:1459: 		return 1;
+wlan/core/gen4m/chips/common/pre_cal.c:1460:
+wlan/core/gen4m/chips/common/pre_cal.c:1461: #if CFG_MTK_ANDROID_EMI
+wlan/core/gen4m/chips/common/pre_cal.c:1462: 	/* CONNAC 2 use backup /restore EMI */
+wlan/core/gen4m/chips/common/pre_cal.c:1463: 	gEmiCalNoUseEmiData = FALSE;
+wlan/core/gen4m/chips/common/pre_cal.c:1464: #endif
+wlan/core/gen4m/chips/common/pre_cal.c:1465:
+wlan/core/gen4m/chips/common/pre_cal.c:1466: 	wfsys_lock();
+wlan/core/gen4m/chips/common/pre_cal.c:1467:
+wlan/core/gen4m/chips/common/pre_cal.c:1468: 	return 0;
+wlan/core/gen4m/chips/common/pre_cal.c:1469: }
+wlan/core/gen4m/chips/common/pre_cal.c:1470:
+wlan/core/gen4m/chips/common/pre_cal.c:1471: int wlan_precal_docal_v1(void)
+wlan/core/gen4m/chips/common/pre_cal.c:1472: {
+wlan/core/gen4m/chips/common/pre_cal.c:1473: 	int32_t ret = 0;
+wlan/core/gen4m/chips/common/pre_cal.c:1474:
+wlan/core/gen4m/chips/common/pre_cal.c:1475: 	DBGLOG(INIT, INFO, "ever = %d\n", g_fgEverCal);
+wlan/core/gen4m/chips/common/pre_cal.c:1476:
+wlan/core/gen4m/chips/common/pre_cal.c:1477: 	if (!g_fgEverCal) {
+wlan/core/gen4m/chips/common/pre_cal.c:1478: 		update_pre_cal_status(1);
+wlan/core/gen4m/chips/common/pre_cal.c:1479: 		g_fgPreCal = TRUE;
+wlan/core/gen4m/chips/common/pre_cal.c:1480:
+wlan/core/gen4m/chips/common/pre_cal.c:1481: 		ret = wlanFuncOnImpl();
+wlan/core/gen4m/chips/common/pre_cal.c:1482: 		if (ret) {
+wlan/core/gen4m/chips/common/pre_cal.c:1483: 			DBGLOG(INIT, ERROR, "failed, ret=%d\n", ret);
+wlan/core/gen4m/chips/common/pre_cal.c:1484: 			goto exit;
+wlan/core/gen4m/chips/common/pre_cal.c:1485: 		}
+wlan/core/gen4m/chips/common/pre_cal.c:1486:
+wlan/core/gen4m/chips/common/pre_cal.c:1487: 		wlanFuncOffImpl();
+wlan/core/gen4m/chips/common/pre_cal.c:1488:
+wlan/core/gen4m/chips/common/pre_cal.c:1489: exit:
+wlan/core/gen4m/chips/common/pre_cal.c:1490: 		g_fgPreCal = FALSE;
+wlan/core/gen4m/chips/common/pre_cal.c:1491: 		update_pre_cal_status(0);
+wlan/core/gen4m/chips/common/pre_cal.c:1492: 		g_fgEverCal = TRUE;
+wlan/core/gen4m/chips/common/pre_cal.c:1493: 		wlan_precal_done_notify();
+wlan/core/gen4m/chips/common/pre_cal.c:1494:
+wlan/core/gen4m/chips/common/pre_cal.c:1495: 		wfsys_unlock();
+wlan/core/gen4m/chips/common/pre_cal.c:1496: 	}
+wlan/core/gen4m/chips/common/pre_cal.c:1497: 	return ret;
+wlan/core/gen4m/chips/common/pre_cal.c:1498: }
+wlan/core/gen4m/chips/common/pre_cal.c:1499:
+wlan/core/gen4m/chips/common/pre_cal.c:1500: int wlan_precal_pwron_v2(void)
+wlan/core/gen4m/chips/common/pre_cal.c:1623: void set_cal_enabled(u_int8_t enabled)
+wlan/core/gen4m/chips/common/pre_cal.c:1624: {
+wlan/core/gen4m/chips/common/pre_cal.c:1625: 	if (enabled)
+wlan/core/gen4m/chips/common/pre_cal.c:1626: 		g_fgCalDisabled = FALSE;
+wlan/core/gen4m/chips/common/pre_cal.c:1627: 	else
+wlan/core/gen4m/chips/common/pre_cal.c:1628: 		g_fgCalDisabled = TRUE;
+wlan/core/gen4m/chips/common/pre_cal.c:1629: }
+wlan/core/gen4m/chips/common/pre_cal.c:1630:
+wlan/core/gen4m/chips/common/pre_cal.c:1631: u_int8_t is_cal_flow_finished(void)
+wlan/core/gen4m/chips/common/pre_cal.c:1632: {
+wlan/core/gen4m/chips/common/pre_cal.c:1633: #if (CFG_WLAN_CONNAC3_DEV == 1)
+wlan/core/gen4m/chips/common/pre_cal.c:1634: 	return TRUE;
+wlan/core/gen4m/chips/common/pre_cal.c:1635: #else
+wlan/core/gen4m/chips/common/pre_cal.c:1636: 	return g_fgEverCal;
+wlan/core/gen4m/chips/common/pre_cal.c:1637: #endif
+wlan/core/gen4m/chips/common/pre_cal.c:1638: }

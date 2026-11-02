@@ -18,6 +18,25 @@ config COMMON_CLK_MEDIATEK_FHCTL
 	  This driver supports MediaTek frequency hopping and
 	  spread spectrum clocking features.
 
+config COMMON_CLK_MT6893_MAINPLL
+	bool "Experimental MT6893 op6893 read-only MAINPLL"
+	depends on ARM64_OP6893_BRINGUP
+	help
+	  Read the inherited MAINPLL rate without changing its configuration.
+	  This board-specific diagnostic provider does not manage PLL power
+	  or frequency and does not resolve firmware ownership.
+
+config COMMON_CLK_MT6893_PMIF
+	bool "Experimental MT6893 op6893 PMIF clocks"
+	depends on ARM64_OP6893_BRINGUP
+	select COMMON_CLK_MT6893_MAINPLL
+	select COMMON_CLK_MEDIATEK
+	help
+	  Register only the PMIF clock selector, factors and AP/TMR gates.
+	  Keep these clocks critical while other consumers remain inherited
+	  from LK. This is a board-specific diagnostic subset, not full SoC
+	  clock or power-management support.
+
 config COMMON_CLK_MT2701
 	bool "Clock driver for MediaTek MT2701"
 	depends on (ARCH_MEDIATEK && ARM) || COMPILE_TEST

@@ -1,0 +1,112 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/mediatek,mt6893-clock.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT6893 Top and Infrastructure Clock Controllers
+
+maintainers:
+  - AngeloGioacchino Del Regno <angelogioacchino.delregno@collabora.com>
+
+description: |
+  The top clock generator supplies oscillator dividers and the PMIF source
+  selector, as well as the AXI source selector. The infrastructure controller
+  gates the PMIC AP, timer and thermal clocks
+  and shares its registers with peripheral reset control. This initial
+  description covers the PMIF, AXI and thermal clock subset. Clock indices are defined in
+  dt-bindings/clock/mt6893-clk.h and retain the vendor numbering.
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+          - const: mediatek,mt6893-topckgen
+          - const: syscon
+      - items:
+          - const: mediatek,mt6893-infracfg_ao
+          - const: syscon
+          - const: simple-mfd
+
+  reg:
+    maxItems: 1
+
+  '#clock-cells':
+    const: 1
+
+  clocks:
+    minItems: 1
+    maxItems: 3
+
+  clock-names:
+    minItems: 1
+    maxItems: 3
+
+  reset-controller:
+    type: object
+    description:
+      Reset child using the shared infrastructure syscon. See
+      Documentation/devicetree/bindings/reset/ti-syscon-reset.txt.
+    properties:
+      compatible:
+        const: ti,syscon-reset
+      '#reset-cells':
+        const: 1
+      ti,reset-bits:
+        $ref: /schemas/types.yaml#/definitions/uint32-matrix
+        items:
+          minItems: 7
+          maxItems: 7
+    required:
+      - compatible
+      - '#reset-cells'
+      - ti,reset-bits
+    additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - '#clock-cells'
+  - clocks
+  - clock-names
+
+if:
+  properties:
+    compatible:
+      contains:
+        const: mediatek,mt6893-topckgen
+then:
+  properties:
+    clocks:
+      items:
+        - description: Ultra-low-power oscillator
+        - description: 26 MHz reference oscillator
+        - description: MAINPLL from the analog mixed controller
+    clock-names:
+      items:
+        - const: ulposc
+        - const: clk26m
+        - const: mainpll
+    reset-controller: false
+else:
+  properties:
+    clocks:
+      items:
+        - description: PMIF source from the top clock generator
+        - description: AXI source from the top clock generator
+    clock-names:
+      items:
+        - const: pwrap
+        - const: axi
+
+additionalProperties: false
+
+examples:
+  - |
+    clock-controller@10000000 {
+        compatible = "mediatek,mt6893-topckgen", "syscon";
+        reg = <0x10000000 0x1000>;
+        #clock-cells = <1>;
+        clocks = <&ulposc>, <&clk26m>, <&apmixedsys 6>;
+        clock-names = "ulposc", "clk26m", "mainpll";
+    };

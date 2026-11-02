@@ -82,6 +82,12 @@ $(obj)/vdso32-wrap.o: $(obj)/vdso32/vdso.so
 
 obj-y					+= probes/
 obj-y					+= head.o
+obj-$(CONFIG_ARM64_OP6893_BRINGUP)		+= op6893-boot.o op6893-fdt.o op6893-dtb.o
+
+$(obj)/op6893-embed.dtb: $(srctree)/arch/arm64/boot/dts/mediatek/mt6893-op6893-boot.dts $(DTC) FORCE
+	$(call if_changed_dep,dtc)
+$(obj)/op6893-dtb.o: $(obj)/op6893-embed.dtb
+targets += op6893-embed.dtb
 always-$(KBUILD_BUILTIN)		+= vmlinux.lds
 
 ifeq ($(CONFIG_DEBUG_EFI),y)
@@ -90,3 +96,5 @@ endif
 
 # for cleaning
 subdir- += vdso vdso32
+
+obj-$(CONFIG_ARM64_OP6893_LVTS_IDENTIFY) += op6893-lvts.o

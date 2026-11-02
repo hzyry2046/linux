@@ -2528,6 +2528,26 @@ config ARM64_ACPI_PARKING_PROTOCOL
 	  protocol even if the corresponding data is present in the ACPI
 	  MADT table.
 
+config ARM64_OP6893_LVTS_IDENTIFY
+	bool "One-shot op6893 LVTS calibration experiment"
+	depends on ARM64_OP6893_BRINGUP && COMMON_CLK_MT6893_PMIF
+	help
+	  Reset idle LVTS domains, identify sensors and calibrate RC once at boot.
+	  This board-only experiment uses audited fixed register addresses and
+	  leaves sensing, interrupts and thermal protection disabled. It is not
+	  a thermal driver or a general reset provider.
+
+config ARM64_OP6893_BRINGUP
+	bool "Experimental op6893 direct-LK boot"
+	depends on ARCH_MEDIATEK && OF
+	select ARCH_USE_MEMREMAP_PROT
+	help
+	  Embed a minimal op6893 device tree and import LK's memory layout
+	  before scanning it. Use a built-in initramfs. Also capture setup_arch
+	  printk output in this board's ACK-compatible ramoops console area.
+	  This is an experimental, board-specific bring-up aid, not a general
+	  bootloader workaround. Leave disabled for other machines.
+
 config CMDLINE
 	string "Default kernel command string"
 	default ""

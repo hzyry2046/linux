@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/clock/mediatek,mt6893-apmixedsys.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: MediaTek MT6893 Analog Mixed Clock Controller
+
+maintainers:
+  - AngeloGioacchino Del Regno <angelogioacchino.delregno@collabora.com>
+
+description:
+  The analog mixed controller contains the PLLs. This initial description
+  exposes MAINPLL using the vendor clock index in dt-bindings/clock/mt6893-clk.h.
+
+properties:
+  compatible:
+    const: mediatek,mt6893-apmixedsys
+
+  reg:
+    maxItems: 1
+
+  '#clock-cells':
+    const: 1
+
+  clocks:
+    maxItems: 1
+
+  clock-names:
+    const: clk26m
+
+required:
+  - compatible
+  - reg
+  - '#clock-cells'
+  - clocks
+  - clock-names
+
+additionalProperties: false
+
+examples:
+  - |
+    clock-controller@1000c000 {
+        compatible = "mediatek,mt6893-apmixedsys";
+        reg = <0x1000c000 0x1000>;
+        #clock-cells = <1>;
+        clocks = <&clk26m>;
+        clock-names = "clk26m";
+    };

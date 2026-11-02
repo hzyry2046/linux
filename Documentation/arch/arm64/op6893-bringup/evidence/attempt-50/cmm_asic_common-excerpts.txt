@@ -1,0 +1,56 @@
+wlan/core/gen4m/chips/common/cmm_asic_common.c:425: #if CFG_MTK_ANDROID_WMT
+wlan/core/gen4m/chips/common/cmm_asic_common.c:426: #if !CFG_SUPPORT_CONNAC1X
+wlan/core/gen4m/chips/common/cmm_asic_common.c:427: static int wlan_func_on_by_chrdev(void)
+wlan/core/gen4m/chips/common/cmm_asic_common.c:428: {
+wlan/core/gen4m/chips/common/cmm_asic_common.c:429: #define WAKE_LOCK_ON_TIMEOUT	15000	/* ms */
+wlan/core/gen4m/chips/common/cmm_asic_common.c:430: #define MAX_RETRY_COUNT		100
+wlan/core/gen4m/chips/common/cmm_asic_common.c:431:
+wlan/core/gen4m/chips/common/cmm_asic_common.c:432: #if CFG_ENABLE_WAKE_LOCK
+wlan/core/gen4m/chips/common/cmm_asic_common.c:433: 	KAL_WAKE_LOCK_T *prWlanOnOffWakeLock;
+wlan/core/gen4m/chips/common/cmm_asic_common.c:434: #endif
+wlan/core/gen4m/chips/common/cmm_asic_common.c:435: 	int retry = 0;
+wlan/core/gen4m/chips/common/cmm_asic_common.c:436: 	int ret = 0;
+wlan/core/gen4m/chips/common/cmm_asic_common.c:437:
+wlan/core/gen4m/chips/common/cmm_asic_common.c:438: 	while (TRUE) {
+wlan/core/gen4m/chips/common/cmm_asic_common.c:439: 		if (retry >= MAX_RETRY_COUNT) {
+wlan/core/gen4m/chips/common/cmm_asic_common.c:440: 			DBGLOG(INIT, WARN,
+wlan/core/gen4m/chips/common/cmm_asic_common.c:441: 				"Timeout, pre_cal_flow: %d, locked: %d.\n",
+wlan/core/gen4m/chips/common/cmm_asic_common.c:442: 				is_cal_flow_finished(),
+wlan/core/gen4m/chips/common/cmm_asic_common.c:443: 				wfsys_is_locked());
+wlan/core/gen4m/chips/common/cmm_asic_common.c:444: 			ret = -EBUSY;
+wlan/core/gen4m/chips/common/cmm_asic_common.c:445: 			goto exit;
+wlan/core/gen4m/chips/common/cmm_asic_common.c:446: 		}
+wlan/core/gen4m/chips/common/cmm_asic_common.c:447:
+wlan/core/gen4m/chips/common/cmm_asic_common.c:448: 		if (is_cal_flow_finished() && !wfsys_is_locked())
+wlan/core/gen4m/chips/common/cmm_asic_common.c:449: 			break;
+wlan/core/gen4m/chips/common/cmm_asic_common.c:450:
+wlan/core/gen4m/chips/common/cmm_asic_common.c:451: 		retry++;
+wlan/core/gen4m/chips/common/cmm_asic_common.c:452: 		kalMdelay(100);
+wlan/core/gen4m/chips/common/cmm_asic_common.c:453: 	}
+wlan/core/gen4m/chips/common/cmm_asic_common.c:454:
+wlan/core/gen4m/chips/common/cmm_asic_common.c:455: #if CFG_ENABLE_WAKE_LOCK
+wlan/core/gen4m/chips/common/cmm_asic_common.c:456: 	KAL_WAKE_LOCK_INIT(NULL,
+wlan/core/gen4m/chips/common/cmm_asic_common.c:457: 		prWlanOnOffWakeLock, "WIFI on");
+wlan/core/gen4m/chips/common/cmm_asic_common.c:458: 	/*KAL_WAKE_LOCK(NULL, prWlanOnOffWakeLock);*/
+wlan/core/gen4m/chips/common/cmm_asic_common.c:459: 	KAL_WAKE_LOCK_TIMEOUT(NULL, prWlanOnOffWakeLock,
+wlan/core/gen4m/chips/common/cmm_asic_common.c:460: 		MSEC_TO_JIFFIES(WAKE_LOCK_ON_TIMEOUT));
+wlan/core/gen4m/chips/common/cmm_asic_common.c:461: #endif
+wlan/core/gen4m/chips/common/cmm_asic_common.c:462:
+wlan/core/gen4m/chips/common/cmm_asic_common.c:463: 	wfsys_lock();
+wlan/core/gen4m/chips/common/cmm_asic_common.c:464: 	ret = wlanFuncOn();
+wlan/core/gen4m/chips/common/cmm_asic_common.c:465: 	wfsys_unlock();
+wlan/core/gen4m/chips/common/cmm_asic_common.c:466:
+wlan/core/gen4m/chips/common/cmm_asic_common.c:467: #if CFG_ENABLE_WAKE_LOCK
+wlan/core/gen4m/chips/common/cmm_asic_common.c:468: 	KAL_WAKE_UNLOCK(NULL, prWlanOnOffWakeLock);
+wlan/core/gen4m/chips/common/cmm_asic_common.c:469: 	KAL_WAKE_LOCK_DESTROY(NULL, prWlanOnOffWakeLock);
+wlan/core/gen4m/chips/common/cmm_asic_common.c:470: #endif
+wlan/core/gen4m/chips/common/cmm_asic_common.c:471:
+wlan/core/gen4m/chips/common/cmm_asic_common.c:472: exit:
+wlan/core/gen4m/chips/common/cmm_asic_common.c:473: 	return ret;
+wlan/core/gen4m/chips/common/cmm_asic_common.c:474: }
+wlan/core/gen4m/chips/common/cmm_asic_common.c:475:
+wlan/core/gen4m/chips/common/cmm_asic_common.c:476: static int wlan_func_off_by_chrdev(void)
+wlan/core/gen4m/chips/common/cmm_asic_common.c:477: {
+wlan/core/gen4m/chips/common/cmm_asic_common.c:478: 	wfsys_lock();
+wlan/core/gen4m/chips/common/cmm_asic_common.c:479: 	wlanFuncOff();
+wlan/core/gen4m/chips/common/cmm_asic_common.c:480: 	wfsys_unlock();

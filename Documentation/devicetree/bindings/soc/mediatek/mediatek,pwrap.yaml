@@ -36,6 +36,7 @@ properties:
               - mediatek,mt6795-pwrap
               - mediatek,mt6797-pwrap
               - mediatek,mt6873-pwrap
+              - mediatek,mt6885-pwrap
               - mediatek,mt7622-pwrap
               - mediatek,mt8135-pwrap
               - mediatek,mt8173-pwrap
@@ -60,13 +61,13 @@ properties:
     minItems: 1
     items:
       - description: PMIC wrapper registers
-      - description: IP pairing registers
+      - description: IP pairing or separate SPI master registers
 
   reg-names:
     minItems: 1
     items:
       - const: pwrap
-      - const: pwrap-bridge
+      - enum: [pwrap-bridge, spi_mst]
 
   interrupts:
     maxItems: 1
@@ -76,16 +77,16 @@ properties:
     items:
       - description: SPI bus clock
       - description: Main module clock
-      - description: System module clock
-      - description: Timer module clock
+      - description: System module clock or ULPOSC source selector
+      - description: Timer module clock or divided ULPOSC source
 
   clock-names:
     minItems: 2
     items:
       - const: spi
       - const: wrap
-      - const: sys
-      - const: tmr
+      - enum: [sys, ulposc]
+      - enum: [tmr, ulposc_osc]
 
   resets:
     minItems: 1
@@ -120,6 +121,42 @@ dependentRequired:
   resets: [reset-names]
 
 allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: mediatek,mt6885-pwrap
+    then:
+      properties:
+        reg:
+          minItems: 2
+        reg-names:
+          items:
+            - const: pwrap
+            - const: spi_mst
+        clocks:
+          minItems: 4
+        clock-names:
+          items:
+            - const: spi
+            - const: wrap
+            - const: ulposc
+            - const: ulposc_osc
+    else:
+      properties:
+        reg-names:
+          minItems: 1
+          items:
+            - const: pwrap
+            - const: pwrap-bridge
+        clock-names:
+          minItems: 2
+          items:
+            - const: spi
+            - const: wrap
+            - const: sys
+            - const: tmr
+
   - if:
       properties:
         compatible:

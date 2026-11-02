@@ -8,6 +8,7 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mfd/mt6359/registers.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
@@ -769,6 +770,20 @@ static const int mt6873_regs[] = {
 	[PWRAP_WACS2_RDATA] =		0xCA8,
 };
 
+/* Only offsets verified against MT6885 PMIF are defined here. */
+static const int mt6885_regs[] = {
+	[PWRAP_INIT_DONE2] =		0x0,
+	[PWRAP_TIMER_EN] =		0x3E0,
+	[PWRAP_INT_EN] =		0x448,
+	[PWRAP_INT_FLG] =		0x450,
+	[PWRAP_INT_CLR] =		0x454,
+	[PWRAP_WACS2_CMD] =		0xC80,
+	[PWRAP_SWINF_2_WDATA_31_0] =	0xC84,
+	[PWRAP_SWINF_2_RDATA_31_0] =	0xC94,
+	[PWRAP_WACS2_VLDCLR] =		0xCA4,
+	[PWRAP_WACS2_RDATA] =		0xCA8,
+};
+
 static const int mt7622_regs[] = {
 	[PWRAP_MUX_SEL] =		0x0,
 	[PWRAP_WRAP_EN] =		0x4,
@@ -1319,6 +1334,7 @@ enum pwrap_type {
 	PWRAP_MT6795,
 	PWRAP_MT6797,
 	PWRAP_MT6873,
+	PWRAP_MT6885,
 	PWRAP_MT7622,
 	PWRAP_MT8135,
 	PWRAP_MT8173,
@@ -1386,13 +1402,29 @@ struct pmic_wrapper_type {
 	int (*init_soc_specific)(struct pmic_wrapper *wrp);
 };
 
+static bool pwrap_reg_valid(struct pmic_wrapper *wrp, enum pwrap_regs reg)
+{
+	if (wrp->master->type != PWRAP_MT6885)
+		return true;
+
+	/* Sparse holes must not alias INIT_DONE at offset zero. */
+	return (unsigned int)reg < ARRAY_SIZE(mt6885_regs) &&
+		(reg == PWRAP_INIT_DONE2 || wrp->master->regs[reg]);
+}
+
 static u32 pwrap_readl(struct pmic_wrapper *wrp, enum pwrap_regs reg)
 {
+	if (WARN_ON_ONCE(!pwrap_reg_valid(wrp, reg)))
+		return ~0U;
+
 	return readl(wrp->base + wrp->master->regs[reg]);
 }
 
 static void pwrap_writel(struct pmic_wrapper *wrp, u32 val, enum pwrap_regs reg)
 {
+	if (WARN_ON_ONCE(!pwrap_reg_valid(wrp, reg)))
+		return;
+
 	writel(val, wrp->base + wrp->master->regs[reg]);
 }
 
@@ -1575,14 +1607,34 @@ static int pwrap_write(struct pmic_wrapper *wrp, u32 adr, u32 wdata)
 	return wrp->slave->regops->pwrap_write(wrp, adr, wdata);
 }
 
+static void pwrap_mt6885_log_error(struct pmic_wrapper *wrp, const char *op,
+				  u32 adr, int ret)
+{
+	if (ret && wrp->master->type == PWRAP_MT6885)
+		dev_err_ratelimited(wrp->dev,
+			"PMIF %s reg=%#x failed: %d status=%#x irq_flags=%#x\n",
+			op, adr, ret, pwrap_readl(wrp, PWRAP_WACS2_RDATA),
+			pwrap_readl(wrp, PWRAP_INT_FLG));
+}
+
 static int pwrap_regmap_read(void *context, u32 adr, u32 *rdata)
 {
-	return pwrap_read(context, adr, rdata);
+	struct pmic_wrapper *wrp = context;
+	int ret;
+
+	ret = pwrap_read(wrp, adr, rdata);
+	pwrap_mt6885_log_error(wrp, "read", adr, ret);
+	return ret;
 }
 
 static int pwrap_regmap_write(void *context, u32 adr, u32 wdata)
 {
-	return pwrap_write(context, adr, wdata);
+	struct pmic_wrapper *wrp = context;
+	int ret;
+
+	ret = pwrap_write(wrp, adr, wdata);
+	pwrap_mt6885_log_error(wrp, "write", adr, ret);
+	return ret;
 }
 
 static bool pwrap_pmic_read_test(struct pmic_wrapper *wrp, const u32 *dew_regs,
@@ -1856,6 +1908,8 @@ static int pwrap_init_cipher(struct pmic_wrapper *wrp)
 	case PWRAP_MT8183:
 	case PWRAP_MT8195:
 		break;
+	case PWRAP_MT6885:
+		return -EOPNOTSUPP;
 	}
 
 	/* Config cipher mode @PMIC */
@@ -2054,6 +2108,10 @@ static int pwrap_mt8183_init_soc_specific(struct pmic_wrapper *wrp)
 static int pwrap_init(struct pmic_wrapper *wrp)
 {
 	int ret;
+
+	/* MT6885 requires the validated LK handoff, never legacy setup. */
+	if (wrp->master->type == PWRAP_MT6885)
+		return -EOPNOTSUPP;
 
 	if (wrp->rstc)
 		reset_control_reset(wrp->rstc);
@@ -2341,6 +2399,13 @@ static const struct pmic_wrapper_type pwrap_mt6873 = {
 	.init_soc_specific = NULL,
 };
 
+/* Diagnostic LK handoff only; no generic init or error IRQ programming. */
+static const struct pmic_wrapper_type pwrap_mt6885 = {
+	.regs = mt6885_regs,
+	.type = PWRAP_MT6885,
+	.caps = PWRAP_CAP_ARB,
+};
+
 static const struct pmic_wrapper_type pwrap_mt7622 = {
 	.regs = mt7622_regs,
 	.type = PWRAP_MT7622,
@@ -2451,6 +2516,7 @@ static const struct of_device_id of_pwrap_match_tbl[] = {
 	{ .compatible = "mediatek,mt6795-pwrap", .data = &pwrap_mt6795 },
 	{ .compatible = "mediatek,mt6797-pwrap", .data = &pwrap_mt6797 },
 	{ .compatible = "mediatek,mt6873-pwrap", .data = &pwrap_mt6873 },
+	{ .compatible = "mediatek,mt6885-pwrap", .data = &pwrap_mt6885 },
 	{ .compatible = "mediatek,mt7622-pwrap", .data = &pwrap_mt7622 },
 	{ .compatible = "mediatek,mt8135-pwrap", .data = &pwrap_mt8135 },
 	{ .compatible = "mediatek,mt8173-pwrap", .data = &pwrap_mt8173 },
@@ -2462,6 +2528,69 @@ static const struct of_device_id of_pwrap_match_tbl[] = {
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, of_pwrap_match_tbl);
+
+/* Temporary op6893 transport test: preserve LK setup and PMIC registers. */
+static int pwrap_op6893_read_test(struct platform_device *pdev,
+				  struct pmic_wrapper *wrp)
+{
+	struct clk_bulk_data *clks;
+	void __iomem *spi;
+	u32 chip, test, init, status, first = 0;
+	int ret, i;
+
+	if (!IS_ENABLED(CONFIG_ARM64_OP6893_BRINGUP) ||
+	    !of_machine_is_compatible("realme,op6893") ||
+	    wrp->slave->type != PMIC_MT6359)
+		return -ENODEV;
+
+	ret = devm_clk_bulk_get_all_enabled(wrp->dev, &clks);
+	if (ret < 0)
+		return dev_err_probe(wrp->dev, ret, "PMIF clocks unavailable\n");
+	if (ret != 4)
+		return dev_err_probe(wrp->dev, -EINVAL, "expected four PMIF clocks\n");
+	for (i = 0; i < ret; i++)
+		dev_info(wrp->dev, "PMIF clock %s: %lu Hz\n",
+			 clks[i].id, clk_get_rate(clks[i].clk));
+
+	spi = devm_platform_ioremap_resource_byname(pdev, "spi_mst");
+	if (IS_ERR(spi))
+		return PTR_ERR(spi);
+
+	ret = platform_get_irq(pdev, 0);
+	if (ret < 0)
+		return ret;
+
+	/* Snapshot only: wrapper error IRQ ownership is still inherited. */
+	init = pwrap_readl(wrp, PWRAP_INIT_DONE2);
+	status = pwrap_readl(wrp, PWRAP_WACS2_RDATA);
+	dev_info(wrp->dev, "LK PMIF init=%#x status=%#x spi_en=%#x irq_en=%#x irq_flags=%#x\n",
+		 init, status, readl(spi + 0x14), pwrap_readl(wrp, PWRAP_INT_EN),
+		 pwrap_readl(wrp, PWRAP_INT_FLG));
+	if (!init || !(status & PWRAP_STATE_INIT_DONE1))
+		return dev_err_probe(wrp->dev, -ENODEV,
+				     "LK PMIF initialization missing\n");
+
+	for (i = 0; i < 16; i++) {
+		ret = pwrap_read16(wrp, MT6359_SWCID, &chip);
+		if (ret)
+			return dev_err_probe(wrp->dev, ret,
+					     "SWCID read failed at sample %d\n", i);
+		ret = pwrap_read16(wrp, mt6359_regs[PWRAP_DEW_READ_TEST], &test);
+		if (ret)
+			return dev_err_probe(wrp->dev, ret,
+					     "DEW read failed at sample %d\n", i);
+		if ((chip >> 8) != 0x59 || test != PWRAP_DEW_READ_TEST_VAL ||
+		    (i && chip != first))
+			return dev_err_probe(wrp->dev, -EIO,
+					     "PMIC read mismatch: chip=%#x test=%#x\n",
+					     chip, test);
+		first = chip;
+	}
+
+	dev_info(wrp->dev, "OP6893 PMIC read test passed: SWCID=%#x DEW=%#x samples=16\n",
+		 chip, test);
+	return 0;
+}
 
 static int pwrap_probe(struct platform_device *pdev)
 {
@@ -2493,6 +2622,13 @@ static int pwrap_probe(struct platform_device *pdev)
 	wrp->base = devm_platform_ioremap_resource_byname(pdev, "pwrap");
 	if (IS_ERR(wrp->base))
 		return PTR_ERR(wrp->base);
+
+	if (wrp->master->type == PWRAP_MT6885) {
+		ret = pwrap_op6893_read_test(pdev, wrp);
+		if (ret)
+			return ret;
+		goto register_pmic;
+	}
 
 	if (HAS_CAP(wrp->master->caps, PWRAP_CAP_RESET)) {
 		wrp->rstc = devm_reset_control_get(wrp->dev, "pwrap");
@@ -2588,6 +2724,7 @@ static int pwrap_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+register_pmic:
 	wrp->regmap = devm_regmap_init(wrp->dev, NULL, wrp, wrp->slave->regops->regmap);
 	if (IS_ERR(wrp->regmap))
 		return PTR_ERR(wrp->regmap);

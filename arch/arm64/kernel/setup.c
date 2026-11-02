@@ -55,6 +55,8 @@
 #include <asm/xen/hypervisor.h>
 #include <asm/mmu_context.h>
 
+#include "op6893-boot.h"
+
 static int num_standard_resources;
 static struct resource *standard_resources;
 
@@ -289,7 +291,7 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 	early_fixmap_init();
 	early_ioremap_init();
 
-	setup_machine_fdt(__fdt_pointer);
+	setup_machine_fdt(op6893_prepare_fdt(__fdt_pointer));
 
 	/*
 	 * Initialise the static keys early as they may be enabled by the
@@ -331,6 +333,7 @@ void __init __no_sanitize_address setup_arch(char **cmdline_p)
 
 	arm64_memblock_init();
 
+	op6893_early_console_exit();
 	paging_init();
 
 	acpi_table_upgrade();

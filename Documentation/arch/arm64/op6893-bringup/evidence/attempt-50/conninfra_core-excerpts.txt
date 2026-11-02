@@ -1,0 +1,386 @@
+conninfra/conn_drv/connv2/core/conninfra_core.c:596: static int opfunc_pre_cal(struct msg_op_data *op)
+conninfra/conn_drv/connv2/core/conninfra_core.c:597: {
+conninfra/conn_drv/connv2/core/conninfra_core.c:598: #define CAL_DRV_COUNT 2
+conninfra/conn_drv/connv2/core/conninfra_core.c:599: 	int cal_drvs[CAL_DRV_COUNT] = {CONNDRV_TYPE_BT, CONNDRV_TYPE_WIFI};
+conninfra/conn_drv/connv2/core/conninfra_core.c:600: 	int i, ret, cur_state;
+conninfra/conn_drv/connv2/core/conninfra_core.c:601: 	int bt_cal_ret, wf_cal_ret;
+conninfra/conn_drv/connv2/core/conninfra_core.c:602: 	struct subsys_drv_inst *drv_inst;
+conninfra/conn_drv/connv2/core/conninfra_core.c:603: 	int pre_cal_done_state = (0x1 << CONNDRV_TYPE_BT) | (0x1 << CONNDRV_TYPE_WIFI);
+conninfra/conn_drv/connv2/core/conninfra_core.c:604: 	struct timespec64 begin, bt_cal_begin, wf_cal_begin, end, backup_end;
+conninfra/conn_drv/connv2/core/conninfra_core.c:605: 	struct subsys_drv_inst *wifi_drv = &g_conninfra_ctx.drv_inst[CONNDRV_TYPE_WIFI];
+conninfra/conn_drv/connv2/core/conninfra_core.c:606: 	unsigned int cal_result_offset = 0, cal_result_size = 0;
+conninfra/conn_drv/connv2/core/conninfra_core.c:607: 	int get_cal_ret;
+conninfra/conn_drv/connv2/core/conninfra_core.c:608:
+conninfra/conn_drv/connv2/core/conninfra_core.c:609: 	/* Check BT/WIFI status again */
+conninfra/conn_drv/connv2/core/conninfra_core.c:610: 	ret = osal_lock_sleepable_lock(&g_conninfra_ctx.core_lock);
+conninfra/conn_drv/connv2/core/conninfra_core.c:611: 	if (ret) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:612: 		pr_err("[%s] core_lock fail!!", __func__);
+conninfra/conn_drv/connv2/core/conninfra_core.c:613: 		return ret;
+conninfra/conn_drv/connv2/core/conninfra_core.c:614: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:615:
+conninfra/conn_drv/connv2/core/conninfra_core.c:616: 	/* Check if both BT and Wifi is support */
+conninfra/conn_drv/connv2/core/conninfra_core.c:617: 	if ((g_conninfra_ctx.support_drv & pre_cal_done_state) != pre_cal_done_state) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:618: 		pr_warn("[%s] support_drv=0x%x, don't do K", __func__, g_conninfra_ctx.support_drv);
+conninfra/conn_drv/connv2/core/conninfra_core.c:619: 		osal_unlock_sleepable_lock(&g_conninfra_ctx.core_lock);
+conninfra/conn_drv/connv2/core/conninfra_core.c:620: 		return 0;
+conninfra/conn_drv/connv2/core/conninfra_core.c:621: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:622:
+conninfra/conn_drv/connv2/core/conninfra_core.c:623: 	/* check if func already on */
+conninfra/conn_drv/connv2/core/conninfra_core.c:624: 	for (i = 0; i < CAL_DRV_COUNT; i++) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:625: 		if (g_conninfra_ctx.drv_inst[cal_drvs[i]].drv_status == DRV_STS_POWER_ON) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:626: 			pr_warn("[%s] %s already on\n", __func__, g_drv_name[cal_drvs[i]]);
+conninfra/conn_drv/connv2/core/conninfra_core.c:627: 			osal_unlock_sleepable_lock(&g_conninfra_ctx.core_lock);
+conninfra/conn_drv/connv2/core/conninfra_core.c:628: 			return 0;
+conninfra/conn_drv/connv2/core/conninfra_core.c:629: 		}
+conninfra/conn_drv/connv2/core/conninfra_core.c:630: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:631: 	osal_unlock_sleepable_lock(&g_conninfra_ctx.core_lock);
+conninfra/conn_drv/connv2/core/conninfra_core.c:632: 	/* Clean pre-cal backup data */
+conninfra/conn_drv/connv2/core/conninfra_core.c:633: 	ret = conninfra_core_pre_cal_clean_data();
+conninfra/conn_drv/connv2/core/conninfra_core.c:634: 	if (ret)
+conninfra/conn_drv/connv2/core/conninfra_core.c:635: 		pr_info("[pre_cal] clean data fail, ret = %d", ret);
+conninfra/conn_drv/connv2/core/conninfra_core.c:636:
+conninfra/conn_drv/connv2/core/conninfra_core.c:637: 	ret = conninfra_core_power_on(CONNDRV_TYPE_BT);
+conninfra/conn_drv/connv2/core/conninfra_core.c:638: 	if (ret) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:639: 		pr_err("BT power on fail during pre_cal");
+conninfra/conn_drv/connv2/core/conninfra_core.c:640: 		return -1;
+conninfra/conn_drv/connv2/core/conninfra_core.c:641: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:642: 	ret = conninfra_core_power_on(CONNDRV_TYPE_WIFI);
+conninfra/conn_drv/connv2/core/conninfra_core.c:643: 	if (ret) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:644: 		pr_err("WIFI power on fail during pre_cal");
+conninfra/conn_drv/connv2/core/conninfra_core.c:645: 		conninfra_core_power_off(CONNDRV_TYPE_BT);
+conninfra/conn_drv/connv2/core/conninfra_core.c:646: 		return -2;
+conninfra/conn_drv/connv2/core/conninfra_core.c:647: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:648:
+conninfra/conn_drv/connv2/core/conninfra_core.c:649: 	osal_gettimeofday(&begin);
+conninfra/conn_drv/connv2/core/conninfra_core.c:650:
+conninfra/conn_drv/connv2/core/conninfra_core.c:651: 	/* power on subsys */
+conninfra/conn_drv/connv2/core/conninfra_core.c:652: 	atomic_set(&g_conninfra_ctx.pre_cal_state, 0);
+conninfra/conn_drv/connv2/core/conninfra_core.c:653: 	sema_init(&g_conninfra_ctx.pre_cal_sema, 1);
+conninfra/conn_drv/connv2/core/conninfra_core.c:654:
+conninfra/conn_drv/connv2/core/conninfra_core.c:655: 	for (i = 0; i < CAL_DRV_COUNT; i++) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:656: 		drv_inst = &g_conninfra_ctx.drv_inst[cal_drvs[i]];
+conninfra/conn_drv/connv2/core/conninfra_core.c:657: 		ret = msg_thread_send_1(&drv_inst->msg_ctx,
+conninfra/conn_drv/connv2/core/conninfra_core.c:658: 				INFRA_SUBDRV_OPID_CAL_PWR_ON, cal_drvs[i]);
+conninfra/conn_drv/connv2/core/conninfra_core.c:659: 		if (ret)
+conninfra/conn_drv/connv2/core/conninfra_core.c:660: 			pr_warn("driver [%d] power on fail\n", cal_drvs[i]);
+conninfra/conn_drv/connv2/core/conninfra_core.c:661: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:662:
+conninfra/conn_drv/connv2/core/conninfra_core.c:663: 	while (atomic_read(&g_conninfra_ctx.pre_cal_state) != pre_cal_done_state) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:664: 		ret = down_timeout(&g_conninfra_ctx.pre_cal_sema, msecs_to_jiffies(CONNINFRA_PRE_CAL_TIMEOUT));
+conninfra/conn_drv/connv2/core/conninfra_core.c:665: 		if (ret == 0)
+conninfra/conn_drv/connv2/core/conninfra_core.c:666: 			continue;
+conninfra/conn_drv/connv2/core/conninfra_core.c:667: 		cur_state = atomic_read(&g_conninfra_ctx.pre_cal_state);
+conninfra/conn_drv/connv2/core/conninfra_core.c:668: 		pr_info("[pre_cal] cur state =[%d]", cur_state);
+conninfra/conn_drv/connv2/core/conninfra_core.c:669: 		if ((cur_state & (0x1 << CONNDRV_TYPE_BT)) == 0) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:670: 			pr_info("[pre_cal] BT pwr_on callback is not back");
+conninfra/conn_drv/connv2/core/conninfra_core.c:671: 			drv_inst = &g_conninfra_ctx.drv_inst[CONNDRV_TYPE_BT];
+conninfra/conn_drv/connv2/core/conninfra_core.c:672: 			osal_thread_show_stack(&drv_inst->msg_ctx.thread);
+conninfra/conn_drv/connv2/core/conninfra_core.c:673: 		}
+conninfra/conn_drv/connv2/core/conninfra_core.c:674: 		if ((cur_state & (0x1 << CONNDRV_TYPE_WIFI)) == 0) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:675: 			pr_info("[pre_cal] WIFI pwr_on callback is not back");
+conninfra/conn_drv/connv2/core/conninfra_core.c:676: 			drv_inst = &g_conninfra_ctx.drv_inst[CONNDRV_TYPE_WIFI];
+conninfra/conn_drv/connv2/core/conninfra_core.c:677: 			osal_thread_show_stack(&drv_inst->msg_ctx.thread);
+conninfra/conn_drv/connv2/core/conninfra_core.c:678: 		}
+conninfra/conn_drv/connv2/core/conninfra_core.c:679: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:680: 	pr_info("[pre_cal] >>>>>>> power on DONE!!");
+conninfra/conn_drv/connv2/core/conninfra_core.c:681:
+conninfra/conn_drv/connv2/core/conninfra_core.c:682: 	osal_gettimeofday(&bt_cal_begin);
+conninfra/conn_drv/connv2/core/conninfra_core.c:683:
+conninfra/conn_drv/connv2/core/conninfra_core.c:684: 	/* Do Calibration */
+conninfra/conn_drv/connv2/core/conninfra_core.c:685: 	drv_inst = &g_conninfra_ctx.drv_inst[CONNDRV_TYPE_BT];
+conninfra/conn_drv/connv2/core/conninfra_core.c:686: 	bt_cal_ret = msg_thread_send_wait_1(&drv_inst->msg_ctx,
+conninfra/conn_drv/connv2/core/conninfra_core.c:687: 			INFRA_SUBDRV_OPID_CAL_DO_CAL, 0, CONNDRV_TYPE_BT);
+conninfra/conn_drv/connv2/core/conninfra_core.c:688:
+conninfra/conn_drv/connv2/core/conninfra_core.c:689: 	pr_info("[pre_cal] driver [%s] calibration %s, ret=[%d]\n", g_drv_name[CONNDRV_TYPE_BT],
+conninfra/conn_drv/connv2/core/conninfra_core.c:690: 			(bt_cal_ret == CONNINFRA_CB_RET_CAL_FAIL_POWER_OFF ||
+conninfra/conn_drv/connv2/core/conninfra_core.c:691: 			bt_cal_ret == CONNINFRA_CB_RET_CAL_FAIL_POWER_ON) ? "fail" : "success",
+conninfra/conn_drv/connv2/core/conninfra_core.c:692: 			bt_cal_ret);
+conninfra/conn_drv/connv2/core/conninfra_core.c:693:
+conninfra/conn_drv/connv2/core/conninfra_core.c:694: 	if (bt_cal_ret == CONNINFRA_CB_RET_CAL_PASS_POWER_OFF ||
+conninfra/conn_drv/connv2/core/conninfra_core.c:695: 		bt_cal_ret == CONNINFRA_CB_RET_CAL_FAIL_POWER_OFF)
+conninfra/conn_drv/connv2/core/conninfra_core.c:696: 		conninfra_core_power_off(CONNDRV_TYPE_BT);
+conninfra/conn_drv/connv2/core/conninfra_core.c:697:
+conninfra/conn_drv/connv2/core/conninfra_core.c:698: 	pr_info("[pre_cal] >>>>>>>> BT do cal done");
+conninfra/conn_drv/connv2/core/conninfra_core.c:699:
+conninfra/conn_drv/connv2/core/conninfra_core.c:700: 	osal_gettimeofday(&wf_cal_begin);
+conninfra/conn_drv/connv2/core/conninfra_core.c:701:
+conninfra/conn_drv/connv2/core/conninfra_core.c:702: 	drv_inst = &g_conninfra_ctx.drv_inst[CONNDRV_TYPE_WIFI];
+conninfra/conn_drv/connv2/core/conninfra_core.c:703: 	wf_cal_ret = msg_thread_send_wait_1(&drv_inst->msg_ctx,
+conninfra/conn_drv/connv2/core/conninfra_core.c:704: 			INFRA_SUBDRV_OPID_CAL_DO_CAL, 0, CONNDRV_TYPE_WIFI);
+conninfra/conn_drv/connv2/core/conninfra_core.c:705:
+conninfra/conn_drv/connv2/core/conninfra_core.c:706: 	pr_info("[pre_cal] driver [%s] calibration %s, ret=[%d]\n", g_drv_name[CONNDRV_TYPE_WIFI],
+conninfra/conn_drv/connv2/core/conninfra_core.c:707: 			(wf_cal_ret == CONNINFRA_CB_RET_CAL_FAIL_POWER_OFF ||
+conninfra/conn_drv/connv2/core/conninfra_core.c:708: 			wf_cal_ret == CONNINFRA_CB_RET_CAL_FAIL_POWER_ON) ? "fail" : "success",
+conninfra/conn_drv/connv2/core/conninfra_core.c:709: 			wf_cal_ret);
+conninfra/conn_drv/connv2/core/conninfra_core.c:710:
+conninfra/conn_drv/connv2/core/conninfra_core.c:711: 	if (wf_cal_ret == CONNINFRA_CB_RET_CAL_PASS_POWER_OFF ||
+conninfra/conn_drv/connv2/core/conninfra_core.c:712: 		wf_cal_ret == CONNINFRA_CB_RET_CAL_FAIL_POWER_OFF)
+conninfra/conn_drv/connv2/core/conninfra_core.c:713: 		conninfra_core_power_off(CONNDRV_TYPE_WIFI);
+conninfra/conn_drv/connv2/core/conninfra_core.c:714:
+conninfra/conn_drv/connv2/core/conninfra_core.c:715: 	pr_info(">>>>>>>> WF do cal done");
+conninfra/conn_drv/connv2/core/conninfra_core.c:716: 	osal_gettimeofday(&end);
+conninfra/conn_drv/connv2/core/conninfra_core.c:717:
+conninfra/conn_drv/connv2/core/conninfra_core.c:718: 	/* Backup WIFI calibration data */
+conninfra/conn_drv/connv2/core/conninfra_core.c:719: 	if (wifi_drv->ops_cb.pre_cal_cb.get_cal_result_cb != NULL) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:720: 		get_cal_ret = msg_thread_send_wait_3(
+conninfra/conn_drv/connv2/core/conninfra_core.c:721: 				&wifi_drv->msg_ctx, INFRA_SUBDRV_OPID_GET_CAL_RESULT,
+conninfra/conn_drv/connv2/core/conninfra_core.c:722: 				0,
+conninfra/conn_drv/connv2/core/conninfra_core.c:723: 				CONNDRV_TYPE_WIFI, (size_t)&cal_result_offset, (size_t)&cal_result_size);
+conninfra/conn_drv/connv2/core/conninfra_core.c:724: 		if (get_cal_ret == 0 && cal_result_size != 0) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:725: 			ret = conninfra_core_pre_cal_backup(cal_result_offset, cal_result_size);
+conninfra/conn_drv/connv2/core/conninfra_core.c:726: 			if (ret)
+conninfra/conn_drv/connv2/core/conninfra_core.c:727: 				pr_err("[pre_cal] backup error: %d", ret);
+conninfra/conn_drv/connv2/core/conninfra_core.c:728: 		} else {
+conninfra/conn_drv/connv2/core/conninfra_core.c:729: 			pr_info("[pre_cal] get_cal_ret=%d, cal_result_size=%d, cal_result_offset=0x%08x",
+conninfra/conn_drv/connv2/core/conninfra_core.c:730: 				get_cal_ret, cal_result_size, cal_result_offset);
+conninfra/conn_drv/connv2/core/conninfra_core.c:731: 		}
+conninfra/conn_drv/connv2/core/conninfra_core.c:732: 	} else
+conninfra/conn_drv/connv2/core/conninfra_core.c:733: 		pr_info("[pre_cal] WIFI not support get_cal_result_cb");
+conninfra/conn_drv/connv2/core/conninfra_core.c:734:
+conninfra/conn_drv/connv2/core/conninfra_core.c:735: 	osal_gettimeofday(&backup_end);
+conninfra/conn_drv/connv2/core/conninfra_core.c:736:
+conninfra/conn_drv/connv2/core/conninfra_core.c:737: 	pr_info("[pre_cal] summary pwr=[%lu] bt_cal=[%d][%lu] wf_cal=[%d][%lu] backup=[%lu]",
+conninfra/conn_drv/connv2/core/conninfra_core.c:738: 			timespec64_to_ms(&begin, &bt_cal_begin),
+conninfra/conn_drv/connv2/core/conninfra_core.c:739: 			bt_cal_ret, timespec64_to_ms(&bt_cal_begin, &wf_cal_begin),
+conninfra/conn_drv/connv2/core/conninfra_core.c:740: 			wf_cal_ret, timespec64_to_ms(&wf_cal_begin, &end),
+conninfra/conn_drv/connv2/core/conninfra_core.c:1124: static int opfunc_pre_cal_prepare(struct msg_op_data *op)
+conninfra/conn_drv/connv2/core/conninfra_core.c:1125: {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1126: 	int ret = 0, rst_status, num = 0;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1127: 	unsigned long flag;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1128: 	struct pre_cal_info *cal_info = &g_conninfra_ctx.cal_info;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1129: 	struct subsys_drv_inst *bt_drv = &g_conninfra_ctx.drv_inst[CONNDRV_TYPE_BT];
+conninfra/conn_drv/connv2/core/conninfra_core.c:1130: 	struct subsys_drv_inst *wifi_drv = &g_conninfra_ctx.drv_inst[CONNDRV_TYPE_WIFI];
+conninfra/conn_drv/connv2/core/conninfra_core.c:1131: 	enum pre_cal_status cur_status;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1132:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1133: 	spin_lock_irqsave(&g_conninfra_ctx.infra_lock, flag);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1134:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1135: 	if (bt_drv->ops_cb.pre_cal_cb.do_cal_cb == NULL ||
+conninfra/conn_drv/connv2/core/conninfra_core.c:1136: 		wifi_drv->ops_cb.pre_cal_cb.do_cal_cb == NULL) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1137: 		pr_info("[%s] [pre_cal] [%p][%p]", __func__,
+conninfra/conn_drv/connv2/core/conninfra_core.c:1138: 			bt_drv->ops_cb.pre_cal_cb.do_cal_cb,
+conninfra/conn_drv/connv2/core/conninfra_core.c:1139: 			wifi_drv->ops_cb.pre_cal_cb.do_cal_cb);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1140: 		spin_unlock_irqrestore(&g_conninfra_ctx.infra_lock, flag);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1141: 		return 0;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1142: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:1143: 	spin_unlock_irqrestore(&g_conninfra_ctx.infra_lock, flag);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1144:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1145: 	spin_lock_irqsave(&g_conninfra_ctx.rst_lock, flag);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1146: 	rst_status = g_conninfra_ctx.rst_status;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1147: 	spin_unlock_irqrestore(&g_conninfra_ctx.rst_lock, flag);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1148:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1149: 	if (rst_status > CHIP_RST_NONE) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1150: 		pr_info("rst is ongoing, skip pre_cal");
+conninfra/conn_drv/connv2/core/conninfra_core.c:1151: 		return 0;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1152: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:1153:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1154: 	/* non-zero means lock got, zero means not */
+conninfra/conn_drv/connv2/core/conninfra_core.c:1155:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1156: 	while (!ret) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1157: 		ret = osal_trylock_sleepable_lock(&cal_info->pre_cal_lock);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1158: 		if (ret == 0) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1159: 			if (num >= 10) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1160: 				/* Another pre-cal should be on progress */
+conninfra/conn_drv/connv2/core/conninfra_core.c:1161: 				/* Skip to prevent block core thread */
+conninfra/conn_drv/connv2/core/conninfra_core.c:1162: 				pr_notice("[%s] fail to get pre_cal_lock\n", __func__);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1163: 				break;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1164: 			}
+conninfra/conn_drv/connv2/core/conninfra_core.c:1165: 			/* sleep time is short to make sure get lock easier than */
+conninfra/conn_drv/connv2/core/conninfra_core.c:1166: 			/* conninfra_core_pre_cal_blocking */
+conninfra/conn_drv/connv2/core/conninfra_core.c:1167: 			osal_sleep_ms(10);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1168: 			num++;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1169: 			continue;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1170: 		}
+conninfra/conn_drv/connv2/core/conninfra_core.c:1171:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1172: 		cur_status = cal_info->status;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1173:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1174: 		if ((cur_status == PRE_CAL_NOT_INIT || cur_status == PRE_CAL_NEED_RESCHEDULE) &&
+conninfra/conn_drv/connv2/core/conninfra_core.c:1175: 			bt_drv->drv_status == DRV_STS_POWER_OFF &&
+conninfra/conn_drv/connv2/core/conninfra_core.c:1176: 			wifi_drv->drv_status == DRV_STS_POWER_OFF) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1177: 			cal_info->status = PRE_CAL_SCHEDULED;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1178: 			cal_info->caller = op->op_data[0];
+conninfra/conn_drv/connv2/core/conninfra_core.c:1179: 			pr_info("[pre_cal] BT&WIFI is off, schedule pre-cal from status=[%d] to new status[%d]\n",
+conninfra/conn_drv/connv2/core/conninfra_core.c:1180: 				cur_status, cal_info->status);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1181: 			schedule_work(&cal_info->pre_cal_work);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1182: 		} else {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1183: 			pr_info("[%s] [pre_cal] bt=[%d] wf=[%d] status=[%d]", __func__,
+conninfra/conn_drv/connv2/core/conninfra_core.c:1184: 				bt_drv->drv_status, wifi_drv->drv_status, cur_status);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1185: 		}
+conninfra/conn_drv/connv2/core/conninfra_core.c:1186: 		osal_unlock_sleepable_lock(&cal_info->pre_cal_lock);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1187: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:1188:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1189: 	return 0;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1190: }
+conninfra/conn_drv/connv2/core/conninfra_core.c:1458: {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1459: 	int ret = 0;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1460: 	bool skip = false;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1461: 	enum pre_cal_caller caller;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1462: 	struct conninfra_ctx *infra_ctx = &g_conninfra_ctx;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1463: 	struct pre_cal_info *cal_info = &infra_ctx->cal_info;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1464:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1465: 	ret = osal_lock_sleepable_lock(&cal_info->pre_cal_lock);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1466: 	if (ret) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1467: 		pr_err("[%s] get lock fail, ret = %d\n",
+conninfra/conn_drv/connv2/core/conninfra_core.c:1468: 			__func__, ret);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1469: 		return -1;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1470: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:1471:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1472: 	caller = cal_info->caller;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1473: 	pr_info("[%s] [pre_cal] Caller = %u", __func__, caller);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1474:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1475: 	/* Handle different pre_cal_mode */
+conninfra/conn_drv/connv2/core/conninfra_core.c:1476: 	switch (g_pre_cal_mode) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1477: 		case PRE_CAL_ALL_DISABLED:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1478: 			pr_info("[%s] [pre_cal] Skip all pre-cal", __func__);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1479: 			skip = true;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1480: 			cal_info->status = PRE_CAL_DONE;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1481: 			break;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1482: 		case PRE_CAL_PWR_ON_DISABLED:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1483: 			if (caller == PRE_CAL_BY_SUBDRV_REGISTER) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1484: 				pr_info("[%s] [pre_cal] Skip pre-cal triggered by subdrv register", __func__);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1485: 				skip = true;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1486: 				cal_info->status = PRE_CAL_NOT_INIT;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1487: 			}
+conninfra/conn_drv/connv2/core/conninfra_core.c:1488: 			break;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1489: 		case PRE_CAL_SCREEN_ON_DISABLED:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1490: 			if (caller == PRE_CAL_BY_SCREEN_ON) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1491: 				pr_info("[%s] [pre_cal] Skip pre-cal triggered by screen on", __func__);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1492: 				skip = true;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1493: 				cal_info->status = PRE_CAL_DONE;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1494: 			}
+conninfra/conn_drv/connv2/core/conninfra_core.c:1495: 			break;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1496: 		default:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1497: 			pr_info("[%s] [pre_cal] Begin pre-cal, g_pre_cal_mode: %u",
+conninfra/conn_drv/connv2/core/conninfra_core.c:1498: 				__func__, g_pre_cal_mode);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1499: 			break;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1500: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:1501:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1502: 	if (skip) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1503: 		pr_info("[%s] [pre_cal] Reset status to %d", __func__, cal_info->status);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1504: 		osal_unlock_sleepable_lock(&cal_info->pre_cal_lock);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1505: 		return -2;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1506: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:1507:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1508: 	cal_info->status = PRE_CAL_EXECUTING;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1509: 	ret = msg_thread_send_wait(&infra_ctx->cb_ctx,
+conninfra/conn_drv/connv2/core/conninfra_core.c:1510: 				CONNINFRA_CB_OPID_PRE_CAL, 0);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1511: 	if (ret) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1512: 		pr_err("[%s] send msg fail, ret = %d\n", __func__, ret);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1513: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:1514:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1515: 	cal_info->status = PRE_CAL_DONE;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1516: 	osal_unlock_sleepable_lock(&cal_info->pre_cal_lock);
+conninfra/conn_drv/connv2/core/conninfra_core.c:1517: 	return 0;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1518: }
+conninfra/conn_drv/connv2/core/conninfra_core.c:1519:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1520: int conninfra_core_pre_cal_backup(unsigned int offset, unsigned int size)
+conninfra/conn_drv/connv2/core/conninfra_core.c:1521: {
+conninfra/conn_drv/connv2/core/conninfra_core.c:1522: 	int ret = 0;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1523: 	struct conninfra_ctx *infra_ctx = &g_conninfra_ctx;
+conninfra/conn_drv/connv2/core/conninfra_core.c:1524:
+conninfra/conn_drv/connv2/core/conninfra_core.c:1525: 	ret = msg_thread_send_wait_2(&infra_ctx->msg_ctx,
+conninfra/conn_drv/connv2/core/conninfra_core.c:2038: 	unsigned long flag;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2039: 	struct subsys_drv_inst *drv_inst;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2040: 	struct conninfra_ctx *infra_ctx = &g_conninfra_ctx;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2041: 	int ret, trigger_pre_cal = 0;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2042:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2043: 	if (type < CONNDRV_TYPE_BT || type >= CONNDRV_TYPE_MAX)
+conninfra/conn_drv/connv2/core/conninfra_core.c:2044: 		return -1;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2045:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2046: 	if ((infra_ctx->support_drv & (0x1 << type)) == 0) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:2047: 		pr_warn("[%s] drv(%d) not support, support_drv=0x%x", __func__, type, infra_ctx->support_drv);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2048: 		return -1;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2049: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:2050:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2051: 	spin_lock_irqsave(&g_conninfra_ctx.infra_lock, flag);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2052: 	drv_inst = &g_conninfra_ctx.drv_inst[type];
+conninfra/conn_drv/connv2/core/conninfra_core.c:2053: 	memcpy(&g_conninfra_ctx.drv_inst[type].ops_cb, cb,
+conninfra/conn_drv/connv2/core/conninfra_core.c:2054: 					sizeof(struct sub_drv_ops_cb));
+conninfra/conn_drv/connv2/core/conninfra_core.c:2055:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2056: 	pr_info("[%s] [pre_cal] type=[%s] cb rst=[%p][%p] pre_cal=[%p][%p], therm=[%p]",
+conninfra/conn_drv/connv2/core/conninfra_core.c:2057: 			__func__, g_drv_name[type],
+conninfra/conn_drv/connv2/core/conninfra_core.c:2058: 			cb->rst_cb.pre_whole_chip_rst, cb->rst_cb.post_whole_chip_rst,
+conninfra/conn_drv/connv2/core/conninfra_core.c:2059: 			cb->pre_cal_cb.pwr_on_cb, cb->pre_cal_cb.do_cal_cb, cb->thermal_qry);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2060:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2061: 	pr_info("[%s] [pre_cal] type=[%d] bt=[%p] wf=[%p]", __func__, type,
+conninfra/conn_drv/connv2/core/conninfra_core.c:2062: 			infra_ctx->drv_inst[CONNDRV_TYPE_BT].ops_cb.pre_cal_cb.pwr_on_cb,
+conninfra/conn_drv/connv2/core/conninfra_core.c:2063: 			infra_ctx->drv_inst[CONNDRV_TYPE_WIFI].ops_cb.pre_cal_cb.pwr_on_cb);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2064:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2065: 	/* trigger pre-cal if BT and WIFI are registered */
+conninfra/conn_drv/connv2/core/conninfra_core.c:2066: 	if (infra_ctx->drv_inst[CONNDRV_TYPE_BT].ops_cb.pre_cal_cb.do_cal_cb != NULL &&
+conninfra/conn_drv/connv2/core/conninfra_core.c:2067: 		infra_ctx->drv_inst[CONNDRV_TYPE_WIFI].ops_cb.pre_cal_cb.do_cal_cb != NULL)
+conninfra/conn_drv/connv2/core/conninfra_core.c:2068: 		trigger_pre_cal = 1;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2069:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2070: 	spin_unlock_irqrestore(&g_conninfra_ctx.infra_lock, flag);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2071:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2072: 	if (trigger_pre_cal) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:2073: 		pr_info("[%s] [pre_cal] trigger pre-cal BT/WF are registered", __func__);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2074: 		ret = msg_thread_send_1(&infra_ctx->msg_ctx,
+conninfra/conn_drv/connv2/core/conninfra_core.c:2075: 				CONNINFRA_OPID_PRE_CAL_PREPARE, PRE_CAL_BY_SUBDRV_REGISTER);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2076: 		if (ret)
+conninfra/conn_drv/connv2/core/conninfra_core.c:2077: 			pr_err("send pre_cal_prepare msg fail, ret = %d\n", ret);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2078: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:2079:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2080: 	return 0;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2081: }
+conninfra/conn_drv/connv2/core/conninfra_core.c:2082:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2140: void conninfra_core_pre_cal_blocking(void)
+conninfra/conn_drv/connv2/core/conninfra_core.c:2141: {
+conninfra/conn_drv/connv2/core/conninfra_core.c:2142: #define BLOCKING_CHECK_MONITOR_THREAD 100
+conninfra/conn_drv/connv2/core/conninfra_core.c:2143: 	int ret;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2144: 	struct pre_cal_info *cal_info = &g_conninfra_ctx.cal_info;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2145: 	struct timespec64 start, end;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2146: 	unsigned long diff;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2147: 	static bool ever_pre_cal = false;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2148:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2149: 	if (g_pre_cal_mode == PRE_CAL_ALL_DISABLED) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:2150: 		pr_info("g_pre_cal_mode == PRE_CAL_ALL_DISABLED\n");
+conninfra/conn_drv/connv2/core/conninfra_core.c:2151: 		return;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2152: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:2153:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2154: 	osal_gettimeofday(&start);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2155:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2156: 	/* non-zero means lock got, zero means not */
+conninfra/conn_drv/connv2/core/conninfra_core.c:2157: 	while (true) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:2158: 		// Handle PRE_CAL_PWR_ON_DISABLED case:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2159: 		// 1. Do pre-cal "only once" after bootup if BT or WIFI is default on
+conninfra/conn_drv/connv2/core/conninfra_core.c:2160: 		// 2. Use ever_pre_cal to check if the "first" pre-cal is already
+conninfra/conn_drv/connv2/core/conninfra_core.c:2161: 		//    triggered. If yes, skip pre-cal
+conninfra/conn_drv/connv2/core/conninfra_core.c:2162: 		if (g_pre_cal_mode == PRE_CAL_PWR_ON_DISABLED && !ever_pre_cal) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:2163: 			struct conninfra_ctx *infra_ctx = &g_conninfra_ctx;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2164:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2165: 			ret = msg_thread_send_1(&infra_ctx->msg_ctx,
+conninfra/conn_drv/connv2/core/conninfra_core.c:2166: 					CONNINFRA_OPID_PRE_CAL_PREPARE, PRE_CAL_BY_SUBDRV_PWR_ON);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2167: 			ever_pre_cal = true;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2168: 			pr_info("[%s] [pre_cal] Triggered by subdrv power on and set ever_pre_cal to true, result: %d", __func__, ret);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2169: 		}
+conninfra/conn_drv/connv2/core/conninfra_core.c:2170:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2171: 		ret = osal_trylock_sleepable_lock(&cal_info->pre_cal_lock);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2172: 		if (ret) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:2173: 			if (cal_info->status == PRE_CAL_NOT_INIT || cal_info->status == PRE_CAL_SCHEDULED) {
+conninfra/conn_drv/connv2/core/conninfra_core.c:2174: 				pr_info("[%s] [pre_cal] ret=[%d] status=[%d]", __func__, ret, cal_info->status);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2175: 				osal_unlock_sleepable_lock(&cal_info->pre_cal_lock);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2176: 				if (conninfra_is_pre_cal_timeout_by_cb_not_registered(&start) == 1)
+conninfra/conn_drv/connv2/core/conninfra_core.c:2177: 					break;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2178: 				osal_sleep_ms(100);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2179: 				continue;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2180: 			}
+conninfra/conn_drv/connv2/core/conninfra_core.c:2181: 			osal_unlock_sleepable_lock(&cal_info->pre_cal_lock);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2182: 			break;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2183: 		} else {
+conninfra/conn_drv/connv2/core/conninfra_core.c:2184: 			pr_info("[%s] [pre_cal] ret=[%d] status=[%d]", __func__, ret, cal_info->status);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2185: 			osal_sleep_ms(100);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2186: 		}
+conninfra/conn_drv/connv2/core/conninfra_core.c:2187: 	}
+conninfra/conn_drv/connv2/core/conninfra_core.c:2188: 	osal_gettimeofday(&end);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2189:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2190: 	diff = timespec64_to_ms(&start, &end);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2191: 	if (diff > BLOCKING_CHECK_MONITOR_THREAD)
+conninfra/conn_drv/connv2/core/conninfra_core.c:2192: 		pr_info("blocking spent [%lu]", diff);
+conninfra/conn_drv/connv2/core/conninfra_core.c:2193: }
+conninfra/conn_drv/connv2/core/conninfra_core.c:2194: #endif
+conninfra/conn_drv/connv2/core/conninfra_core.c:2195:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2196:
+conninfra/conn_drv/connv2/core/conninfra_core.c:2197: static void _conninfra_core_update_rst_status(enum chip_rst_status status)
+conninfra/conn_drv/connv2/core/conninfra_core.c:2198: {
+conninfra/conn_drv/connv2/core/conninfra_core.c:2199: 	unsigned long flag;
+conninfra/conn_drv/connv2/core/conninfra_core.c:2200:

@@ -1,0 +1,46 @@
+test_auxadc_scale.py: rc=0
+PASS: extracted scale branch matches ACK transfer law (12/15-bit, integer/fractional ratios)
+
+test_auxadc_temperature.py: rc=0
+PASS:4096 codes; invalid calibration and nonzero slope; regmap/ADC errors preserved; no sampling on calibration failure
+
+test_axi_observer.py: rc=0
+PASS: 8 selectors, 7 live source changes, 49 selector transitions, read errors, inactive source, adjacent bits; read-only parentless ops
+
+test_fdt.py: rc=0
+PASS: live LK RAM and 41 reservations retained; vendor devices/phandles excluded
+PASS: FDT reserve-map entries retained
+PASS: wrong board/cell layout, malformed reg/ranges, missing RAM, small buffer rejected
+PASS: missing/short/oversized/wrong-endian/truncated calibration omitted without blocking boot
+PASS: exact byte preservation at count bounds and chosen@0; unrelated chosen properties excluded
+
+test_lvts_calibration.py: rc=0
+PASS:22 calibration words match ACK log;17 count_r and7 count_rc match extracted vendor C; malformed/truncated/endian-invalid blobs rejected
+
+test_lvts_capture.py: rc=0
+PASS: complete capture publication, sequence/timestamps, interrupted locking, sticky errors and no partial output; root-only attribute
+
+test_lvts_identify.py: rc=0
+PASS: idle refusal, seven IDs, both command timeouts, wrong-ID and busy handling, clock cleanup, exact reset masks and write faults
+
+test_lvts_rck.py: rc=0
+PASS: actual calibration decode, malformed data, RCK 1–4 sensors, every command timeout, sensing timeout, fallback boundaries, overflow and EDATA readback failure
+
+test_lvts_sample.py: rc=0
+PASS: 1–4 sensor acquisition, command/valid/idle timeout cleanup, stale/zero/IRQ rejection and 28 signed temperature conversions
+
+test_mainpll_provider.py: rc=0
+PASS: 56 rates, inactive/power/isolation/reference cases, 30 provider requests; read-only ops
+
+test_mainpll_rate.py: rc=0
+PASS:56 PCW/postdivider boundary and rounding cases match extracted kernel PLL arithmetic; live MAINPLL2184MHz / AXI156MHz
+
+test_pmic_temperature.py: rc=0
+PASS: all4096 raw codes match vendor C for captured zero-slope calibration; invalid/missing/unsupported calibration rejected
+
+test_pwrap_mt6885.py: rc=0
+PASS: sparse/out-of-range access blocked, INIT_DONE preserved, error returns unchanged, diagnostics read-only
+PASS: ten MT6885 offsets match ACK; hardware faults were not injected
+
+test_thermal_gate.py: rc=0
+PASS: inherited-on/closed/invalid-rate/read-error preflight; actual gate ops preserve adjacent bits across 6 register patterns; vendor ID and critical flag

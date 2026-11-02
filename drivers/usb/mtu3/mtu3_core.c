@@ -359,6 +359,17 @@ void mtu3_start(struct mtu3 *mtu)
 
 	mtu3_dev_power_on(mtu);
 	mtu3_csr_init(mtu);
+	/* Diagnostic equivalent of ACK force-vbus, fixed peripheral mode only. */
+	if (IS_ENABLED(CONFIG_ARM64_OP6893_BRINGUP) &&
+	    of_machine_is_compatible("realme,op6893") &&
+	    mtu->ssusb->dr_mode == USB_DR_MODE_PERIPHERAL) {
+		mtu3_clrbits(mtu->ippc_base, SSUSB_U2_CTRL(0),
+			     SSUSB_U2_PORT_OTG_SEL);
+		mtu3_setbits(mbase, U3D_MISC_CTRL, VBUS_FRC_EN | VBUS_ON);
+		dev_info(mtu->dev, "op6893: forced VBUS, misc=%#x u2ctl=%#x\n",
+			 mtu3_readl(mbase, U3D_MISC_CTRL),
+			 mtu3_readl(mtu->ippc_base, SSUSB_U2_CTRL(0)));
+	}
 	mtu3_set_speed(mtu, mtu->speed);
 
 	/* Initialize the default interrupts */

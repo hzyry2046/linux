@@ -1,0 +1,12 @@
+3993: [    3.544760] [get_consys_platform_ops] --- [af2630b0]of_node[consys][consys@18000000]
+3994: [    3.544765] [get_consys_platform_ops] chipid=[6893] [af218498]
+4030: [    3.546121] A-die chipid detection done, found chipid=[6635]
+4140: [    3.611348] [wlan][1]axiCsrIoremap:(INIT INFO) CSRBaseAddress:0xFFFFFFC086800000 ioremap idx:0 region 0x700000 @ 0x18000000
+4141: [    3.611354] [wlan][1]halGetRsvMemSizeRsvedByKernel:(INIT INFO) gWifiRsvMemSize:0xf20000
+4142: [    3.611372] wlan 18000000.wifi: assigned reserved memory node wifi-reserve-memory
+4146: [    3.612738] [wlan][1]halGetRsvMemSizeRsvedByKernel:(INIT INFO) gWifiRsvMemSize:0xf20000
+4266: [    3.697883] A-die chipid detection done, found chipid=[6635]
+7791: [   25.600046] [wlan][315]kalFirmwareOpen:(INIT INFO) Request FW image: soc3_0_ram_wmmcu_1a_1_hdr.bin done
+7795: [   25.602393] [wlan][315]kalFirmwareOpen:(INIT INFO) Request FW image: soc3_0_ram_wifi_1a_1_hdr.bin done
+8047: [   25.707597] [wlan][315]kalFirmwareOpen:(INIT INFO) Request FW image: soc3_0_patch_wmmcu_1a_1_hdr.bin done
+8441: [   26.870956] [wlan][315]kalFirmwareOpen:(INIT INFO) Request FW image: WIFI_RAM_CODE_soc3_0_1a_1.bin done

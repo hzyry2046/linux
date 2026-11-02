@@ -12,6 +12,7 @@
 #include <linux/cleanup.h>
 #include <linux/delay.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
@@ -299,7 +300,7 @@ static const u16 mt6358_auxadc_regs[] = {
 };
 
 static const struct iio_chan_spec mt6359_auxadc_channels[] = {
-	MTK_PMIC_IIO_CHAN(MT6359, bat_adc, BATADC, 0, 15, IIO_RESISTANCE),
+	MTK_PMIC_IIO_CHAN(MT6359, bat_adc, BATADC, 0, 15, IIO_VOLTAGE),
 	MTK_PMIC_IIO_CHAN(MT6359, batt_temp, BAT_TEMP, 3, 12, IIO_TEMP),
 	MTK_PMIC_IIO_CHAN(MT6359, chip_temp, CHIP_TEMP, 4, 12, IIO_TEMP),
 	MTK_PMIC_IIO_CHAN(MT6359, acc_det, ACCDET, 5, 12, IIO_RESISTANCE),
@@ -315,6 +316,22 @@ static const struct iio_chan_spec mt6359_auxadc_channels[] = {
 	/* Battery impedance channels */
 	MTK_PMIC_IIO_CHAN(MT6359, batt_v, VBAT, 0, 15, IIO_VOLTAGE),
 	MTK_PMIC_IIO_CHAN(MT6359, batt_i, IBAT, 0, 15, IIO_CURRENT),
+};
+
+/* Board diagnostics: keep raw voltage alongside calibrated die temperature. */
+static const struct iio_chan_spec op6893_auxadc_channels[] = {
+	MTK_PMIC_IIO_CHAN(MT6359, bat_adc, BATADC, 0, 15, IIO_VOLTAGE),
+	MTK_PMIC_IIO_CHAN(MT6359, chip_temp_voltage, CHIP_TEMP, 4, 12, IIO_VOLTAGE),
+	{
+		.type = IIO_TEMP,
+		.channel = MT6359_AUXADC_CHIP_TEMP,
+		.address = 4,
+		.scan_index = PMIC_AUXADC_CHAN_CHIP_TEMP,
+		.scan_type.realbits = 12,
+		.datasheet_name = "chip_temp",
+		.indexed = 1,
+		.info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED),
+	},
 };
 
 static const struct mtk_pmic_auxadc_chan mt6359_auxadc_ch_desc[] = {
@@ -753,6 +770,49 @@ static int mt6359_auxadc_read_adc(struct mt6359_auxadc *adc_dev,
 	return 0;
 }
 
+static int op6893_auxadc_temp_intercept(unsigned int control, unsigned int vts,
+				      int *intercept)
+{
+	unsigned int degc = FIELD_GET(GENMASK(13, 8), control);
+	unsigned int slope = FIELD_GET(GENMASK(6, 1), control);
+
+	vts &= GENMASK(12, 0);
+	if (!(control & BIT(14)) || degc < 38 || degc > 60 || !vts || vts >= 4096)
+		return -ENODATA;
+
+	/* Vendor intercept/sample formulas disagree for nonzero effective slope. */
+	if ((control & BIT(0)) && slope)
+		return -EOPNOTSUPP;
+
+	/* Match the vendor's integer-millivolt truncation, returning milli-Celsius. */
+	*intercept = (vts * 1800 / 4096) * 1000000 / 1681 + degc * 500;
+	return 0;
+}
+
+static int op6893_auxadc_read_temp(struct mt6359_auxadc *adc_dev,
+				 const struct iio_chan_spec *chan, int *val)
+{
+	unsigned int control, vts;
+	int intercept, ret;
+
+	/* MT6359P thermal calibration shadows ELR8/9; no OTP engine writes. */
+	ret = regmap_read(adc_dev->regmap, 0x11e8, &control);
+	if (ret)
+		return ret;
+	ret = regmap_read(adc_dev->regmap, 0x11ea, &vts);
+	if (ret)
+		return ret;
+	ret = op6893_auxadc_temp_intercept(control, vts, &intercept);
+	if (ret)
+		return ret;
+
+	ret = mt6359_auxadc_read_adc(adc_dev, chan, val);
+	if (ret)
+		return ret;
+	*val = intercept - (*val * 1800 / 4096) * 1000000 / 1681;
+	return IIO_VAL_INT;
+}
+
 static int mt6359_auxadc_read_label(struct iio_dev *indio_dev,
 				    const struct iio_chan_spec *chan, char *label)
 {
@@ -768,15 +828,17 @@ static int mt6359_auxadc_read_raw(struct iio_dev *indio_dev,
 	const struct mtk_pmic_auxadc_chan *desc = &cinfo->desc[chan->scan_index];
 	int ret;
 
+	if (mask == IIO_CHAN_INFO_PROCESSED) {
+		if (cinfo->channels != op6893_auxadc_channels || chan->type != IIO_TEMP)
+			return -EOPNOTSUPP;
+		guard(mutex)(&adc_dev->lock);
+		return op6893_auxadc_read_temp(adc_dev, chan, val);
+	}
+
 	if (mask == IIO_CHAN_INFO_SCALE) {
 		*val = desc->r_ratio.numerator * cinfo->vref_mV;
-
-		if (desc->r_ratio.denominator > 1) {
-			*val2 = desc->r_ratio.denominator;
-			return IIO_VAL_FRACTIONAL;
-		}
-
-		return IIO_VAL_INT;
+		*val2 = desc->r_ratio.denominator << chan->scan_type.realbits;
+		return IIO_VAL_FRACTIONAL;
 	}
 
 	scoped_guard(mutex, &adc_dev->lock) {
@@ -805,7 +867,7 @@ static int mt6359_auxadc_read_raw(struct iio_dev *indio_dev,
 		 * AUXADC is stuck: perform a full reset to recover it.
 		 */
 		if (ret == -ETIMEDOUT) {
-			if (adc_dev->timed_out) {
+			if (adc_dev->timed_out && !cinfo->no_reset) {
 				dev_warn(adc_dev->dev, "Resetting stuck ADC!\r\n");
 				mt6359_auxadc_reset(adc_dev);
 			}
@@ -837,6 +899,24 @@ static int mt6359_auxadc_probe(struct platform_device *pdev)
 	chip_info = device_get_match_data(dev);
 	if (!chip_info)
 		return -EINVAL;
+
+	if (IS_ENABLED(CONFIG_ARM64_OP6893_BRINGUP) &&
+	    of_machine_is_compatible("realme,op6893") &&
+	    chip_info == &mt6359_chip_info) {
+		struct mtk_pmic_auxadc_info *bringup_info;
+
+		bringup_info = devm_kmemdup(dev, chip_info, sizeof(*chip_info), GFP_KERNEL);
+		if (!bringup_info)
+			return -ENOMEM;
+		/* Preserve LK reset/averaging and exclude impedance. */
+		bringup_info->channels = op6893_auxadc_channels;
+		bringup_info->num_channels = ARRAY_SIZE(op6893_auxadc_channels);
+		bringup_info->no_reset = true;
+		bringup_info->read_imp = NULL;
+		chip_info = bringup_info;
+		dev_info(dev, "op6893 diagnostic voltages; preserving LK ADC setup\n");
+	}
+
 	/*
 	 * The regmap for this device has to be acquired differently for
 	 * SoC PMIC Wrapper and SPMI PMIC cases:

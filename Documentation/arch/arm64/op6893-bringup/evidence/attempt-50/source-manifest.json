@@ -1,0 +1,8 @@
+{
+  "conninfra/conn_drv/connv2/core/conninfra_core.c": "d5646d13ec532fa91c6bd99b9f31f7e9a3fcf3a1d002253b556ec64e78930a75",
+  "wlan/core/gen4m/chips/common/pre_cal.c": "d82cfc419b7a2550da3b66c6468cef6f9668c56c565360b5100c6690afd2e167",
+  "wlan/core/gen4m/chips/common/cmm_asic_common.c": "8b346cb1159394b18588f99ac0a25c140407c4dd2a639adfc0d2565de2cc793f",
+  "wlan/core/gen4m/os/linux/gl_init.c": "272cb3397908d96b4e832d5596ce5bbd653fc719dfff71daa4fccac008503ec6",
+  "wlan/adaptor/wmt_cdev_wifi.c": "06528831296996d73e0c1fd0c8d1dec4ec3cf211e7de1cafcd09f43672f17a5e",
+  "bt/mt66xx/btif/btmtk_btif_main.c": "2993154368dc1292fea1196de905801545e1b4957fa3b7bdc0aaa02e5ca5b776"
+}
