@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: GPL-2.0
+config MTK_COMBO
+bool "MediaTek MT6893 connectivity support (conninfra only)"
+help
+  Downstream MediaTek conninfra stack for MT6893, built-in,
+  phase A: power-on path only.
+
+config MTK_COMBO_CHIP_CONSYS_6893
+bool "MT6893 Consys support"
+depends on MTK_COMBO
+default y
+
+config MTK_CONNSYS_DEDICATED_LOG_PATH
+bool "MTK dedicated connsys log path"
+depends on MTK_COMBO
+default y
+
+config OP6893_CONN_MTCMOS_OFF
+	bool "Power down CONN domain on conninfra power-off (unsafe)"
+	depends on MTK_COMBO
+	default n
+	help
+	  Keep the CONN power domain retained after conninfra power-off.
+	  Enabling runs the extracted SPM/protection off sequence, whose
+	  safety on this board is not yet established.
+
+config MTK_COMBO_WIFI
+	bool "MT6893 Wi-Fi (gen4m + wmt_chrdev)"
+	depends on MTK_COMBO && WLAN && CFG80211
+	default n
+
+config MTK_COMBO_WIFI_HIF
+	string
+	default "axi"
+	depends on MTK_COMBO_WIFI
+
+config MTK_COMBO_BT
+	bool "MediaTek MT6893 Bluetooth (btif + mt66xx)"
+	depends on MTK_COMBO
+	default n
+
+config MTK_BT_MT66XX
+	bool "MediaTek MT6893 BT (btmtk btif transport)"
+	depends on MTK_COMBO_BT
+	default y
+
+config MTK_BTIF
+	bool "MediaTek BTIF platform driver"
+	depends on MTK_COMBO_BT
+	default y
