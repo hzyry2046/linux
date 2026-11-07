@@ -2537,6 +2537,17 @@ config ARM64_OP6893_LVTS_IDENTIFY
 	  leaves sensing, interrupts and thermal protection disabled. It is not
 	  a thermal driver or a general reset provider.
 
+config ARM64_OP6893_CONN_PREFLIGHT
+	bool "Experimental op6893 connectivity preflight and rail cycle"
+	depends on ARM64_OP6893_BRINGUP && REGULATOR_MT6359 && PINCTRL
+	help
+	  Expose a root-only sequential snapshot of always-on AP power state,
+	  MT6359P registers and explicitly described regulator providers.
+	  An explicit board opt-in also permits a one-shot common-rail cycle,
+	  with shared-parent lifetime votes. A further opt-in permits a bounded
+	  CONN domain cycle and guarded digital-ID reads. Neither establishes
+	  full ownership of inherited upstream inputs.
+
 config ARM64_OP6893_BRINGUP
 	bool "Experimental op6893 direct-LK boot"
 	depends on ARCH_MEDIATEK && OF

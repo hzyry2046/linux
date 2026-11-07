@@ -10,6 +10,13 @@
 目标：让 Debian 主线环境以本机原有固件和校准数据初始化 Wi-Fi，不依赖
 Android HAL、属性服务、nvram daemon 或屏幕亮灭事件。当前尚未启用 Wi-Fi。
 
+## 结果已接收（2026-11-03）
+
+原报告位于 `/home/hzyry2046/src/conninfra-rev/REPORT.md`。经过独立复核的
+集成约定见 [WIFI-INITIALIZATION.md](WIFI-INITIALIZATION.md)：
+前缀是12字节 ASCII、无NUL、无尾部补零；本机BTIF剥离48字节EMI头。
+这几项修正优先于原报告。任务A主要协议已闭合，B/C仍保留明确的未知项。
+
 ## 输入文件及身份
 
 固件与用户空间文件根目录：

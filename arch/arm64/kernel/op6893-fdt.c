@@ -100,7 +100,10 @@ int __init op6893_merge_fdt(void *dst, int size, const void *board,
 		return -FDT_ERR_BADNCELLS;
 	if (!fdt_getprop(lk, parent, "ranges", &len) || len)
 		return -FDT_ERR_BADVALUE;
-	reserved = fdt_add_subnode(dst, 0, "reserved-memory");
+	/* The board dtb may already carry a reserved-memory node (consys). */
+	reserved = fdt_path_offset(dst, "/reserved-memory");
+	if (reserved < 0)
+		reserved = fdt_add_subnode(dst, 0, "reserved-memory");
 	if (reserved < 0)
 		return reserved;
 	ret = fdt_setprop_u32(dst, reserved, "#address-cells", 2);
@@ -122,8 +125,11 @@ int __init op6893_merge_fdt(void *dst, int size, const void *board,
 		} else if (len != 8) {
 			return -FDT_ERR_BADVALUE;
 		}
-		target = fdt_add_subnode(dst, reserved,
-					 fdt_get_name(lk, node, NULL));
+		target = fdt_subnode_offset(dst, reserved,
+					    fdt_get_name(lk, node, NULL));
+		if (target == -FDT_ERR_NOTFOUND)
+			target = fdt_add_subnode(dst, reserved,
+						 fdt_get_name(lk, node, NULL));
 		if (target < 0)
 			return target;
 		/* Retain even reusable regions, but do not attach vendor drivers. */

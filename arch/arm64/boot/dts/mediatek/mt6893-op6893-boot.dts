@@ -11,6 +11,29 @@
 	model = "Realme GT Neo op6893 (direct LK bring-up)";
 	compatible = "realme,op6893", "mediatek,mt6893";
 
+	/* No default pin state; a rail cycle requires an explicit trigger. */
+	conn-preflight {
+		compatible = "realme,op6893-conn-preflight";
+		realme,allow-inherited-parent-rail-cycle;
+		realme,allow-conn-domain-cycle;
+		pinctrl-names = "conn-active", "conn-idle", "strap-prepare",
+				"strap-high", "strap-mux", "strap-low", "strap-input";
+		pinctrl-0 = <&conn_active_pins &conn180_active>;
+		pinctrl-1 = <&conn_idle_pins>;
+		pinctrl-2 = <&conn_active_pins &conn180_prepare>;
+		pinctrl-3 = <&conn_active_pins &conn180_high>;
+		pinctrl-4 = <&conn_active_pins &conn180_mux>;
+		pinctrl-5 = <&conn_active_pins &conn180_low>;
+		pinctrl-6 = <&conn_active_pins &conn180_input>;
+		mediatek,pmic-wrapper = <&pwrap>;
+		vs1-supply = <&mt6359_vs1>;
+		vs2-supply = <&mt6359_vs2>;
+		vcn13-supply = <&mt6359_vcn13>;
+		vcn18-supply = <&mt6359_vcn18>;
+		vcn33-1-supply = <&mt6359_vcn33_1>;
+		vcn33-2-supply = <&mt6359_vcn33_2>;
+	};
+
 	/* ACK nominal rate; oscillator calibration/control remain inherited. */
 	ulposc: oscillator-ulposc {
 		compatible = "fixed-clock";
@@ -109,6 +132,50 @@
 			interrupts = <222 IRQ_TYPE_LEVEL_HIGH>;
 			interrupt-controller;
 			#interrupt-cells = <2>;
+			vs1-ldo2-supply = <&mt6359_vs1>;
+			vs2-ldo2-supply = <&mt6359_vs2>;
+
+			/*
+			 * Register inherited supplies without applying voltage, mode
+			 * or boot-on constraints. Diagnostic rail votes are explicit.
+			 * Keep regulator_ignore_unused until ownership is complete.
+			 */
+			regulators {
+				compatible = "mediatek,mt6359-regulator";
+
+				mt6359_vs1: buck_vs1 {
+					regulator-name = "vs1";
+				};
+
+				mt6359_vs2: buck_vs2 {
+					regulator-name = "vs2";
+				};
+
+				mt6359_vcn13: ldo_vcn13 {
+					regulator-name = "vcn13";
+				};
+
+				mt6359_vcn18: ldo_vcn18 {
+					regulator-name = "vcn18";
+				};
+
+				mt6359_vcn33_1: ldo_vcn33_1 {
+					regulator-name = "vcn33_1";
+				};
+
+				mt6359_vcn33_1_bt: ldo_vcn33_1_bt {
+					regulator-name = "vcn33_1_bt";
+				};
+				mt6359_vcn33_1_wifi: ldo_vcn33_1_wifi {
+					regulator-name = "vcn33_1_wifi";
+				};
+				mt6359_vcn33_2_wifi: ldo_vcn33_2_wifi {
+					regulator-name = "vcn33_2_wifi";
+				};
+				mt6359_vcn33_2: ldo_vcn33_2 {
+					regulator-name = "vcn33_2";
+				};
+			};
 
 			adc {
 				compatible = "mediatek,mt6359-auxadc";
@@ -164,10 +231,199 @@
 };
 
 &pio {
+	/* Custom names prevent automatic boot/probe selection by driver core. */
+	conn_active_pins: conn-active-pins {
+		/* GPIO173/175/178-182 share the same drive field. */
+		pins-clocks-control {
+			pinmux = <PINMUX_GPIO172__FUNC_CONN_TOP_CLK>,
+				 <PINMUX_GPIO175__FUNC_CONN_WB_PTA>,
+				 <PINMUX_GPIO176__FUNC_CONN_BT_CLK>,
+				 <PINMUX_GPIO178__FUNC_CONN_WF_CTRL0>,
+				 <PINMUX_GPIO179__FUNC_CONN_WF_CTRL1>,
+				 <PINMUX_GPIO181__FUNC_CONN_WF_CTRL3>,
+				 <PINMUX_GPIO182__FUNC_CONN_WF_CTRL4>;
+			drive-strength = <4>;
+		};
+
+		pins-data {
+			pinmux = <PINMUX_GPIO173__FUNC_CONN_TOP_DATA>,
+				 <PINMUX_GPIO177__FUNC_CONN_BT_DATA>;
+			drive-strength = <4>;
+			bias-pull-up;
+		};
+
+		pins-reset {
+			pinmux = <PINMUX_GPIO174__FUNC_CONN_HRST_B>;
+			drive-strength = <2>;
+		};
+	};
+
+	conn180_active: conn180-active-pins {
+		pins-strap {
+			pinmux = <PINMUX_GPIO180__FUNC_CONN_WF_CTRL2>;
+		};
+	};
+
+	conn180_prepare: conn180-prepare-pins {
+		pins-strap {
+			pinmux = <PINMUX_GPIO180__FUNC_CONN_WF_CTRL2>;
+			output-high;
+		};
+	};
+
+	conn180_high: conn180-high-pins {
+		pins-strap {
+			pinmux = <PINMUX_GPIO180__FUNC_GPIO180>;
+		};
+	};
+
+	conn180_mux: conn180-mux-pins {
+		pins-strap {
+			pinmux = <PINMUX_GPIO180__FUNC_CONN_WF_CTRL2>;
+		};
+	};
+
+	conn180_low: conn180-low-pins {
+		pins-strap {
+			pinmux = <PINMUX_GPIO180__FUNC_CONN_WF_CTRL2>;
+			output-low;
+		};
+	};
+
+	conn180_input: conn180-input-pins {
+		pins-strap {
+			pinmux = <PINMUX_GPIO180__FUNC_CONN_WF_CTRL2>;
+			output-disable;
+		};
+	};
+
+	conn_idle_pins: conn-idle-pins {
+		pins-clocks-control-reset {
+			pinmux = <PINMUX_GPIO172__FUNC_GPIO172>,
+				 <PINMUX_GPIO174__FUNC_GPIO174>,
+				 <PINMUX_GPIO175__FUNC_GPIO175>,
+				 <PINMUX_GPIO176__FUNC_GPIO176>,
+				 <PINMUX_GPIO178__FUNC_GPIO178>,
+				 <PINMUX_GPIO179__FUNC_GPIO179>,
+				 <PINMUX_GPIO180__FUNC_GPIO180>,
+				 <PINMUX_GPIO181__FUNC_GPIO181>,
+				 <PINMUX_GPIO182__FUNC_GPIO182>;
+		};
+
+		pins-data {
+			pinmux = <PINMUX_GPIO173__FUNC_GPIO173>,
+				 <PINMUX_GPIO177__FUNC_GPIO177>;
+			bias-pull-down;
+		};
+	};
+
 	volume_down_pins: volume-down-pins {
 		pins-key {
 			pinmux = <PINMUX_GPIO155__FUNC_GPIO155>;
 			input-enable;
 		};
+	};
+};
+
+/ {
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+			op6893-crumb {
+			reg = <0x0 0x48180000 0x0 0x1000>;
+			no-map;
+		};
+
+		wifi_mem: wifi-mem {
+			compatible = "shared-dma-pool";
+			no-map;
+			size = <0x0 0xf20000>;
+			alloc-ranges = <0x0 0x40000000 0x0 0x80000000>;
+			alignment = <0x0 0x1000000>;
+		};
+
+		consys_mem: consys-mem {
+			compatible = "mediatek,consys-reserve-memory";
+			size = <0x0 0x450000>;
+			alignment = <0x0 0x100000>;
+			alloc-ranges = <0x0 0x50000000 0x0 0x40000000>;
+			no-map;
+		};
+	};
+
+	consys@18000000 {
+		compatible = "mediatek,mt6893-consys";
+		pmic = <&pwrap>;
+		vcn13-supply = <&mt6359_vcn13>;
+		vcn18-supply = <&mt6359_vcn18>;
+		vcn33_1_bt-supply = <&mt6359_vcn33_1_bt>;
+		vcn33_1_wifi-supply = <&mt6359_vcn33_1_wifi>;
+		vcn33_2_wifi-supply = <&mt6359_vcn33_2_wifi>;
+		reg = <0x0 0x18000000 0x0 0x1000
+		       0x0 0x18001000 0x0 0x1000
+		       0x0 0x18060000 0x0 0x10000
+		       0x0 0x10001000 0x0 0x1000
+		       0x0 0x10007000 0x0 0x1000
+		       0x0 0x10006000 0x0 0x1000
+		       0x0 0x1020e000 0x0 0x1000
+		       0x0 0x18005000 0x0 0x1000
+		       0x0 0x18003000 0x0 0x1000
+		       0x0 0x18050000 0x0 0x10000
+		       0x0 0x10005000 0x0 0x1000
+		       0x0 0x18004000 0x0 0x1000
+		       0x0 0x18070000 0x0 0x10000
+		       0x0 0x18002000 0x0 0x1000
+		       0x0 0x11ea0000 0x0 0x1000
+		       0x0 0x1800f000 0x0 0x1000>;
+		memory-region = <&consys_mem>;
+	};
+};
+
+/ {
+	btif_clk: btif_clk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <26000000>;
+		clock-output-names = "btif";
+	};
+
+	btif@1100c000 {
+		compatible = "mediatek,btif";
+		reg = <0x0 0x1100c000 0x0 0x1000>,
+		      <0x0 0x11000d80 0x0 0x80>,
+		      <0x0 0x11000e00 0x0 0x80>;
+		interrupts = <0 0x9e 4>, <0 0x98 4>, <0 0x99 4>;
+		clocks = <&btif_clk>, <&btif_clk>;
+		clock-names = "btifc", "apdmac";
+		status = "okay";
+	};
+
+	wifi: wifi@18000000 {
+		compatible = "mediatek,wifi";
+		reg = <0x0 0x18000000 0x0 0x700000>;
+		interrupts = <0 0x177 4>, <0 0x17a 4>;
+		memory-region = <&wifi_mem>;
+		flavor_bin = "a";
+		emi-addr = <0>;
+		emi-size = <0xf20000>;
+		emi-alignment = <0x1000000>;
+		emi-max-addr = <0xC0000000>;
+		status = "okay";
+	};
+
+	bt@18000000 {
+		compatible = "mediatek,bt";
+		flavor_bin = "a";
+		reg = <0x0 0x18000000 0x0 0x1000>,
+		      <0x0 0x18001000 0x0 0x1000>,
+		      <0x0 0x18050000 0x0 0x1000>,
+		      <0x0 0x18060000 0x0 0x1000>,
+		      <0x0 0x18800000 0x0 0x1000>,
+		      <0x0 0x18812000 0x0 0x1000>,
+		      <0x0 0x10001000 0x0 0x1000>;
+		interrupts = <0 0x178 4>, <0 0x179 4>;
+		status = "okay";
 	};
 };
