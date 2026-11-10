@@ -3982,17 +3982,21 @@ int btmtk_register_hci_device(struct btmtk_dev *bdev)
 		return err;
 	}
 
-	hci_dev_clear_flag(hdev, HCI_SETUP);
-	hci_dev_clear_flag(hdev, HCI_UNCONFIGURED);
-	/* This driver takes over the setup phase itself (it clears HCI_SETUP
-	 * and emits mgmt_index_added() by hand), so the grace period that
-	 * hci_register_dev() arms must be dropped as well. Otherwise the core
-	 * powers the controller off again HCI_AUTO_OFF_TIMEOUT after the first
-	 * successful Set Powered, without reporting it to userspace.
+	/*
+	 * Leave HCI_SETUP to the core: hci_power_on() runs the normal setup
+	 * and init sequence and only then clears it and sends Index Added.
+	 * Several Command Complete handlers (Read Local Version, Read Local
+	 * Supported Commands, ...) store their result only while HCI_SETUP is
+	 * set; clearing it here left hci_ver and hdev->commands[] zeroed, which
+	 * skipped Read Local Supported Commands, disabled extended scanning and
+	 * dropped LE Advertising Report from the LE event mask.
+	 *
+	 * Do drop the auto-off grace period, so the controller stays up after
+	 * the initial power-on instead of being switched off again
+	 * HCI_AUTO_OFF_TIMEOUT later.
 	 */
 	hci_dev_clear_flag(hdev, HCI_AUTO_OFF);
 	cancel_delayed_work(&hdev->power_off);
-	mgmt_index_added(hdev);
 
 	/* Storage is not up yet; this retries until the cell can be read. */
 	btmtk_schedule_bdaddr_load();
