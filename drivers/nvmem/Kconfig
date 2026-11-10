@@ -317,6 +317,16 @@ config NVMEM_MICROCHIP_OTPC
 	  This driver enable the OTP controller available on Microchip SAMA7G5
 	  SoCs. It controls the access to the OTP memory connected to it.
 
+config NVMEM_PARTITION
+	bool "Raw storage partition nvmem provider"
+	depends on BLOCK
+	help
+	  Expose a raw storage partition as an nvmem device, so per-unit data
+	  that a vendor bootloader leaves in a partition -- MAC addresses,
+	  calibration -- can be described with ordinary nvmem cells instead of
+	  being hardcoded in a board file. The partition is named by GPT label
+	  in DT and opened lazily on the first cell read.
+
 config NVMEM_MTK_EFUSE
 	tristate "Mediatek SoCs EFUSE support"
 	depends on ARCH_MEDIATEK || COMPILE_TEST

@@ -410,6 +410,8 @@
 		emi-size = <0xf20000>;
 		emi-alignment = <0x1000000>;
 		emi-max-addr = <0xC0000000>;
+		nvmem-cells = <&wifi_mac>;
+		nvmem-cell-names = "mac-address";
 		status = "okay";
 	};
 
@@ -424,6 +426,29 @@
 		      <0x0 0x18812000 0x0 0x1000>,
 		      <0x0 0x10001000 0x0 0x1000>;
 		interrupts = <0 0x178 4>, <0 0x179 4>;
+		nvmem-cells = <&bt_bdaddr>;
+		nvmem-cell-names = "bd-address";
 		status = "okay";
+	};
+
+	/*
+	 * Per-unit addresses, not patched into DT by the bootloader. They sit
+	 * at fixed offsets in the raw proinfo partition (same bytes as
+	 * /nvdata/APCFG/APRDEB/{BT_Addr,WIFI+4}); values deliberately not
+	 * recorded here.
+	 */
+	proinfo_nvmem: nvmem {
+		compatible = "mediatek,partition-nvmem";
+		partition-label = "proinfo";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		bt_bdaddr: bd-address@68 {
+			reg = <0x68 6>;
+		};
+
+		wifi_mac: mac-address@6e {
+			reg = <0x6e 6>;
+		};
 	};
 };
