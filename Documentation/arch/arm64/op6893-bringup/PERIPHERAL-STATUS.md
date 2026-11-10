@@ -1,11 +1,10 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
-更新基线：attempt97（TOPA18/384/394 往返写入/恢复通过）。设备当前运行主线，ACK 恢复备份按用户要求沿用原版本；
-attempt67 进入测试前为用户恢复的实际4.19 Android，uname5.10.0为伪装，未更新备份；
-当前实机镜像是 `9d1e950c4d59`，内核
-`7.3.0-op6893-d1-9d1e950c4d59+`；trim no-op复核、TOP070重复读取与全部清理通过，源码检查点
-`f12c1a18c` 加本地未提交修改。
-外置 Debian 镜像 `9825862f46b0`。本文描述这台设备的主线实测结果，
+更新基线：attempt106（Wi-Fi、Bluetooth 和 BlueZ 扫描实测可用，见
+[CONNECTIVITY-STATUS](CONNECTIVITY-STATUS.md)）。当前实机镜像是 `24c0e33d5597`，内核
+`7.3.0-op6893-d1-24c0e33d5597+`；外置 Debian 镜像 `debian-1ed1b45c80c2`。
+attempt97 及之前的寄存器级 CONN 行为保留作历史记录。
+本文描述这台设备的主线实测结果，
 不把 ACK 的功能、源码中存在的驱动或 DT 节点视为主线已经支持。
 
 各行限制对应所引实验，后续集成进展见较新的行。
@@ -34,6 +33,8 @@ attempt67 进入测试前为用户恢复的实际4.19 Android，uname5.10.0为�
 | CONN A-die ID mailbox | 部分，实测 | 新鲜 E3 ID 写入 SYSRAM +0x2800、读回、清零；完整清理成功 | 本轮清理后不保留给固件；尚未启动固件或 Wi-Fi | [76](evidence/attempt-76.md) |
 | CONN TOP 单寄存器写入/恢复 | 部分，实测 | E3/精确基线限定，0xa18 写 f6e8fff5、独立读回并恢复 f668fff5；完整清理通过 | 不是完整模拟初始化或物理电压验证；尚无 Wi-Fi | [75](evidence/attempt-75.md) |
 | CONN TOP XTAL 读取 | 部分，实测 | ID 后读取 0xa18=0xf668fff5、0xa1c=0x55555fff；逐笔 RDAT 变化，完整清理成功 | 无模拟写入/efuse/校准/固件；尚不能连接 Wi-Fi | [74](evidence/attempt-74.md) |
+| Wi-Fi（厂商 gen4m） | 实测可用 | 开机自动关联开放网络、DHCP、Wi-Fi SSH、NTP、DNS、HTTPS；出厂 MAC 由 proinfo 经 nvmem 读取 | 只测了无密码网络；WPA、省电、漫游未测；使用厂商栈，不是上游驱动 | [CONNECTIVITY](CONNECTIVITY-STATUS.md)、[100–106](evidence/attempt-100-106.md) |
+| Bluetooth（厂商 btif/mt66xx + BlueZ） | 实测可用 | 开机 hci0、标准 HCI 初始化、出厂 public 地址；bluetoothctl/btmgmt LE 扫描和 BR/EDR inquiry 能发现设备 | 配对、连接、数据传输未测；`0x0c77/0x0c78` 在本地完成 | [CONNECTIVITY](CONNECTIVITY-STATUS.md)、[100–106](evidence/attempt-100-106.md) |
 | 直接启动、内存 | 实测 | 从 boot 分区启动主线，导入 LK 内存与保留区 | fastboot boot 不可靠；不改 GPT；仍是本机调试启动实现 | [39](evidence/attempt-39.md) |
 | CPU / SMP | 部分 | CPU0–7 在线、用户空间与 SSH 运行 | 未完成 CPUfreq、CPUidle、热控或长期负载验证 | [39](evidence/attempt-39.md)、[40](evidence/attempt-40.md) |
 | UFS / 块设备 | 部分 | 读取 cache 上 rootfs，核对镜像哈希 | 时钟/PHY 等仍继承 LK；当前磁盘只读策略，不代表写入、链路省电已验证 | [37](evidence/attempt-37.md)、[39](evidence/attempt-39.md) |
@@ -84,7 +85,6 @@ attempt67 进入测试前为用户恢复的实际4.19 Android，uname5.10.0为�
 | 显示 / 背光 | 未启用 | DRM 关闭；需确认本机面板、DSI、供电与背光链路 |
 | 触摸屏 | 未启用 | 需核对芯片、总线、供电和复位；GPIO20 是触摸复位线索，不应当作音量加 |
 | GPU 加速 | 未启用 | GPU 驱动、时钟、电源域、供电、固件及热控待建立 |
-| Wi-Fi / Bluetooth | 未启用；Wi-Fi 优先推进 | 主线已实读 MT6635 E3 ID；ACK 已确认 AXI / SOC3_0 固件路径；接续模拟初始化、校准和固件依赖，再验证独立 Wi-Fi SSH；Bluetooth 仍关闭。见 [49](evidence/attempt-49.md)、[逆向复核与初始化约定](WIFI-INITIALIZATION.md) |
 | 音频 / 耳机检测 | 未启用 | codec、AFE、时钟/供电和路由待实现；accdet 尚未接入 |
 | 摄像头 / ISP | 未启用 | 传感器型号、总线、供电、时钟、ISP 管线待调查 |
 | RTC / 持久时间 | 未启用 | RTC_CLASS 关闭；不能用启动日志时间作为准确实时时钟 |
@@ -97,6 +97,10 @@ attempt67 进入测试前为用户恢复的实际4.19 Android，uname5.10.0为�
 
 - Debian13 arm64 SquashFS 位于 cache 的 `mainline/debian.squashfs`，外层 ext4
   以 `ro,norecovery` 挂载；根目录使用 tmpfs OverlayFS，运行时修改易失。
+  主线下不写 UFS，所以更新镜像要在 Android 下进行：先推到临时文件，校验哈希后
+  再改名，旧镜像保留（当前回滚镜像为 `debian-9825862f46b0.squashfs`）。
+- 开机由 `op6893-ssh-start` 依次启动 USB SSH、Wi-Fi（`op6893-wifi-up`）以及
+  dbus 和 bluetoothd（后者在后台运行）。
 - BusyBox PID1 / watchdog 和 USB SSH 是调试基础；并非完整手机发行版体验。
 - 保留 `clk_ignore_unused regulator_ignore_unused fw_devlink=off`；这些仍是
   bring-up 约束，不应在资源接管完成前简单删除。
@@ -280,3 +284,9 @@ trim no-op 成立、重复基线为5时执行目标写入、读回及恢复。�
 ## Attempt97
 
 `adie-ir-cycle` 实测通过；厂商序列中到 GPIO180 回切为止的固定写入均已逐项验证（均恢复，未保留）。设备保持 `7b4f9d238ef2`。见 [97](evidence/attempt-97.md)。
+
+## Attempt98–106：Wi-Fi 与 Bluetooth
+
+改用厂商连接栈之后，Wi-Fi 和 Bluetooth 都已实测可用：BLE 扫描的根因是 BT 驱动
+提前清除了 `HCI_SETUP`；出厂地址由 proinfo 经 nvmem 读取；BlueZ 已装进 rootfs。
+见 [CONNECTIVITY-STATUS](CONNECTIVITY-STATUS.md)。
