@@ -16,7 +16,7 @@
 | Wi-Fi（gen4m） | 实测可用 | 开机自动关联开放网络、DHCP、经 Wi-Fi 的 SSH、NTP 校时、DNS、HTTPS（`apt update`）| 只测了无密码网络；`wpa_supplicant`、省电、漫游都没测 |
 | Wi-Fi 出厂 MAC | 实测 | 从 proinfo 0x6e 经 nvmem 读取 | — |
 | Bluetooth HCI | 实测可用 | 开机 `hci0` 自动起来；HCI 初始化走主线标准流程；版本 12，厂商 70 | 有一处变通：`0x0c77/0x0c78` 在本地直接完成（固件不认识这两个命令） |
-| Bluetooth 出厂地址 | 部分 | 驱动已从 proinfo 0x68 经 nvmem 读到出厂地址，`bluetoothctl show` 也显示这个地址 | 实际空中地址仍是控制器默认的 `00:00:46:67:61:01`（btmgmt、hciconfig 和 RFCOMM 源地址都是它）：之后的 HCI 初始化会重新读取 BD_ADDR 并覆盖掉。见 attempt107 |
+| Bluetooth 出厂地址 | 实测 | 从 proinfo 0x68 经 nvmem 读取，由内核 `set_bdaddr`（`0xfc1a`）在初始化前写入控制器；hciconfig、btmgmt 和 RFCOMM 源地址都是出厂地址（attempt108） | 每次上电都会重新写入（`NON_PERSISTENT_SETUP`） |
 | BLE 扫描（BlueZ） | 实测可用 | `bluetoothctl scan on` 15 秒发现 32 个；`btmgmt find -l` 发现 90–126 个 | — |
 | BR/EDR inquiry | 实测 | `btmgmt find` 能找到经典蓝牙设备 | — |
 | 配对 / RFCOMM / OBEX | 实测 | 与 V35 ThinQ 完成 SSP 配对；l2ping 0% 丢包；RFCOMM 连接成功，OBEX OPP 推送 21 KiB 文件成功（attempt107） | 音频配置文件（A2DP/HFP）、PAN、LE 连接都没测 |
@@ -31,6 +31,8 @@
 - `8117d622c`：BT 驱动不再自己清除 `HCI_SETUP`（见下文“BLE 扫描”）。
 - `54dd59781`：新增 `partition-nvmem` 驱动，并在 DT 里描述 proinfo 中的 BT/Wi-Fi
   地址。
+- `cb944eec1`：defconfig 打开 RFCOMM 和 BNEP。
+- `f4f010b36`：BT 出厂地址改为通过内核 `set_bdaddr` 写入控制器。
 
 ## 关键问题与根因
 
