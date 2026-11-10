@@ -3506,10 +3506,8 @@ failed:
  */
 #define BT_ADDR_RETRY_MS	250
 #define BT_ADDR_MAX_RETRIES	480		/* ~120 s */
-#define BT_ADDR_REAPPLY_MS	1500
 
 static struct delayed_work bt_bdaddr_defer_work;
-static struct delayed_work bt_bdaddr_reapply_work;
 
 static int btmtk_read_bdaddr(struct btmtk_dev *bdev)
 {
@@ -3555,41 +3553,27 @@ static int btmtk_read_bdaddr(struct btmtk_dev *bdev)
 	return 0;
 }
 
-static int btmtk_set_bdaddr_vendor(struct btmtk_dev *bdev)
+/*
+ * Program the address through the core: hci_dev_setup_sync() calls this with
+ * hdev->public_addr when the setup callback flagged the controller address as
+ * invalid, before hci_init_sync() reads BD_ADDR back. Setup is marked
+ * non-persistent because the controller forgets the address whenever its
+ * firmware is reloaded on power-on.
+ */
+static int btmtk_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr)
 {
-	u8 cmd[SET_ADDRESS_CMD_LEN] = { 0x01, 0x1A, 0xFC, 0x06,
-					0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-	u8 event[SET_ADDRESS_EVT_LEN] = { 0x04, 0x0E, 0x04,
-					  0x01, 0x1A, 0xFC, 0x00 };
-	int ret, i;
+	struct sk_buff *skb;
 
-	if (!bdev || !bdev->hdev)
-		return -EINVAL;
+	skb = __hci_cmd_sync(hdev, 0xfc1a, sizeof(*bdaddr), bdaddr,
+			     HCI_INIT_TIMEOUT);
+	if (IS_ERR(skb)) {
+		bt_dev_err(hdev, "setting BD address failed (%ld)",
+			   PTR_ERR(skb));
+		return PTR_ERR(skb);
+	}
+	kfree_skb(skb);
 
-	for (i = 0; i < BD_ADDRESS_SIZE; i++)
-		cmd[SET_ADDRESS_CMD_PAYLOAD_OFFSET + i] = bdev->bdaddr[i];
-
-	ret = btmtk_main_send_cmd(bdev, cmd, sizeof(cmd), event, sizeof(event),
-				  0, 0, BTMTK_TX_CMD_FROM_DRV);
-	if (ret)
-		BTMTK_ERR("%s: vendor set BD_ADDR failed (%d)", __func__, ret);
-
-	return ret;
-}
-
-static void bt_bdaddr_reapply(struct work_struct *work)
-{
-	if (!g_sbdev)
-		return;
-
-	if (!btmtk_read_bdaddr(g_sbdev))
-		btmtk_set_bdaddr_vendor(g_sbdev);
-}
-
-static void bt_schedule_bdaddr_reapply(void)
-{
-	schedule_delayed_work(&bt_bdaddr_reapply_work,
-			      msecs_to_jiffies(BT_ADDR_REAPPLY_MS));
+	return 0;
 }
 
 static void bt_bdaddr_deferred_load(struct work_struct *work)
@@ -3610,7 +3594,6 @@ static void bt_bdaddr_deferred_load(struct work_struct *work)
 static void btmtk_schedule_bdaddr_load(void)
 {
 	INIT_DELAYED_WORK(&bt_bdaddr_defer_work, bt_bdaddr_deferred_load);
-	INIT_DELAYED_WORK(&bt_bdaddr_reapply_work, bt_bdaddr_reapply);
 	schedule_delayed_work(&bt_bdaddr_defer_work,
 			      msecs_to_jiffies(BT_ADDR_RETRY_MS));
 }
@@ -3623,13 +3606,15 @@ static int bt_setup(struct hci_dev *hdev)
 	BTMTK_INFO("%s", __func__);
 
 	/*
-	 * Refresh hdev->bdaddr before HCI init runs. Deliberately no vendor
-	 * set-address command here: on this port it times out and desyncs the
-	 * HCI event stream (same finding as the xaga port). It is sent from the
-	 * re-apply work instead, once the stack is up.
+	 * With a factory address available, hand it to the core as the public
+	 * address and mark the built-in one invalid, so that setup programs it
+	 * via set_bdaddr() before init reads BD_ADDR. Without one, the
+	 * controller default is used as before.
 	 */
-	btmtk_read_bdaddr(bdev);
-	bt_schedule_bdaddr_reapply();
+	if (!btmtk_read_bdaddr(bdev)) {
+		bacpy(&hdev->public_addr, &hdev->bdaddr);
+		hci_set_quirk(hdev, HCI_QUIRK_INVALID_BDADDR);
+	}
 
 	if (is_mt66xx(bdev->chip_id)) {
 		if (btmtk_fops_get_state(bdev) == BTMTK_FOPS_STATE_OPENED)
@@ -3945,6 +3930,8 @@ int btmtk_allocate_hci_device(struct btmtk_dev *bdev, int hci_bus_type)
 	hdev->flush    = bt_flush;
 	hdev->send	   = bt_send_frame;
 	hdev->setup    = bt_setup;
+	hdev->set_bdaddr = btmtk_set_bdaddr;
+	hci_set_quirk(hdev, HCI_QUIRK_NON_PERSISTENT_SETUP);
 
 	init_waitqueue_head(&bdev->p_wait_event_q);
 
