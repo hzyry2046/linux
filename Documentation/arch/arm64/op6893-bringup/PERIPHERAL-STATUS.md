@@ -34,7 +34,7 @@ attempt97 及之前的寄存器级 CONN 行为保留作历史记录。
 | CONN TOP 单寄存器写入/恢复 | 部分，实测 | E3/精确基线限定，0xa18 写 f6e8fff5、独立读回并恢复 f668fff5；完整清理通过 | 不是完整模拟初始化或物理电压验证；尚无 Wi-Fi | [75](evidence/attempt-75.md) |
 | CONN TOP XTAL 读取 | 部分，实测 | ID 后读取 0xa18=0xf668fff5、0xa1c=0x55555fff；逐笔 RDAT 变化，完整清理成功 | 无模拟写入/efuse/校准/固件；尚不能连接 Wi-Fi | [74](evidence/attempt-74.md) |
 | Wi-Fi（厂商 gen4m） | 实测可用 | 开机自动关联开放网络、DHCP、Wi-Fi SSH、NTP、DNS、HTTPS；出厂 MAC 由 proinfo 经 nvmem 读取 | 只测了无密码网络；WPA、省电、漫游未测；使用厂商栈，不是上游驱动 | [CONNECTIVITY](CONNECTIVITY-STATUS.md)、[100–106](evidence/attempt-100-106.md) |
-| Bluetooth（厂商 btif/mt66xx + BlueZ） | 实测可用 | 开机 hci0、标准 HCI 初始化；LE 扫描和 BR/EDR inquiry 能发现设备；与手机配对、RFCOMM、OBEX 推送成功（attempt107） | 空中地址已是出厂地址（attempt108）；音频和 PAN 未测；`0x0c77/0x0c78` 在本地完成 | [CONNECTIVITY](CONNECTIVITY-STATUS.md)、[100–106](evidence/attempt-100-106.md) |
+| Bluetooth（厂商 btif/mt66xx + BlueZ） | 实测可用 | 开机 hci0、标准 HCI 初始化；LE 扫描和 BR/EDR inquiry 能发现设备；与手机配对、RFCOMM、OBEX 推送、PAN 网络共享成功（attempt107–109） | 空中地址已是出厂地址（attempt108）；音频未测；`0x0c77/0x0c78` 在本地完成 | [CONNECTIVITY](CONNECTIVITY-STATUS.md)、[100–106](evidence/attempt-100-106.md) |
 | 直接启动、内存 | 实测 | 从 boot 分区启动主线，导入 LK 内存与保留区 | fastboot boot 不可靠；不改 GPT；仍是本机调试启动实现 | [39](evidence/attempt-39.md) |
 | CPU / SMP | 部分 | CPU0–7 在线、用户空间与 SSH 运行 | 未完成 CPUfreq、CPUidle、热控或长期负载验证 | [39](evidence/attempt-39.md)、[40](evidence/attempt-40.md) |
 | UFS / 块设备 | 部分 | 读取 cache 上 rootfs，核对镜像哈希 | 时钟/PHY 等仍继承 LK；当前磁盘只读策略，不代表写入、链路省电已验证 | [37](evidence/attempt-37.md)、[39](evidence/attempt-39.md) |

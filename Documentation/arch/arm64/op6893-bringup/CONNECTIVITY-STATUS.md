@@ -19,7 +19,9 @@
 | Bluetooth 出厂地址 | 实测 | 从 proinfo 0x68 经 nvmem 读取，由内核 `set_bdaddr`（`0xfc1a`）在初始化前写入控制器；hciconfig、btmgmt 和 RFCOMM 源地址都是出厂地址（attempt108） | 每次上电都会重新写入（`NON_PERSISTENT_SETUP`） |
 | BLE 扫描（BlueZ） | 实测可用 | `bluetoothctl scan on` 15 秒发现 32 个；`btmgmt find -l` 发现 90–126 个 | — |
 | BR/EDR inquiry | 实测 | `btmgmt find` 能找到经典蓝牙设备 | — |
-| 配对 / RFCOMM / OBEX | 实测 | 与 V35 ThinQ 完成 SSP 配对；l2ping 0% 丢包；RFCOMM 连接成功，OBEX OPP 推送 21 KiB 文件成功（attempt107） | 音频配置文件（A2DP/HFP）、PAN、LE 连接都没测 |
+| 配对 / RFCOMM / OBEX | 实测 | 与 V35 ThinQ 完成 SSP 配对；l2ping 0% 丢包；RFCOMM 连接成功，OBEX OPP 推送约 21 KiB 文件成功（attempt107、108） | — |
+| PAN（BNEP） | 实测 | 连接 V35 的蓝牙网络共享：bnep0、DHCP 获得地址、经 bnep0 ping 外网、HTTP 下载 140 KB 约 60 KB/s（attempt109） | 只测了 PANU 作为客户端；没有做长时间吞吐测试 |
+| 音频（A2DP/HFP）、LE 连接 | 未测 | — | rootfs 里没有 PipeWire/PulseAudio |
 
 完整地址和 NVRAM 内容属于本机私有数据，没有写进本文或证据文件。
 
