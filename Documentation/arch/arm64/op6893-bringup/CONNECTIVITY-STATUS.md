@@ -107,9 +107,33 @@ Debian 镜像通过 qemu chroot 用 apt 装了 `bluez` 5.82 和 `dbus-daemon`。
 启动 dbus 和 bluetoothd，不会阻塞 SSH。镜像是在 Android 下写入 `/cache` 的
 （主线下 UFS 仍然只读），旧镜像保留为 `debian-9825862f46b0.squashfs`。
 
+## Bluetooth 待办
+
+按建议的先后顺序排列。
+
+1. **BLE 连接 / GATT**：只测过扫描。可以用 V35 上的 nRF Connect 开一个 GATT
+   server，再用 `bluetoothctl` 连接、读写特征值。
+2. **A2DP / HFP 音频**：rootfs 里没有 PipeWire 或 PulseAudio，本机音频驱动在主线上
+   也还没启用。可行的第一步是作为 A2DP sink 接收 V35 的音乐流并存成文件；HFP 的
+   SCO 走 PCM 还是 HCI 尚未确认。
+3. **PAN 长时间吞吐与稳定性**：目前只有一次 140 KB 下载（约 60 KB/s）。要测多 MB
+   下载、长时间连接，以及 Wi-Fi 和蓝牙同时工作时的共存。
+4. **配对信息持久化**：rootfs 是内存里的 overlay，每次重启 `/var/lib/bluetooth`
+   都会丢失。需要一个能持久保存的位置；主线下 UFS 仍然是只读的。
+5. **驱动清理**：
+   - `0x0c77/0x0c78` 仍在驱动里本地完成（固件不支持这两个命令），应改为
+     quirk 或按命令位图跳过；
+   - attempt102 抓包中出现过一个异常的 ACL 句柄（3837），还没有解释；
+   - 去掉 `XAGA-*` 调试打印。
+6. **关断与省电**：没有测过 `power off`/`on` 多次循环、rfkill，也没有测过 btif deep
+   idle 对数据延迟的影响。
+7. **与 Android 地址不一致**：Android 在空中用的是控制器默认地址（OUI
+   `d6:fa:46`），主线用的是 proinfo 里的出厂地址，所以同一个对端设备在两个系统下
+   要分别配对。目前接受这一点。
+
 ## 证据
 
 - in-tree：[98](evidence/attempt-98.md)、[99](evidence/attempt-99.md)、
   [100–106 摘要](evidence/attempt-100-106.md)
 - 原始日志（dmesg、btmon、HCI snoop、二分结果）在外部工作区
-  `mt6893-direct/evidence/attempt-100` 到 `attempt-106`，没有复制进源码树。
+  `mt6893-direct/evidence/attempt-100` 到 `attempt-109`，没有复制进源码树。
