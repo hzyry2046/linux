@@ -71,6 +71,7 @@ attempt97 及之前的寄存器级 CONN 行为保留作历史记录。
 | CONN 初始化前置组合 | 部分，实测 | remap/RGU/SPI 配置保持期间清零 SYSRAM、设置 GPIO180 并获取/释放信号量；逐层恢复及关断通过 | A-die 复位始终保持；尚无 RF SPI 传输、A-die ID 或 Wi-Fi 固件运行 | [72](evidence/attempt-72.md) |
 | MT6635 A-die / RF SPI TOP | 部分，实测 | 释放复位后单次读取 ID=0x66358a11（E3），RDAT 从0变化；重新拉回复位、地址/锁/外层配置恢复通过 | 未采样到 busy 脉冲；仅芯片 ID 读取，未模拟初始化、校准、固件或无线网络 | [73](evidence/attempt-73.md) |
 | 电池电压 ADC | 部分 | IIO 原始值和电压比例，连续采样 | 未做外部仪表校准；没有电量百分比、充电控制、battery power_supply | [34](evidence/attempt-34.md) |
+| MT6360 ADC / 电池 power_supply | 部分，实测 | MT6360 ADC 可读 VBUS≈4.83 V、IBUS≈430 mA、VBAT≈3.91 V、结温；`/sys/class/power_supply/fuel-gauge` 报电压（与 MT6359 BATADC 一致，约 3.92 V）（attempt116） | 只读；未启用 MT6360 充电驱动（probe 会改写充电寄存器）；无电量计、无百分比；STATUS 恒为 Discharging；IBAT 只反映充电电流 | [116](evidence/attempt-116.md) |
 | PMIC 芯片温度 | 部分 | `in_temp2_input` 毫摄氏度；真实校准 shadow；与原始值换算对照 | 本机零有效斜率诊断；非法校准返回错误；无 thermal zone/trips/cooling，绝对精度未验证 | [36](evidence/attempt-36.md)、[37](evidence/attempt-37.md) |
 | LK devinfo 校准传递 | 实测（基础设施） | 884字节与当次 ACK 一致；22个 LVTS 校准字解码 | 结构校验不等于传感器工作；还没有通用 NVMEM provider | [38](evidence/attempt-38.md)、[39](evidence/attempt-39.md) |
 
