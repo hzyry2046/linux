@@ -64,9 +64,28 @@
 		regulator-always-on;
 	};
 
+	/*
+	 * LK buffer 2 inside mblock-18-framebuffer (imported from LK, so already
+	 * reserved). Scanned out by OVL layer 0 once op6893-fbkick points it
+	 * here and keeps the command-mode panel refreshed.
+	 */
+	framebuffer@796fc000 {
+		compatible = "simple-framebuffer";
+		reg = <0x0 0x796fc000 0x0 0x9f6000>;
+		width = <1080>;
+		height = <2400>;
+		stride = <(1088 * 4)>;
+		format = "a8r8g8b8";	/* OVL layers use per-pixel alpha */
+	};
+
+	fbkick {
+		compatible = "op6893,fbkick";
+		op6893,framebuffer = <0x796fc000>;
+	};
+
 	/* RAM and reservations are imported from this boot's LK FDT. */
 	chosen {
-		bootargs = "rdinit=/init maxcpus=8 loglevel=8 ignore_loglevel initcall_debug clk_ignore_unused regulator_ignore_unused fw_devlink=off panic=0 ramoops.mem_address=0x48090000 ramoops.mem_size=0xe0000 ramoops.record_size=0x20000 ramoops.console_size=0x40000 ramoops.pmsg_size=0x10000 ramoops.ftrace_size=0x1000 ramoops.ecc=0";
+		bootargs = "rdinit=/init maxcpus=8 loglevel=8 ignore_loglevel initcall_debug clk_ignore_unused regulator_ignore_unused fw_devlink=off panic=0 ramoops.mem_address=0x48090000 ramoops.mem_size=0xe0000 ramoops.record_size=0x20000 ramoops.console_size=0x40000 ramoops.pmsg_size=0x10000 ramoops.ftrace_size=0x1000 ramoops.ecc=0 console=tty0";
 	};
 };
 

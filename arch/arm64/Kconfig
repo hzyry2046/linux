@@ -2548,6 +2548,15 @@ config ARM64_OP6893_CONN_PREFLIGHT
 	  CONN domain cycle and guarded digital-ID reads. Neither establishes
 	  full ownership of inherited upstream inputs.
 
+config ARM64_OP6893_FBKICK
+	bool "op6893 early console on the LK-initialised panel"
+	depends on ARM64_OP6893_BRINGUP
+	help
+	  Periodically send a frame to the command-mode panel through the
+	  display pipeline LK left running, so that a simple-framebuffer over
+	  LK's buffer shows a console before a real display driver exists.
+	  Nothing is reconfigured. Board-specific bring-up aid.
+
 config ARM64_OP6893_BRINGUP
 	bool "Experimental op6893 direct-LK boot"
 	depends on ARCH_MEDIATEK && OF

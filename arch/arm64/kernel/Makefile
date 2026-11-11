@@ -99,3 +99,4 @@ subdir- += vdso vdso32
 
 obj-$(CONFIG_ARM64_OP6893_LVTS_IDENTIFY) += op6893-lvts.o
 obj-$(CONFIG_ARM64_OP6893_CONN_PREFLIGHT) += op6893-conn.o
+obj-$(CONFIG_ARM64_OP6893_FBKICK) += op6893-fbkick.o

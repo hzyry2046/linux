@@ -138,6 +138,18 @@ int __init op6893_merge_fdt(void *dst, int size, const void *board,
 			if (ret)
 				return ret;
 		}
+		/*
+		 * LK's scanout buffers: keep them out of the linear map so the
+		 * early simple-framebuffer console can map them write-combined.
+		 */
+#ifdef CONFIG_ARM64_OP6893_FBKICK
+		if (!strcmp(fdt_get_name(lk, node, NULL),
+			    "mblock-18-framebuffer")) {
+			ret = fdt_setprop(dst, target, "no-map", NULL, 0);
+			if (ret)
+				return ret;
+		}
+#endif
 	}
 
 	for (i = 0; i < fdt_num_mem_rsv(lk); i++) {
