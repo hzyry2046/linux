@@ -293,3 +293,9 @@ trim no-op 成立、重复基线为5时执行目标写入、读回及恢复。�
 改用厂商连接栈之后，Wi-Fi 和 Bluetooth 都已实测可用：BLE 扫描的根因是 BT 驱动
 提前清除了 `HCI_SETUP`；出厂地址由 proinfo 经 nvmem 读取；BlueZ 已装进 rootfs。
 见 [CONNECTIVITY-STATUS](CONNECTIVITY-STATUS.md)。
+
+## Attempt119：GPU 只读探测
+
+GPU 是 Mali-G77 MC9 r0p1（`0x9080`）。LK 交接时 MFG0–6 全部断电，MFGPLL 停在
+350 MHz。SPMI 与 MT6315 已接入，读到 vgpu 0.75 V 且处于开启状态。见
+[119](evidence/attempt-119.md)。
