@@ -131,6 +131,7 @@ static int op6893_gpu_probe(struct platform_device *pdev)
 	};
 	struct device *dev = &pdev->dev;
 	struct op6893_gpu *g;
+	struct resource *res;
 	int ret;
 
 	g = devm_kzalloc(dev, sizeof(*g), GFP_KERNEL);
@@ -138,12 +139,20 @@ static int op6893_gpu_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	g->dev = dev;
 
-	g->gpu = devm_platform_ioremap_resource_byname(pdev, "gpu");
-	if (IS_ERR(g->gpu))
-		return PTR_ERR(g->gpu);
-	g->mfg = devm_platform_ioremap_resource_byname(pdev, "mfgcfg");
-	if (IS_ERR(g->mfg))
-		return PTR_ERR(g->mfg);
+	/*
+	 * Map without claiming the regions: panfrost owns the GPU registers,
+	 * this driver only peeks at them and at mfgcfg.
+	 */
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "gpu");
+	if (!res)
+		return -EINVAL;
+	g->gpu = devm_ioremap(dev, res->start, resource_size(res));
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "mfgcfg");
+	if (!res)
+		return -EINVAL;
+	g->mfg = devm_ioremap(dev, res->start, resource_size(res));
+	if (!g->gpu || !g->mfg)
+		return -ENOMEM;
 
 	ret = devm_pm_domain_attach_list(dev, &pd_data, &g->pds);
 	if (ret < 0)

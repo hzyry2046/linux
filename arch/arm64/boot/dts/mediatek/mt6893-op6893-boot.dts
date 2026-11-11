@@ -241,8 +241,38 @@
 		};
 	};
 
+	/* MFG clock as LK left it: mfg_sel = mfgpll, posdiv /8. */
+	mfg_ck: mfg-clk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <350000000>;
+		clock-output-names = "mfg_ck_inherited";
+	};
+
+	/*
+	 * Mali-G77 MC9. Bring-up: panfrost is a module and is loaded by
+	 * hand after the GPU probe below has powered the domains.
+	 */
+	gpu: gpu@13000000 {
+		compatible = "mediatek,mt6893-mali", "arm,mali-valhall-jm";
+		reg = <0 0x13000000 0 0x4000>;
+		interrupts = <GIC_SPI 364 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 363 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 362 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "job", "mmu", "gpu";
+		clocks = <&mfg_ck>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_MFG1>,
+				<&spm MT6893_POWER_DOMAIN_MFG2>,
+				<&spm MT6893_POWER_DOMAIN_MFG3>,
+				<&spm MT6893_POWER_DOMAIN_MFG4>,
+				<&spm MT6893_POWER_DOMAIN_MFG5>,
+				<&spm MT6893_POWER_DOMAIN_MFG6>;
+		power-domain-names = "core0", "core1", "core2", "core3",
+				     "core4", "core5";
+	};
+
 	/* Bring-up only: powers the GPU on request (debugfs), reads its ID. */
-	gpu-probe@13000000 {
+	gpu-probe {
 		compatible = "realme,op6893-gpu-probe";
 		reg = <0 0x13000000 0 0x4000>, <0 0x13fbf000 0 0x1000>;
 		reg-names = "gpu", "mfgcfg";
