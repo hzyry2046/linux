@@ -35,6 +35,7 @@ attempt97 及之前的寄存器级 CONN 行为保留作历史记录。
 | CONN TOP XTAL 读取 | 部分，实测 | ID 后读取 0xa18=0xf668fff5、0xa1c=0x55555fff；逐笔 RDAT 变化，完整清理成功 | 无模拟写入/efuse/校准/固件；尚不能连接 Wi-Fi | [74](evidence/attempt-74.md) |
 | Wi-Fi（厂商 gen4m） | 实测可用 | 开机自动关联开放网络、DHCP、Wi-Fi SSH、NTP、DNS、HTTPS；出厂 MAC 由 proinfo 经 nvmem 读取 | 只测了无密码网络；WPA、省电、漫游未测；使用厂商栈，不是上游驱动 | [CONNECTIVITY](CONNECTIVITY-STATUS.md)、[100–106](evidence/attempt-100-106.md) |
 | Bluetooth（厂商 btif/mt66xx + BlueZ） | 实测可用 | 开机 hci0、标准 HCI 初始化；LE 扫描和 BR/EDR inquiry 能发现设备；与手机配对、RFCOMM、OBEX 推送、PAN 网络共享成功（attempt107–109） | 空中地址已是出厂地址（attempt108）；音频未测；`0x0c77/0x0c78` 在本地完成 | [CONNECTIVITY](CONNECTIVITY-STATUS.md)、[100–106](evidence/attempt-100-106.md) |
+| 屏幕早期控制台（simplefb + fbkick） | 部分，实测 | 沿用 LK 已点亮的命令模式 AMOLED（AMS643YE01）与显示管线；每 33 ms 触发一帧，simplefb（a8r8g8b8）上的 fbcon 从 0.05 s 起显示内核日志；色条颜色和位置正确；DCS 命令（亮度、全白）可发送 | 完全依赖 LK 状态和 clk_ignore_unused；没有真正的显示驱动、DSC/面板初始化、亮度控制或熄屏；Mu-Silicium 的刷新方案 | [110–111](evidence/attempt-110-111.md) |
 | 直接启动、内存 | 实测 | 从 boot 分区启动主线，导入 LK 内存与保留区 | fastboot boot 不可靠；不改 GPT；仍是本机调试启动实现 | [39](evidence/attempt-39.md) |
 | CPU / SMP | 部分 | CPU0–7 在线、用户空间与 SSH 运行 | 未完成 CPUfreq、CPUidle、热控或长期负载验证 | [39](evidence/attempt-39.md)、[40](evidence/attempt-40.md) |
 | UFS / 块设备 | 部分 | 读取 cache 上 rootfs，核对镜像哈希 | 时钟/PHY 等仍继承 LK；当前磁盘只读策略，不代表写入、链路省电已验证 | [37](evidence/attempt-37.md)、[39](evidence/attempt-39.md) |
@@ -82,7 +83,7 @@ attempt97 及之前的寄存器级 CONN 行为保留作历史记录。
 | CPUfreq / CPUidle / suspend | 配置关闭 | 先完成时钟、供电轨、SoC 热控与唤醒链路 |
 | 充电器、Type-C 检测、USB PD | 未启用/未验证 | ACK MT6360/I2C 路径仅为调查线索；需要控制器时钟、引脚、IRQ 和芯片识别 |
 | 电池电流、容量、SOC、完整电源状态 | 未启用 | 电池电压不等于 fuel gauge；本机 ADC 配置排除阻抗/电流测量 |
-| 显示 / 背光 | 未启用 | DRM 关闭；需确认本机面板、DSI、供电与背光链路 |
+| 显示（完整驱动）/ 亮度 | 未启用 | 早期控制台见上方 simplefb 行。完整驱动需要 MMSYS/SMI/IOMMU/CMDQ/DSC；6.6 port 的 mediatek_v2 已点亮该面板，可作参考；不依赖 GPU |
 | 触摸屏 | 未启用 | 需核对芯片、总线、供电和复位；GPIO20 是触摸复位线索，不应当作音量加 |
 | GPU 加速 | 未启用 | GPU 驱动、时钟、电源域、供电、固件及热控待建立 |
 | 音频 / 耳机检测 | 未启用 | codec、AFE、时钟/供电和路由待实现；accdet 尚未接入 |
