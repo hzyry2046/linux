@@ -67,11 +67,12 @@
 
 	/*
 	 * Voltage-only battery view. There is no fuel gauge driver, and the
-	 * MT6360 IBAT channel only reports charge current, so no current,
-	 * capacity or charging status is exposed here.
+	 * MT6360 IBAT channel only reports charge current, so no current or
+	 * capacity is exposed here; status follows the MT6360 charger.
 	 */
 	fuel-gauge {
 		compatible = "adc-battery";
+		power-supplies = <&mt6360_chg>;
 		io-channels = <&mt6359_auxadc MT6359_AUXADC_BATADC>;
 		io-channel-names = "voltage";
 		monitored-battery = <&battery>;
@@ -599,6 +600,11 @@
 			mt6360_adc: adc {
 				compatible = "mediatek,mt6360-adc";
 				#io-channel-cells = <1>;
+			};
+
+			mt6360_chg: charger {
+				compatible = "mediatek,mt6360-chg";
+				richtek,vinovp-microvolt = <6500000>;
 			};
 
 			regulator {
