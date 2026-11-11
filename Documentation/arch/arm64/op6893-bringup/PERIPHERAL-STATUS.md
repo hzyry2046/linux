@@ -311,3 +311,9 @@ GPU 是 Mali-G77 MC9 r0p1（`0x9080`）。LK 交接时 MFG0–6 全部断电，M
 panfrost（模块，手动加载）在 G77 r0p1 上 probe 成功，有 `renderD128`；
 运行时电源管理会关闭 GPU 电源域，GET_PARAM 和 CREATE_BO 均可用。还没有 Mesa，
 GPU 尚未执行过作业。见 [121](evidence/attempt-121.md)。
+
+## Attempt122：Mesa 渲染
+
+打了 G77 补丁的 Mesa 26.2.6（panfrost、不依赖 LLVM）识别为 “Mali-G77 MC9 (Panfrost)”，
+GLES 3.1。离屏三角形渲染像素正确，2000 帧无 GPU fault。panvk 不支持 v9。
+见 [122](evidence/attempt-122.md)。
