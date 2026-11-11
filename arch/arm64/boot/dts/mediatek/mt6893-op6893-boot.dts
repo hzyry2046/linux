@@ -3,6 +3,7 @@
 #include "mt6893.dtsi"
 #include "mt6893-pinfunc.h"
 #include <dt-bindings/pinctrl/mt65xx.h>
+#include <dt-bindings/iio/adc/mediatek,mt6359-auxadc.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/reset/ti-syscon.h>
@@ -53,6 +54,27 @@
 		#clock-cells = <0>;
 		clock-frequency = <124800000>;
 		clock-output-names = "i2c_ck_inherited";
+	};
+
+	/* 4500 mAh single cell, 4.4 V float (vendor: oplus_batt_4400mv). */
+	battery: battery {
+		compatible = "simple-battery";
+		device-chemistry = "lithium-ion-polymer";
+		charge-full-design-microamp-hours = <4500000>;
+		voltage-min-design-microvolt = <3300000>;
+		voltage-max-design-microvolt = <4400000>;
+	};
+
+	/*
+	 * Voltage-only battery view. There is no fuel gauge driver, and the
+	 * MT6360 IBAT channel only reports charge current, so no current,
+	 * capacity or charging status is exposed here.
+	 */
+	fuel-gauge {
+		compatible = "adc-battery";
+		io-channels = <&mt6359_auxadc MT6359_AUXADC_BATADC>;
+		io-channel-names = "voltage";
+		monitored-battery = <&battery>;
 	};
 
 	gpio-keys {
@@ -209,7 +231,7 @@
 				};
 			};
 
-			adc {
+			mt6359_auxadc: adc {
 				compatible = "mediatek,mt6359-auxadc";
 				#io-channel-cells = <1>;
 			};
@@ -573,6 +595,11 @@
 			interrupt-names = "IRQB";
 			interrupt-controller;
 			#interrupt-cells = <1>;
+
+			mt6360_adc: adc {
+				compatible = "mediatek,mt6360-adc";
+				#io-channel-cells = <1>;
+			};
 
 			regulator {
 				compatible = "mediatek,mt6360-regulator";
