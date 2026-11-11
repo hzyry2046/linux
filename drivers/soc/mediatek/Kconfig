@@ -79,6 +79,14 @@ config MTK_SVS
 	  chip process corner, temperatures and other factors. Then DVFS
 	  driver could apply SVS bank voltage to PMIC/Buck.
 
+config OP6893_GPU_PROBE
+	bool "op6893 GPU power bring-up probe"
+	depends on ARCH_MEDIATEK && PM_GENERIC_DOMAINS && DEBUG_FS
+	help
+	  Bring-up helper for the op6893 (MT6893) board. Powers the GPU
+	  domains on request through debugfs and logs the Mali ID
+	  registers. Not intended for production kernels.
+
 config MTK_SOCINFO
 	tristate "MediaTek SoC Information"
 	default y

@@ -9,6 +9,7 @@
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/reset/ti-syscon.h>
 #include <dt-bindings/clock/mt6893-clk.h>
+#include <dt-bindings/power/mediatek,mt6893-power.h>
 
 / {
 	model = "Realme GT Neo op6893 (direct LK bring-up)";
@@ -181,6 +182,79 @@
 		clock-names = "ulposc", "clk26m", "mainpll";
 	};
 
+	/*
+	 * SPM power controller, GPU domains only. CONN stays with the vendor
+	 * conninfra driver and is not described here. The MFG clock mux and
+	 * MFGPLL are left as LK set them (mfgpll, ~350 MHz).
+	 */
+	scpsys: syscon@10006000 {
+		compatible = "mediatek,mt6893-scpsys", "syscon", "simple-mfd";
+		reg = <0 0x10006000 0 0x1000>;
+
+		spm: power-controller {
+			compatible = "mediatek,mt6893-power-controller";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			#power-domain-cells = <1>;
+
+			mfg0: power-domain@MT6893_POWER_DOMAIN_MFG0 {
+				reg = <MT6893_POWER_DOMAIN_MFG0>;
+				domain-supply = <&mt6315_7_vbuck1>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				#power-domain-cells = <1>;
+
+				mfg1: power-domain@MT6893_POWER_DOMAIN_MFG1 {
+					reg = <MT6893_POWER_DOMAIN_MFG1>;
+					domain-supply = <&mt6359_vsram_others>;
+					mediatek,infracfg = <&ufs_infracfg>;
+					#address-cells = <1>;
+					#size-cells = <0>;
+					#power-domain-cells = <1>;
+
+					power-domain@MT6893_POWER_DOMAIN_MFG2 {
+						reg = <MT6893_POWER_DOMAIN_MFG2>;
+						#power-domain-cells = <0>;
+					};
+
+					power-domain@MT6893_POWER_DOMAIN_MFG3 {
+						reg = <MT6893_POWER_DOMAIN_MFG3>;
+						#power-domain-cells = <0>;
+					};
+
+					power-domain@MT6893_POWER_DOMAIN_MFG4 {
+						reg = <MT6893_POWER_DOMAIN_MFG4>;
+						#power-domain-cells = <0>;
+					};
+
+					power-domain@MT6893_POWER_DOMAIN_MFG5 {
+						reg = <MT6893_POWER_DOMAIN_MFG5>;
+						#power-domain-cells = <0>;
+					};
+
+					power-domain@MT6893_POWER_DOMAIN_MFG6 {
+						reg = <MT6893_POWER_DOMAIN_MFG6>;
+						#power-domain-cells = <0>;
+					};
+				};
+			};
+		};
+	};
+
+	/* Bring-up only: powers the GPU on request (debugfs), reads its ID. */
+	gpu-probe@13000000 {
+		compatible = "realme,op6893-gpu-probe";
+		reg = <0 0x13000000 0 0x4000>, <0 0x13fbf000 0 0x1000>;
+		reg-names = "gpu", "mfgcfg";
+		power-domains = <&spm MT6893_POWER_DOMAIN_MFG1>,
+				<&spm MT6893_POWER_DOMAIN_MFG2>,
+				<&spm MT6893_POWER_DOMAIN_MFG3>,
+				<&spm MT6893_POWER_DOMAIN_MFG4>,
+				<&spm MT6893_POWER_DOMAIN_MFG5>,
+				<&spm MT6893_POWER_DOMAIN_MFG6>;
+		power-domain-names = "mfg1", "mfg2", "mfg3", "mfg4", "mfg5", "mfg6";
+	};
+
 	/* SPMI master clock mux, left as LK set it (no topckgen mux driver). */
 	spmimst_ck: spmimst-clk {
 		compatible = "fixed-clock";
@@ -286,6 +360,9 @@
 				};
 				mt6359_vcn33_2: ldo_vcn33_2 {
 					regulator-name = "vcn33_2";
+				};
+				mt6359_vsram_others: ldo_vsram_others {
+					regulator-name = "vsram_others";
 				};
 			};
 
