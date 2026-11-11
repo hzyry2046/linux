@@ -63,12 +63,24 @@
 		charge-full-design-microamp-hours = <4500000>;
 		voltage-min-design-microvolt = <3300000>;
 		voltage-max-design-microvolt = <4400000>;
+		/*
+		 * 25 C OCV curve, resampled every 5 % from the vendor gauge
+		 * profile (mt6893_battery_table_ext_cupid.dtsi, profile_t1).
+		 */
+		ocv-capacity-celsius = <25>;
+		ocv-capacity-table-0 = <4409700 100>, <4361616 95>, <4308150 90>,
+			<4250212 85>, <4190820 80>, <4133481 75>, <4079715 70>,
+			<4029777 65>, <3980500 60>, <3916290 55>, <3880550 50>,
+			<3852323 45>, <3829900 40>, <3810637 35>, <3791403 30>,
+			<3764981 25>, <3742580 20>, <3711975 15>, <3693301 10>,
+			<3617634 5>, <3263200 0>;
 	};
 
 	/*
-	 * Voltage-only battery view. There is no fuel gauge driver, and the
-	 * MT6360 IBAT channel only reports charge current, so no current or
-	 * capacity is exposed here; status follows the MT6360 charger.
+	 * Voltage-based battery view. There is no fuel gauge driver, and the
+	 * MT6360 IBAT channel only reports charge current, so no current is
+	 * exposed; capacity is a rough estimate from the OCV table, and status
+	 * follows the MT6360 charger.
 	 */
 	fuel-gauge {
 		compatible = "adc-battery";
