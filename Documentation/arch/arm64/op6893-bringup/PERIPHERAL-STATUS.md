@@ -305,3 +305,9 @@ GPU 是 Mali-G77 MC9 r0p1（`0x9080`）。LK 交接时 MFG0–6 全部断电，M
 修正主线 MT6893 MFG1 总线保护掩码（bit17|bit19，原为 17–19）之后，MFG0–6 能够
 上电和下电，读到 GPU_ID `0x90800011` 和 SHADER_PRESENT `0x660067`。频率沿用 LK
 的 350 MHz。见 [120](evidence/attempt-120.md)。
+
+## Attempt121：panfrost
+
+panfrost（模块，手动加载）在 G77 r0p1 上 probe 成功，有 `renderD128`；
+运行时电源管理会关闭 GPU 电源域，GET_PARAM 和 CREATE_BO 均可用。还没有 Mesa，
+GPU 尚未执行过作业。见 [121](evidence/attempt-121.md)。
