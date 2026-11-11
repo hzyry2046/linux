@@ -42,6 +42,18 @@
 		clock-output-names = "mt6893_ulposc";
 	};
 
+	/*
+	 * I2C0 source clock (i2c_sel = univpll_d5_d4) and its gates on
+	 * imp_iic_wrap_c / infracfg_ao are left running by the bootloader;
+	 * there is no MT6893 clock driver for them yet.
+	 */
+	i2c_ck: clock-i2c {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <124800000>;
+		clock-output-names = "i2c_ck_inherited";
+	};
+
 	gpio-keys {
 		compatible = "gpio-keys";
 		pinctrl-names = "default";
@@ -336,6 +348,19 @@
 		};
 	};
 
+	touch_pins: touch-pins {
+		pins-int {
+			pinmux = <PINMUX_GPIO21__FUNC_GPIO21>;
+			input-enable;
+			bias-pull-up;
+		};
+
+		pins-reset {
+			pinmux = <PINMUX_GPIO20__FUNC_GPIO20>;
+			output-high;
+		};
+	};
+
 	volume_down_pins: volume-down-pins {
 		pins-key {
 			pinmux = <PINMUX_GPIO155__FUNC_GPIO155>;
@@ -468,6 +493,74 @@
 
 		wifi_mac: mac-address@6e {
 			reg = <0x6e 6>;
+		};
+	};
+};
+
+&{/soc} {
+	/* SCL0/SDA0 (GPIO204/205) pinmux is inherited from the bootloader. */
+	i2c0: i2c@11015000 {
+		compatible = "mediatek,mt8192-i2c";
+		reg = <0 0x11015000 0 0x1000>,
+		      <0 0x11000080 0 0x80>;
+		interrupts = <GIC_SPI 112 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&i2c_ck>, <&i2c_ck>;
+		clock-names = "main", "dma";
+		clock-div = <5>;
+		clock-frequency = <100000>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		touchscreen@38 {
+			compatible = "focaltech,ft3518";
+			reg = <0x38>;
+			interrupts-extended = <&pio 21 IRQ_TYPE_EDGE_FALLING>;
+			reset-gpios = <&pio 20 GPIO_ACTIVE_LOW>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&touch_pins>;
+			vcc-supply = <&mt6360_ldo2>;
+			touchscreen-size-x = <1080>;
+			touchscreen-size-y = <2400>;
+		};
+	};
+};
+
+&{/soc} {
+	/*
+	 * PMIC bus: MT6360 (0x34 PMU, 0x1a PMIC, 0x64 LDO). Clock gate on
+	 * imp_iic_wrap_n and SCL5/SDA5 pinmux are inherited from LK.
+	 */
+	i2c5: i2c@11f00000 {
+		compatible = "mediatek,mt8192-i2c";
+		reg = <0 0x11f00000 0 0x1000>,
+		      <0 0x11000500 0 0x80>;
+		interrupts = <GIC_SPI 117 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&i2c_ck>, <&i2c_ck>;
+		clock-names = "main", "dma";
+		clock-div = <5>;
+		clock-frequency = <100000>;
+		mediatek,use-push-pull;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		pmic@34 {
+			compatible = "mediatek,mt6360";
+			reg = <0x34>;
+			interrupts-extended = <&pio 24 IRQ_TYPE_LEVEL_LOW>;
+			interrupt-names = "IRQB";
+			interrupt-controller;
+			#interrupt-cells = <1>;
+
+			regulator {
+				compatible = "mediatek,mt6360-regulator";
+
+				/* Touch panel supply (vendor "vtp", 3.0 V). */
+				mt6360_ldo2: ldo2 {
+					regulator-name = "vtp";
+					regulator-min-microvolt = <3000000>;
+					regulator-max-microvolt = <3000000>;
+				};
+			};
 		};
 	};
 };
