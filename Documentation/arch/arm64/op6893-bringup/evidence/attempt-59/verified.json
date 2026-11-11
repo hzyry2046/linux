@@ -1,0 +1,48 @@
+{
+  "release": "7.3.0-op6893-d1-d46fc22c1b0c+",
+  "cycle_result": 0,
+  "cleanup_result": 0,
+  "on_controls": {
+    "vcn18": [
+      "0x3",
+      "0x7",
+      "0x80f0",
+      "0x0"
+    ],
+    "vcn13": [
+      "0x3",
+      "0x7",
+      "0x80f0",
+      "0x0"
+    ]
+  },
+  "before_after_20_pmic_words_equal": true,
+  "before_after_spm_infra_host_equal": true,
+  "shared_parent_votes_retained": [
+    1,
+    1
+  ],
+  "leaf_votes_after_cycle": [
+    0,
+    0
+  ],
+  "repeat_trigger_rejected": true,
+  "sysfs_mode": "0600 root",
+  "post_cycle_preflight_serial": 16,
+  "post_cycle_preflight_concurrent": 4,
+  "usb_ssh": true,
+  "cpus": "0-7",
+  "rootfs_readonly_hash_matches": true,
+  "lvts_host_arithmetic_matches": true,
+  "lvts_min_millidegrees": 35625,
+  "lvts_max_millidegrees": 42005,
+  "lvts_end_controls_all_zero": true,
+  "selected_dmesg_faults": false,
+  "conn_power_transition": false,
+  "firmware_calibration": false,
+  "limits": [
+    "Enable monitor, not physical power-good measurement.",
+    "No physical key retest or thermal protection.",
+    "External inputs remain inherited/dummy; this is not full supply ownership."
+  ]
+}

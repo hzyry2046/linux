@@ -1,0 +1,17 @@
+{
+  "image": "396b7c61f1ed",
+  "boot_sha256": "4cd195347aabc8475bddcac94c91753b2575bd424d365ad3f68d3b3b9d6ba7a5",
+  "result": 0,
+  "id": "0x66358a11",
+  "xtal": {
+    "0xa18": "0xf668fff5",
+    "0xa1c": "0x55555fff"
+  },
+  "xtal_valid_mask": 3,
+  "xtal_busy_mask": 0,
+  "all_outer_restored": true,
+  "retry_refused": true,
+  "cached_hashes_unchanged": true,
+  "gpio180_restored": true,
+  "ack_backup_unchanged": true
+}

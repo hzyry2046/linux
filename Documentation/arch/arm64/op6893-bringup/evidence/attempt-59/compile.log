@@ -1,0 +1,7 @@
+make[1]: 进入目录“/data/src/mainline/mt6893-direct/out”
+  SYNC    include/config/auto.conf
+  UPD     include/generated/compile.h
+  CC      arch/arm64/kernel/op6893-conn.o
+  DTC     arch/arm64/kernel/op6893-embed.dtb
+  AS      arch/arm64/kernel/op6893-dtb.o
+make[1]: 离开目录“/data/src/mainline/mt6893-direct/out”

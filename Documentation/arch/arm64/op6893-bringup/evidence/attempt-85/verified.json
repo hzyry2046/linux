@@ -1,0 +1,63 @@
+{
+  "engine": {
+    "requested": "1",
+    "issued": "1",
+    "pending": "0",
+    "complete": "1",
+    "engine_busy_seen": "0",
+    "transfers": "7",
+    "spi_busy_count": "0",
+    "polls": "3",
+    "confirmed": "3",
+    "flags": "0x20000000",
+    "elapsed_ns": "171040615",
+    "changed": "0x3b",
+    "observe": "1",
+    "observed": "3",
+    "stable": "1",
+    "delta0": "0x3b",
+    "delta1": "0x3b",
+    "delta2": "0x3b",
+    "stable_cycle": "1"
+  },
+  "image": "68e4d632a8bb",
+  "boot_sha256": "fafe2a6e462d9399cfda2dfc8ee8ef45bcdf055b9c6c34a2a4295ceb1bac9dd1",
+  "result": 0,
+  "efuse_control_flags": [
+    "0x0",
+    "0x0"
+  ],
+  "efuse_control_stable": true,
+  "efuse_control_reads": 2,
+  "efuse_kick_issued": true,
+  "efuse_data_read": false,
+  "efuse_read_busy_mask": 0,
+  "route_words": [
+    "0x801f",
+    "0x50305a00",
+    "0x7f0300ff",
+    "0x0",
+    "0x0"
+  ],
+  "route_rounds_equal": true,
+  "sampled_thermal_controls_zero": true,
+  "thermal_owner_checks_passed": true,
+  "fm_ctrl_writes": true,
+  "thermal_route_writes": false,
+  "fm_before": "0x801f",
+  "fm_on": "0x0",
+  "fm_after": "0x801f",
+  "fm_restored": true,
+  "prefix_restored": true,
+  "mailbox_cleared": true,
+  "all_outer_restored": true,
+  "retry_refused": true,
+  "cached_hashes_unchanged": true,
+  "ap_register_differences": {
+    "drive": [
+      "0x0",
+      "0x8248"
+    ]
+  },
+  "ack_backup_unchanged": true
+}

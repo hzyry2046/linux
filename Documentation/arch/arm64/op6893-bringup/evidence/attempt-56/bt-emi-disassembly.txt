@@ -1,0 +1,228 @@
+
+/data/src/6.6-exp/mt6893-gki66/out/android_kernel_modules_oneplus_mt6833/vendor/mediatek/kernel_modules/connectivity/bt/mt66xx/6893/btif/btmtk_mt66xx.o:     file format elf64-littleaarch64
+
+
+Disassembly of section .text:
+
+0000000000004154 <__download_patch_to_emi>:
+    4154:	f800865e 	str	x30, [x18], #8
+    4158:	d10283ff 	sub	sp, sp, #0xa0
+    415c:	a9057bfd 	stp	x29, x30, [sp, #80]
+    4160:	a90667fa 	stp	x26, x25, [sp, #96]
+    4164:	a9075ff8 	stp	x24, x23, [sp, #112]
+    4168:	a90857f6 	stp	x22, x21, [sp, #128]
+    416c:	a9094ff4 	stp	x20, x19, [sp, #144]
+    4170:	910143fd 	add	x29, sp, #0x50
+    4174:	d5384108 	mrs	x8, sp_el0
+    4178:	90000017 	adrp	x23, 0 <btmtk_log_lvl>
+			4178: R_AARCH64_ADR_PREL_PG_HI21	btmtk_log_lvl
+    417c:	aa0203f5 	mov	x21, x2
+    4180:	f9431108 	ldr	x8, [x8, #1568]
+    4184:	aa0103f3 	mov	x19, x1
+    4188:	aa0003f4 	mov	x20, x0
+    418c:	f81f83a8 	stur	x8, [x29, #-8]
+    4190:	394002e8 	ldrb	w8, [x23]
+			4190: R_AARCH64_LDST8_ABS_LO12_NC	btmtk_log_lvl
+    4194:	f81f03bf 	stur	xzr, [x29, #-16]
+    4198:	b81ec3bf 	stur	wzr, [x29, #-20]
+    419c:	71000d1f 	cmp	w8, #0x3
+    41a0:	f81e03bf 	stur	xzr, [x29, #-32]
+    41a4:	54000c02 	b.cs	4324 <__download_patch_to_emi+0x1d0>  // b.hs, b.nlast
+    41a8:	d10043a0 	sub	x0, x29, #0x10
+    41ac:	d10053a3 	sub	x3, x29, #0x14
+    41b0:	aa1403e1 	mov	x1, x20
+    41b4:	aa1f03e2 	mov	x2, xzr
+    41b8:	52800144 	mov	w4, #0xa                   	// #10
+    41bc:	94000000 	bl	0 <btmtk_load_code_from_bin>
+			41bc: R_AARCH64_CALL26	btmtk_load_code_from_bin
+    41c0:	f85f03b4 	ldur	x20, [x29, #-16]
+    41c4:	b85ec3b6 	ldur	w22, [x29, #-20]
+    41c8:	b40005d4 	cbz	x20, 4280 <__download_patch_to_emi+0x12c>
+    41cc:	7100bedf 	cmp	w22, #0x2f
+    41d0:	54000589 	b.ls	4280 <__download_patch_to_emi+0x12c>  // b.plast
+    41d4:	79402a99 	ldrh	w25, [x20, #20]
+    41d8:	79402e9a 	ldrh	w26, [x20, #22]
+    41dc:	aa1503e0 	mov	x0, x21
+    41e0:	b9401e98 	ldr	w24, [x20, #28]
+    41e4:	aa1403e1 	mov	x1, x20
+    41e8:	52800202 	mov	w2, #0x10                  	// #16
+    41ec:	94000000 	bl	0 <strncpy>
+			41ec: R_AARCH64_CALL26	strncpy
+    41f0:	39003abf 	strb	wzr, [x21, #14]
+    41f4:	394002e8 	ldrb	w8, [x23]
+			41f4: R_AARCH64_LDST8_ABS_LO12_NC	btmtk_log_lvl
+    41f8:	71000d1f 	cmp	w8, #0x3
+    41fc:	54000ae2 	b.cs	4358 <__download_patch_to_emi+0x204>  // b.hs, b.nlast
+    4200:	5100c2c8 	sub	w8, w22, #0x30
+    4204:	d280e276 	mov	x22, #0x713                 	// #1811
+    4208:	d10083a0 	sub	x0, x29, #0x20
+    420c:	b81ec3a8 	stur	w8, [x29, #-20]
+    4210:	aa1f03e1 	mov	x1, xzr
+    4214:	f2e00d16 	movk	x22, #0x68, lsl #48
+    4218:	39406a88 	ldrb	w8, [x20, #26]
+    421c:	39406689 	ldrb	w9, [x20, #25]
+    4220:	53103d08 	lsl	w8, w8, #16
+    4224:	2a092115 	orr	w21, w8, w9, lsl #8
+    4228:	94000000 	bl	0 <conninfra_get_phy_addr>
+			4228: R_AARCH64_CALL26	conninfra_get_phy_addr
+    422c:	90000018 	adrp	x24, 0 <arm64_use_ng_mappings>
+			422c: R_AARCH64_ADR_PREL_PG_HI21	arm64_use_ng_mappings
+    4230:	f85e03a9 	ldur	x9, [x29, #-32]
+    4234:	b85ec3a1 	ldur	w1, [x29, #-20]
+    4238:	39400308 	ldrb	w8, [x24]
+			4238: R_AARCH64_LDST8_ABS_LO12_NC	arm64_use_ng_mappings
+    423c:	b27502ca 	orr	x10, x22, #0x800
+    4240:	8b150120 	add	x0, x9, x21
+    4244:	7100011f 	cmp	w8, #0x0
+    4248:	9a8a02c2 	csel	x2, x22, x10, eq	// eq = none
+    424c:	94000000 	bl	0 <ioremap_prot>
+			424c: R_AARCH64_CALL26	ioremap_prot
+    4250:	394002e8 	ldrb	w8, [x23]
+			4250: R_AARCH64_LDST8_ABS_LO12_NC	btmtk_log_lvl
+    4254:	b40001e0 	cbz	x0, 4290 <__download_patch_to_emi+0x13c>
+    4258:	71000d1f 	cmp	w8, #0x3
+    425c:	54000a82 	b.cs	43ac <__download_patch_to_emi+0x258>  // b.hs, b.nlast
+    4260:	b85ec3a2 	ldur	w2, [x29, #-20]
+    4264:	9100c281 	add	x1, x20, #0x30
+    4268:	aa0003f5 	mov	x21, x0
+    426c:	94000000 	bl	0 <__memcpy_toio>
+			426c: R_AARCH64_CALL26	__memcpy_toio
+    4270:	aa1503e0 	mov	x0, x21
+    4274:	94000000 	bl	0 <iounmap>
+			4274: R_AARCH64_CALL26	iounmap
+    4278:	2a1f03f5 	mov	w21, wzr
+    427c:	14000007 	b	4298 <__download_patch_to_emi+0x144>
+    4280:	394002e8 	ldrb	w8, [x23]
+			4280: R_AARCH64_LDST8_ABS_LO12_NC	btmtk_log_lvl
+    4284:	350005e8 	cbnz	w8, 4340 <__download_patch_to_emi+0x1ec>
+    4288:	128002b5 	mov	w21, #0xffffffea            	// #-22
+    428c:	14000015 	b	42e0 <__download_patch_to_emi+0x18c>
+    4290:	35000b28 	cbnz	w8, 43f4 <__download_patch_to_emi+0x2a0>
+    4294:	128001b5 	mov	w21, #0xfffffff2            	// #-14
+    4298:	39400308 	ldrb	w8, [x24]
+			4298: R_AARCH64_LDST8_ABS_LO12_NC	arm64_use_ng_mappings
+    429c:	f85e03a9 	ldur	x9, [x29, #-32]
+    42a0:	912002ca 	add	x10, x22, #0x800
+    42a4:	52800201 	mov	w1, #0x10                  	// #16
+    42a8:	7100011f 	cmp	w8, #0x0
+    42ac:	8b130120 	add	x0, x9, x19
+    42b0:	9a8a02c2 	csel	x2, x22, x10, eq	// eq = none
+    42b4:	94000000 	bl	0 <ioremap_prot>
+			42b4: R_AARCH64_CALL26	ioremap_prot
+    42b8:	b4000100 	cbz	x0, 42d8 <__download_patch_to_emi+0x184>
+    42bc:	aa1403e1 	mov	x1, x20
+    42c0:	52800202 	mov	w2, #0x10                  	// #16
+    42c4:	aa0003f3 	mov	x19, x0
+    42c8:	94000000 	bl	0 <__memcpy_toio>
+			42c8: R_AARCH64_CALL26	__memcpy_toio
+    42cc:	aa1303e0 	mov	x0, x19
+    42d0:	94000000 	bl	0 <iounmap>
+			42d0: R_AARCH64_CALL26	iounmap
+    42d4:	14000003 	b	42e0 <__download_patch_to_emi+0x18c>
+    42d8:	394002e8 	ldrb	w8, [x23]
+			42d8: R_AARCH64_LDST8_ABS_LO12_NC	btmtk_log_lvl
+    42dc:	35000948 	cbnz	w8, 4404 <__download_patch_to_emi+0x2b0>
+    42e0:	f85f03a0 	ldur	x0, [x29, #-16]
+    42e4:	b4000040 	cbz	x0, 42ec <__download_patch_to_emi+0x198>
+    42e8:	94000000 	bl	0 <vfree>
+			42e8: R_AARCH64_CALL26	vfree
+    42ec:	d5384108 	mrs	x8, sp_el0
+    42f0:	f9431108 	ldr	x8, [x8, #1568]
+    42f4:	f85f83a9 	ldur	x9, [x29, #-8]
+    42f8:	eb09011f 	cmp	x8, x9
+    42fc:	540008c1 	b.ne	4414 <__download_patch_to_emi+0x2c0>  // b.any
+    4300:	2a1503e0 	mov	w0, w21
+    4304:	a9494ff4 	ldp	x20, x19, [sp, #144]
+    4308:	a94857f6 	ldp	x22, x21, [sp, #128]
+    430c:	a9475ff8 	ldp	x24, x23, [sp, #112]
+    4310:	a94667fa 	ldp	x26, x25, [sp, #96]
+    4314:	a9457bfd 	ldp	x29, x30, [sp, #80]
+    4318:	910283ff 	add	sp, sp, #0xa0
+    431c:	f85f8e5e 	ldr	x30, [x18, #-8]!
+    4320:	d65f03c0 	ret
+    4324:	90000000 	adrp	x0, 0 <fwp_if_get_datetime-0x4>
+			4324: R_AARCH64_ADR_PREL_PG_HI21	.rodata.str1.1+0x10ac
+    4328:	91000000 	add	x0, x0, #0x0
+			4328: R_AARCH64_ADD_ABS_LO12_NC	.rodata.str1.1+0x10ac
+    432c:	90000001 	adrp	x1, 0 <fwp_if_get_datetime-0x4>
+			432c: R_AARCH64_ADR_PREL_PG_HI21	.rodata.str1.1+0x10d1
+    4330:	91000021 	add	x1, x1, #0x0
+			4330: R_AARCH64_ADD_ABS_LO12_NC	.rodata.str1.1+0x10d1
+    4334:	aa1403e2 	mov	x2, x20
+    4338:	94000000 	bl	0 <_printk>
+			4338: R_AARCH64_CALL26	_printk
+    433c:	17ffff9b 	b	41a8 <__download_patch_to_emi+0x54>
+    4340:	90000000 	adrp	x0, 0 <fwp_if_get_datetime-0x4>
+			4340: R_AARCH64_ADR_PREL_PG_HI21	.rodata.str1.1+0x10e9
+    4344:	91000000 	add	x0, x0, #0x0
+			4344: R_AARCH64_ADD_ABS_LO12_NC	.rodata.str1.1+0x10e9
+    4348:	2a1603e1 	mov	w1, w22
+    434c:	94000000 	bl	0 <_printk>
+			434c: R_AARCH64_CALL26	_printk
+    4350:	128002b5 	mov	w21, #0xffffffea            	// #-22
+    4354:	17ffffe3 	b	42e0 <__download_patch_to_emi+0x18c>
+    4358:	39404284 	ldrb	w4, [x20, #16]
+    435c:	39404685 	ldrb	w5, [x20, #17]
+    4360:	5ac00722 	rev16	w2, w25
+    4364:	39404a86 	ldrb	w6, [x20, #18]
+    4368:	39404e87 	ldrb	w7, [x20, #19]
+    436c:	5ac00743 	rev16	w3, w26
+    4370:	39406e88 	ldrb	w8, [x20, #27]
+    4374:	39406a89 	ldrb	w9, [x20, #26]
+    4378:	90000000 	adrp	x0, 0 <fwp_if_get_datetime-0x4>
+			4378: R_AARCH64_ADR_PREL_PG_HI21	.rodata.str1.1+0x1112
+    437c:	91000000 	add	x0, x0, #0x0
+			437c: R_AARCH64_ADD_ABS_LO12_NC	.rodata.str1.1+0x1112
+    4380:	3940668a 	ldrb	w10, [x20, #25]
+    4384:	3940628b 	ldrb	w11, [x20, #24]
+    4388:	aa1503e1 	mov	x1, x21
+    438c:	b90023f8 	str	w24, [sp, #32]
+    4390:	b9001beb 	str	w11, [sp, #24]
+    4394:	b90013ea 	str	w10, [sp, #16]
+    4398:	b9000be9 	str	w9, [sp, #8]
+    439c:	b90003e8 	str	w8, [sp]
+    43a0:	94000000 	bl	0 <_printk>
+			43a0: R_AARCH64_CALL26	_printk
+    43a4:	b85ec3b6 	ldur	w22, [x29, #-20]
+    43a8:	17ffff96 	b	4200 <__download_patch_to_emi+0xac>
+    43ac:	f85e03a1 	ldur	x1, [x29, #-32]
+    43b0:	39400002 	ldrb	w2, [x0]
+    43b4:	90000008 	adrp	x8, 0 <fwp_if_get_datetime-0x4>
+			43b4: R_AARCH64_ADR_PREL_PG_HI21	.rodata.str1.1+0x1178
+    43b8:	91000108 	add	x8, x8, #0x0
+			43b8: R_AARCH64_ADD_ABS_LO12_NC	.rodata.str1.1+0x1178
+    43bc:	aa0003f9 	mov	x25, x0
+    43c0:	aa0803e0 	mov	x0, x8
+    43c4:	94000000 	bl	0 <_printk>
+			43c4: R_AARCH64_CALL26	_printk
+    43c8:	394002e8 	ldrb	w8, [x23]
+			43c8: R_AARCH64_LDST8_ABS_LO12_NC	btmtk_log_lvl
+    43cc:	aa1903e0 	mov	x0, x25
+    43d0:	71000d1f 	cmp	w8, #0x3
+    43d4:	54fff463 	b.cc	4260 <__download_patch_to_emi+0x10c>  // b.lo, b.ul, b.last
+    43d8:	b85ec3a2 	ldur	w2, [x29, #-20]
+    43dc:	90000000 	adrp	x0, 0 <fwp_if_get_datetime-0x4>
+			43dc: R_AARCH64_ADR_PREL_PG_HI21	.rodata.str1.1+0x11bc
+    43e0:	91000000 	add	x0, x0, #0x0
+			43e0: R_AARCH64_ADD_ABS_LO12_NC	.rodata.str1.1+0x11bc
+    43e4:	2a1503e1 	mov	w1, w21
+    43e8:	94000000 	bl	0 <_printk>
+			43e8: R_AARCH64_CALL26	_printk
+    43ec:	aa1903e0 	mov	x0, x25
+    43f0:	17ffff9c 	b	4260 <__download_patch_to_emi+0x10c>
+    43f4:	90000000 	adrp	x0, 0 <fwp_if_get_datetime-0x4>
+			43f4: R_AARCH64_ADR_PREL_PG_HI21	.rodata.str1.1+0x1201
+    43f8:	91000000 	add	x0, x0, #0x0
+			43f8: R_AARCH64_ADD_ABS_LO12_NC	.rodata.str1.1+0x1201
+    43fc:	94000000 	bl	0 <_printk>
+			43fc: R_AARCH64_CALL26	_printk
+    4400:	17ffffa5 	b	4294 <__download_patch_to_emi+0x140>
+    4404:	90000000 	adrp	x0, 0 <fwp_if_get_datetime-0x4>
+			4404: R_AARCH64_ADR_PREL_PG_HI21	.rodata.str1.1+0x1224
+    4408:	91000000 	add	x0, x0, #0x0
+			4408: R_AARCH64_ADD_ABS_LO12_NC	.rodata.str1.1+0x1224
+    440c:	94000000 	bl	0 <_printk>
+			440c: R_AARCH64_CALL26	_printk
+    4410:	17ffffb4 	b	42e0 <__download_patch_to_emi+0x18c>
+    4414:	94000000 	bl	0 <__stack_chk_fail>
+			4414: R_AARCH64_CALL26	__stack_chk_fail

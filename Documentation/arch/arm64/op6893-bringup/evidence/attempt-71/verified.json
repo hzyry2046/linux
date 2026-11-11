@@ -1,0 +1,23 @@
+{
+  "image": "d8f40ea749e6",
+  "boot_sha256": "b6e72757814e3bbcdbff2dbab0aa185fdc2bea888dae6a6759f903e2a8725d62",
+  "result": 0,
+  "selected": 6,
+  "samples": 7,
+  "complete": true,
+  "dirty": false,
+  "unsafe": false,
+  "adie_control": 2,
+  "active_fields_restored": true,
+  "idle_dir_latch_mux_restored": true,
+  "shared_schmitt_unchanged": true,
+  "common_active_drive_before_after": [
+    0,
+    33352
+  ],
+  "cleanup_result": 0,
+  "domain_cleanup_result": 0,
+  "retry_refused": true,
+  "cached_hashes_unchanged": true,
+  "ack_backup_updated": false
+}

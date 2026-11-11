@@ -1,0 +1,48 @@
+op6893-native: enp0s20f0u1i2 ready at 192.0.2.1/30
+7.3.0-op6893-d1-b2d5ede80b81+
+f9570f51111fc13762629f4a1249454885c8d7dde9549a8879c37eefcd6c733e  /dev/sdc48
+allowed=1 attempted=0 faulted=0 result=0 cleanup_result=0
+stage=idle failure_stage=none mismatch_reg=0x0 value=0x0
+parent_votes=0,0 rail_refs=0,0 dirty=0,0 uncertain_enable=0
+on_vcn18=0x0,0x0,0x0,0x0 on_vcn13=0x0,0x0,0x0,0x0
+domain_allowed=1 requested=0 uncertain=0 pins_dirty=0 id_read=0 hw=0x0 cfg=0x0
+domain_cleanup_result=0
+access_status=0x0 status2=0x0 control=0x0 protect=0x0 protect2=0x0 host=0x0
+last_status=0x0 status2=0x0 control=0x0 protect=0x0 protect2=0x0 host=0x0
+csr_requested=0 samples=0 clock_raw=0x0 sleep_raw=0x0 timeout_raw=0x0
+id_requested=0 clock_reset_requested=0 off_ready=0 id_samples=0 fresh_clock=0x0 fresh_timeout=0x0 fresh_sleep=0x0
+start_ns=15532739154 end_ns=15533288308 sequential=1
+status=0x10580e01 status2=0x10580e01 control=0x12 rc=0x401425 host=0x0
+protect=0xe70c500e protect1=0x519c0000 protect2=0xe7
+end_status=0x10580e01 end_status2=0x10580e01 end_control=0x12
+off_at_both_samples=1 rc_mode=1 legacy_protection_complete=0
+pmic[0x0008]=0x5930
+pmic[0x1888]=0x0001
+pmic[0x188e]=0x002c
+pmic[0x18a6]=0x3a2c
+pmic[0x18a8]=0x0043
+pmic[0x18aa]=0x0000
+pmic[0x18b4]=0x0030
+pmic[0x1c1c]=0x0000
+pmic[0x1c20]=0x0000
+pmic[0x1c22]=0x8000
+pmic[0x1c28]=0x0000
+pmic[0x1c2e]=0x0000
+pmic[0x1c32]=0x0000
+pmic[0x1c34]=0x8000
+pmic[0x1c3a]=0x0000
+pmic[0x202e]=0x0400
+pmic[0x1be2]=0x0000
+pmic[0x1be6]=0x0000
+pmic[0x1c08]=0x0000
+pmic[0x1c0c]=0x0000
+rail=vs1 enabled=1 nominal_uv=2000000
+rail=vs2 enabled=1 nominal_uv=1400000
+rail=vcn13 enabled=0 nominal_uv=1300000
+rail=vcn18 enabled=0 nominal_uv=1800000
+rail=vcn33-1 enabled=0 nominal_uv=3500000
+rail=vcn33-2 enabled=0 nominal_uv=3500000
+activation_ready=0 upstream_policy=unresolved dark_conn_access=none
+emi_valid=1 base=0x8fb00000 size=0x450000
+0-7
+configured

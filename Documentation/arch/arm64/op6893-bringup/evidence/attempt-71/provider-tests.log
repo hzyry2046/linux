@@ -1,0 +1,1 @@
+PASS: actual Paris get/set,32 direction/latch/Schmitt/argument combinations,all unrelated pins/fields preserved,provider errors,invalid pin,LEVEL interoperability

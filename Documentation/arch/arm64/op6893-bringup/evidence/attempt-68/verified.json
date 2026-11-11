@@ -1,0 +1,14 @@
+{
+  "image": "e384bb8e140f",
+  "boot_sha256": "9d8d5c11ddaed6336d0534c51699c8d12d185bf1870f7a46ffa84cb50672709e",
+  "result": 0,
+  "saved": 36,
+  "applied": 36,
+  "restored": 36,
+  "dirty": 0,
+  "unsafe": false,
+  "cleanup_result": 0,
+  "domain_cleanup_result": 0,
+  "independent_all_rows_comparison": true,
+  "ack_backup_updated": false
+}

@@ -1,0 +1,18 @@
+{
+  "image": "0d19c805d6b6",
+  "boot_hash_match": true,
+  "digital_hw_version": "0x20010101",
+  "digital_config_id": "0x3",
+  "id_samples": 2,
+  "clock_reset_requested": true,
+  "fresh_clock": "0x4006",
+  "fresh_timeout": "0x1",
+  "fresh_sleep": "0x100",
+  "domain_cleanup": 0,
+  "rail_cleanup": 0,
+  "repeat_refused_trace_unchanged": true,
+  "cpus": "0-7",
+  "sdc_readonly": true,
+  "root_hash_unchanged": true,
+  "lvts_channels": 17
+}

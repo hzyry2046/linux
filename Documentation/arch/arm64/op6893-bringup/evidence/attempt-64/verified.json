@@ -1,0 +1,28 @@
+{
+  "image": "acbc438563c6",
+  "boot_hash_match": true,
+  "post_samples": 13,
+  "emi_base": "0x8fb00000",
+  "emi_size": "0x450000",
+  "emi_valid": true,
+  "mcu_remap_observed": "0x4000",
+  "mcu_remap_target": "0x8fb0",
+  "peripheral_remaps_observed": "0x1100",
+  "peripheral_remaps_ack_target": "0x1000",
+  "rgu_observed": [
+    255,
+    0,
+    1,
+    0
+  ],
+  "rgu_ack_target": [
+    0,
+    255,
+    0,
+    1
+  ],
+  "domain_cleanup": 0,
+  "rail_cleanup": 0,
+  "repeat_refused_snapshots_unchanged": true,
+  "regressions_pass": true
+}

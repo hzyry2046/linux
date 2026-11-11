@@ -1,0 +1,11 @@
+PASS: 262144 synthetic cases; 98304 differ from width-bounded interpretation; exact source, write order, coefficients, invalid efuse and four counterexamples
+{
+  "source": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/connectivity/conninfra/platform/mt6893/mt6893_pos.c",
+  "source_sha256": "fb998ea09e10f18006cabf8a0b2a3312cace979386d55b251e0b84679be2512f",
+  "register_header": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/connectivity/conninfra/platform/include/consys_reg_util.h",
+  "header_sha256": "a253ce96cdab66204bc70a53bce646a4b9401c42bd74bfc044f0ba974facc855",
+  "helper_sha256": "5b3a7e8f15e74033ce0864f9450e112c16cbd956bdc44734c1b8b572b418c934",
+  "calibration_sha256": "509e3511c448e73c6e42bfdb61c12f0fb309eb97684e46a010043da2b750eebd",
+  "device_access": false,
+  "synthetic_data_only": true
+}

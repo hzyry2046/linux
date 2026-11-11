@@ -1,0 +1,8 @@
+PASS: actual A-die reset/read/reset/address restoration,3 IDs,stale-data refusal,all guard/ownership-read losses,5 dropped writes,25 write-time guard losses,busy timeout,baseline refusal and mapping failures
+PASS: actual ID mailbox,7 dropped writes,35 write-time faults,all guard/owner losses,4 map failures,unexpected contents retention,6 prerequisite refusals and clear before reset
+PASS: actual held-mailbox config apply/reverse-restore,43 dropped writes,215 write faults,all guard/owner/mailbox samples,10 timeouts,exact baseline refusal,corrupt/stale responses,partial apply cleanup and first-error preservation
+PASS: actual route read,unchanged digital words,6 mapping failures,all guard points,50 sample-time faults,4 thermal owners,3 active controls,5 unstable baselines,no digital writes
+PASS: actual FM clear/restore,45 dropped writes,30 write-time faults,370 sample-time faults,all guard/mailbox points,27 changed samples,thermal/ownership containment,readback corruption,first-error preservation
+PASS: actual efuse control-only reads,53 dropped writes,128 write-time faults,all guard/mailbox points,4 timeouts,inherited kick/modes,changed controls,bad IDs,stale response and first-error retention
+PASS: actual read-mode efuse engine,67 dropped writes,224 write faults,all guard/mailbox points,7 SPI timeouts,wall-clock deadline,poll cap,fast completion,busy reassertion,invalid data,30 control mutations,stale valid refusal
+PASS: standalone observer 3-sample hold-only,all new dropped writes/guard faults,7 SPI timeouts,72 high-bit changes,12 low-bit instability,6 status faults,late deadline,no-change holds,one kick,no private data

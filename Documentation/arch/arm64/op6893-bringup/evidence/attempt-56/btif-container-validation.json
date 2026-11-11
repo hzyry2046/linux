@@ -1,0 +1,28 @@
+[
+  {
+    "file": "soc3_0_ram_mcu_1a_1_hdr.bin",
+    "sha256": "a82b48735f9e8d21562a8317943844e75880ccec6f64802af581215441e9c3eb",
+    "header_size": 48,
+    "payload_size": 165328,
+    "header_address_le": "0xf0000000",
+    "btif_emi_offset": "0x0",
+    "end_exclusive": "0x285d0",
+    "within_declared_subsystem_window": true,
+    "within_conninfra_emi": true,
+    "crc_field": "0x7b60",
+    "crc_validated": false
+  },
+  {
+    "file": "soc3_0_ram_bt_1a_1_hdr.bin",
+    "sha256": "40636d230df19264a4b187a6f4399103be2215c00c9ad09a93b677013bcb5510",
+    "header_size": 48,
+    "payload_size": 671992,
+    "header_address_le": "0xf0100011",
+    "btif_emi_offset": "0x100000",
+    "end_exclusive": "0x1a40f8",
+    "within_declared_subsystem_window": true,
+    "within_conninfra_emi": true,
+    "crc_field": "0xb68d",
+    "crc_validated": false
+  }
+]

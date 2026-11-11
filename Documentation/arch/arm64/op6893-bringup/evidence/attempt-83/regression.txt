@@ -1,0 +1,163 @@
+op6893-native: enp0s20f0u1i2 ready at 192.0.2.1/30
+7.3.0-op6893-d1-4434b68988c7+
+start_ns=47713398156 end_ns=47713959002 sequential=1
+status=0x10580e03 status2=0x10580e03 control=0xd rc=0x401425 host=0x1
+protect=0xe70c500e protect1=0x519c0000 protect2=0xe3
+end_status=0x10580e03 end_status2=0x10580e03 end_control=0xd
+off_at_both_samples=0 rc_mode=1 legacy_protection_complete=0
+pmic[0x0008]=0x5930
+pmic[0x1888]=0x0001
+pmic[0x188e]=0x002c
+pmic[0x18a6]=0x3a2c
+pmic[0x18a8]=0x0043
+pmic[0x18aa]=0x0000
+pmic[0x18b4]=0x0030
+pmic[0x1c1c]=0x0003
+pmic[0x1c20]=0x0003
+pmic[0x1c22]=0x80f0
+pmic[0x1c28]=0x0000
+pmic[0x1c2e]=0x0003
+pmic[0x1c32]=0x0003
+pmic[0x1c34]=0x80f0
+pmic[0x1c3a]=0x0000
+pmic[0x202e]=0x0400
+pmic[0x1be2]=0x0000
+pmic[0x1be6]=0x0000
+pmic[0x1c08]=0x0000
+pmic[0x1c0c]=0x0000
+rail=vs1 enabled=1 nominal_uv=2000000
+rail=vs2 enabled=1 nominal_uv=1400000
+rail=vcn13 enabled=1 nominal_uv=1300000
+rail=vcn18 enabled=1 nominal_uv=1800000
+rail=vcn33-1 enabled=0 nominal_uv=3500000
+rail=vcn33-2 enabled=0 nominal_uv=3500000
+activation_ready=0 upstream_policy=unresolved dark_conn_access=guarded-id-read
+emi_valid=1 base=0x8fb00000 size=0x450000
+0-7
+1
+TARGET     SOURCE     FSTYPE OPTIONS
+/run/cache /dev/sdc55 ext4   ro,nosuid,nodev,noexec,relatime,norecovery
+4b831520cce5df878a6ddb1b428c235d1735f5eea9fe5148f0fa6d0783f90051  /run/cache/mainline/debian.squashfs
+20899
+41751
+sequence=1 start_ns=47887438772 end_ns=47900172002
+0 0x13c7e 43839
+1 0x13c93 43515
+2 0x13c5c 44363
+3 0x13c2d 45087
+4 0x13bbe 46798
+5 0x13bea 46120
+6 0x13bef 46043
+7 0x13bdf 46289
+8 0x13c9c 43377
+9 0x13c45 44717
+10 0x13cd6 42483
+11 0x13d05 41758
+12 0x13cb6 42976
+13 0x13c38 44918
+14 0x13ce8 42205
+15 0x13d25 41265
+16 0x13ca7 43207
+configured
+ regulator                      use open bypass  opmode voltage current     min     max
+---------------------------------------------------------------------------------------
+ regulator-dummy                  3   32      0 unknown     0mV     0mA     0mV     0mV 
+    vs1                           2    5      0  normal  2000mV     0mA     0mV     0mV 
+       conn-preflight-vs1         1                                 0mA     0mV     0mV
+       VIO18                      0    1      0 unknown  1800mV     0mA     0mV     0mV 
+          VBBCK                   0    0      0 unknown  1200mV     0mA     0mV     0mV 
+       vcn18                      1    1      0 unknown  1800mV     0mA     0mV     0mV 
+          conn-preflight-vcn18    1                                 0mA     0mV     0mV
+       VEFUSE                     0    0      0 unknown  1800mV     0mA     0mV     0mV 
+       VRF18                      0    0      0 unknown  1800mV     0mA     0mV     0mV 
+    VGPU11                        0    0      0  normal   750mV     0mA     0mV     0mV 
+    VMODEM                        0    0      0  normal   900mV     0mA     0mV     0mV 
+    VPU                           0    0      0  normal   700mV     0mA     0mV     0mV 
+    VCORE                         0    0      0  normal  1300mV     0mA     0mV     0mV 
+    vs2                           2    5      0  normal  1400mV     0mA     0mV     0mV 
+       conn-preflight-vs2         1                                 0mA     0mV     0mV
+       VRF12                      0    0      0 unknown  1200mV     0mA     0mV     0mV 
+       vcn13                      1    1      0 unknown  1300mV     0mA     0mV     0mV 
+          conn-preflight-vcn13    1                                 0mA     0mV     0mV
+       VA12                       0    0      0 unknown  1200mV     0mA     0mV     0mV 
+       VA09                       0    0      0 unknown   800mV     0mA     0mV     0mV 
+    VPA                           0    0      0  normal   500mV     0mA     0mV     0mV 
+    VPROC2                        0    0      0  normal   750mV     0mA     0mV     0mV 
+    VPROC1                        0    0      0  normal   750mV     0mA     0mV     0mV 
+    VGPU11_SSHUB                  0    0      0  normal   400mV     0mA     0mV     0mV 
+    VAUD18                        0    0      0 unknown  1800mV     0mA     0mV     0mV 
+    VSIM1                         0    0      0 unknown  1800mV     0mA     0mV     0mV 
+    VIBR                          0    0      0 unknown  2800mV     0mA     0mV     0mV 
+    VUSB                          0    0      0 unknown  3000mV     0mA     0mV     0mV 
+    VSRAM_PROC2                   0    0      0  normal  1000mV     0mA     0mV     0mV 
+    VCAMIO                        0    0      0 unknown  1800mV     0mA     0mV     0mV 
+    VFE28                         0    0      0 unknown  2800mV     0mA     0mV     0mV 
+    vcn33_1                       0    3      0 unknown  3500mV     0mA     0mV     0mV 
+       conn-preflight-vcn33-1     0                                 0mA     0mV     0mV
+       VCN33_1_BT                 0    0      0 unknown  3500mV     0mA     0mV     0mV 
+       VCN33_1_WIFI               0    0      0 unknown  3500mV     0mA     0mV     0mV 
+    VAUX18                        0    0      0 unknown  1800mV     0mA     0mV     0mV 
+    VSRAM_OTHERS                  0    0      0  normal   750mV     0mA     0mV     0mV 
+    VXO22                         0    0      0 unknown  2200mV     0mA     0mV     0mV 
+    VRFCK                         0    0      0 unknown  1600mV     0mA     0mV     0mV 
+    VBIF28                        0    0      0 unknown  2800mV     0mA     0mV     0mV 
+    VIO28                         0    0      0 unknown  2800mV     0mA     0mV     0mV 
+    VEMC                          0    0      0 unknown  2500mV     0mA     0mV     0mV 
+    vcn33_2                       0    3      0 unknown  3500mV     0mA     0mV     0mV 
+       conn-preflight-vcn33-2     0                                 0mA     0mV     0mV
+       VCN33_2_BT                 0    0      0 unknown  3500mV     0mA     0mV     0mV 
+       VCN33_2_WIFI               0    0      0 unknown  3500mV     0mA     0mV     0mV 
+    VSRAM_MD                      0    0      0  normal   850mV     0mA     0mV     0mV 
+    VUFS                          0    0      0 unknown  1800mV     0mA     0mV     0mV 
+    VM18                          0    0      0 unknown  1800mV     0mA     0mV     0mV 
+    VSRAM_PROC1                   0    0      0  normal   750mV     0mA     0mV     0mV 
+    VSIM2                         0    0      0 unknown  1800mV     0mA     0mV     0mV 
+    VSRAM_OTHERS_SSHUB            0    0      0  normal   500mV     0mA     0mV     0mV 
+ vusb33-lk-inherited              2    1      0 unknown  3300mV     0mA  3300mV  3300mV 
+    11201000.usb-vusb33           1                                 0mA     0mV     0mV
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pins:pin 155 (GPIO155) 155:pinctrl_paris 155: 0001001111 (0 1)
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pins:pin 172 (GPIO172) 172:pinctrl_paris 172: 1001010110
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pins:pin 173 (GPIO173) 173:pinctrl_paris 173: 1001010111
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pins:pin 174 (GPIO174) 174:pinctrl_paris 174: 1001000110
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pins:pin 175 (GPIO175) 175:pinctrl_paris 175: 1000010110
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pins:pin 176 (GPIO176) 176:pinctrl_paris 176: 1001010110
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pins:pin 177 (GPIO177) 177:pinctrl_paris 177: 1001010111
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pins:pin 178 (GPIO178) 178:pinctrl_paris 178: 1000010110
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pins:pin 179 (GPIO179) 179:pinctrl_paris 179: 1000010110
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pins:pin 180 (GPIO180) 180:pinctrl_paris 180: 0111010110
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pins:pin 181 (GPIO181) 181:pinctrl_paris 181: 1000010110
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pins:pin 182 (GPIO182) 182:pinctrl_paris 182: 1000010110
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pinmux-pins:pin 155 (GPIO155): gpio-keys pinctrl_paris:667 function func0 group GPIO155
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pinmux-pins:pin 172 (GPIO172): conn-preflight (GPIO UNCLAIMED) function func1 group GPIO172
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pinmux-pins:pin 173 (GPIO173): conn-preflight (GPIO UNCLAIMED) function func1 group GPIO173
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pinmux-pins:pin 174 (GPIO174): conn-preflight (GPIO UNCLAIMED) function func1 group GPIO174
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pinmux-pins:pin 175 (GPIO175): conn-preflight (GPIO UNCLAIMED) function func1 group GPIO175
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pinmux-pins:pin 176 (GPIO176): conn-preflight (GPIO UNCLAIMED) function func1 group GPIO176
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pinmux-pins:pin 177 (GPIO177): conn-preflight (GPIO UNCLAIMED) function func1 group GPIO177
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pinmux-pins:pin 178 (GPIO178): conn-preflight (GPIO UNCLAIMED) function func1 group GPIO178
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pinmux-pins:pin 179 (GPIO179): conn-preflight (GPIO UNCLAIMED) function func1 group GPIO179
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pinmux-pins:pin 180 (GPIO180): conn-preflight (GPIO UNCLAIMED) function func0 group GPIO180
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pinmux-pins:pin 181 (GPIO181): conn-preflight (GPIO UNCLAIMED) function func1 group GPIO181
+/sys/kernel/debug/pinctrl/10005000.pinctrl-pinctrl_paris/pinmux-pins:pin 182 (GPIO182): conn-preflight (GPIO UNCLAIMED) function func1 group GPIO182
+STATUS_BEFORE_RETRY
+28ae02420d1894c2ea7acb76bb8cc2cbc0908533c21f3cb2b1edb0042b90dbbf  /sys/devices/platform/conn-preflight/rail_cycle
+bd9a5b2d54f77261b678e47d2fd34c58fcdbe524a8bdb3bfff7dfc969215e93e  /sys/devices/platform/conn-preflight/adie_status
+e0186532fc96b385641137686207d2b244ffd5a93ca521424e31b1bdd500e46a  /sys/devices/platform/conn-preflight/efuse_status
+4ae8c3fb0d84ac800930a7cd55962ada87a1c874201ebd5feefe976d891937a4  /sys/devices/platform/conn-preflight/remap_status
+da3a62f724db16641e9b26a41504e3d1a9ece1defebd6979b6714e961f4e399c  /sys/devices/platform/conn-preflight/rgu_status
+67dc0ecba0f43d280f393b41f5933c55e6a638b2fbd01ef2f0a1b4630e66340c  /sys/devices/platform/conn-preflight/spi_config
+a60207d0362512d34b53374acceedfd5677ec2d69c3520431a1f3f7187c673e9  /sys/devices/platform/conn-preflight/sysram_status
+b6b401406f317bfaebbbf4e32c39f721311a865a57c75dda5e0e947daf92bd3f  /sys/devices/platform/conn-preflight/strap_status
+fbfa64be2fcde59fe4f64dcc1394dd97da0d3a273e31b7d78d4798ea775d5bf7  /sys/devices/platform/conn-preflight/sema_status
+retry_refused
+bash: line 16: printf: write error: Operation already in progress
+STATUS_AFTER_RETRY
+28ae02420d1894c2ea7acb76bb8cc2cbc0908533c21f3cb2b1edb0042b90dbbf  /sys/devices/platform/conn-preflight/rail_cycle
+bd9a5b2d54f77261b678e47d2fd34c58fcdbe524a8bdb3bfff7dfc969215e93e  /sys/devices/platform/conn-preflight/adie_status
+e0186532fc96b385641137686207d2b244ffd5a93ca521424e31b1bdd500e46a  /sys/devices/platform/conn-preflight/efuse_status
+4ae8c3fb0d84ac800930a7cd55962ada87a1c874201ebd5feefe976d891937a4  /sys/devices/platform/conn-preflight/remap_status
+da3a62f724db16641e9b26a41504e3d1a9ece1defebd6979b6714e961f4e399c  /sys/devices/platform/conn-preflight/rgu_status
+67dc0ecba0f43d280f393b41f5933c55e6a638b2fbd01ef2f0a1b4630e66340c  /sys/devices/platform/conn-preflight/spi_config
+a60207d0362512d34b53374acceedfd5677ec2d69c3520431a1f3f7187c673e9  /sys/devices/platform/conn-preflight/sysram_status
+b6b401406f317bfaebbbf4e32c39f721311a865a57c75dda5e0e947daf92bd3f  /sys/devices/platform/conn-preflight/strap_status
+fbfa64be2fcde59fe4f64dcc1394dd97da0d3a273e31b7d78d4798ea775d5bf7  /sys/devices/platform/conn-preflight/sema_status

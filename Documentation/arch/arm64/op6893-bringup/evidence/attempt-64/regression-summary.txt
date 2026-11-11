@@ -1,0 +1,44 @@
+op6893-native: enp0s20f0u1i2 ready at 192.0.2.1/30
+7.3.0-op6893-d1-acbc438563c6+
+0-7
+1
+TARGET     SOURCE     FSTYPE OPTIONS
+/run/cache /dev/sdc55 ext4   ro,nosuid,nodev,noexec,relatime,norecovery
+4b831520cce5df878a6ddb1b428c235d1735f5eea9fe5148f0fa6d0783f90051  /run/cache/mainline/debian.squashfs
+22129
+37587
+sequence=1 start_ns=51235775618 end_ns=51248441772
+0 0x13d96 39524
+1 0x13d9b 39447
+2 0x13d8e 39647
+3 0x13d78 39986
+4 0x13ce6 42236
+5 0x13d32 41065
+6 0x13cf9 41943
+7 0x13d08 41712
+8 0x13db2 39092
+9 0x13d32 41065
+10 0x13de9 38245
+11 0x13e1a 37489
+12 0x13dd7 38522
+13 0x13d58 40479
+14 0x13e13 37597
+15 0x13e5a 36503
+16 0x13de6 38291
+configured
+040a1dd37da9ba3bbcc5ea3ed3c7b85a308e8dfe11eb90ad0f74c7e99fb5f190  /sys/devices/platform/conn-preflight/post_id
+531c7f9a5c54b2f909d684bf6cf642ea641531c7e6d2d0a2dbf6e0199b7b8f5d  /sys/devices/platform/conn-preflight/protection_trace
+repeat_refused
+bash: line 1: printf: write error: Operation already in progress
+040a1dd37da9ba3bbcc5ea3ed3c7b85a308e8dfe11eb90ad0f74c7e99fb5f190  /sys/devices/platform/conn-preflight/post_id
+531c7f9a5c54b2f909d684bf6cf642ea641531c7e6d2d0a2dbf6e0199b7b8f5d  /sys/devices/platform/conn-preflight/protection_trace
+allowed=1 attempted=1 faulted=0 result=0 cleanup_result=0
+stage=complete failure_stage=none mismatch_reg=0x0 value=0x0
+parent_votes=1,1 rail_refs=0,0 dirty=0,0 uncertain_enable=0
+on_vcn18=0x3,0x7,0x80f0,0x0 on_vcn13=0x3,0x7,0x80f0,0x0
+domain_allowed=1 requested=1 uncertain=0 pins_dirty=0 id_read=1 hw=0x20010101 cfg=0x3
+domain_cleanup_result=0
+access_status=0x10580e03 status2=0x10580e03 control=0xd protect=0xe70c500e protect2=0xe3 host=0x1
+last_status=0x10580e01 status2=0x10580e01 control=0x12 protect=0xe70c700e protect2=0xe7 host=0x0
+csr_requested=0 samples=0 clock_raw=0x0 sleep_raw=0x0 timeout_raw=0x0
+id_requested=1 clock_reset_requested=1 off_ready=1 id_samples=2 fresh_clock=0x4006 fresh_timeout=0x1 fresh_sleep=0x100

@@ -1,0 +1,90 @@
+ regulator                      use open bypass  opmode voltage current     min     max
+---------------------------------------------------------------------------------------
+ regulator-dummy                  4    6      0 unknown     0mV     0mA     0mV     0mV 
+    MAINAF-camaf_m1_pmic          0                                 0mA     0mV     0mV
+    1a101000.ccu-dvfsrc-vcore     0                                 0mA     0mV     0mV
+    9-0035-tfa98xx_vdd            1                                 0mA     0mV     0mV
+    9-0034-tfa98xx_vdd            1                                 0mA     0mV     0mV
+    0-0038-vcc_1v8                1                                 0mA     0mV     0mV
+    11201000.usb0-vbus            0                                 0mA     0mV     0mV
+ vs1                              0    0      0  normal  2000mV     0mA   800mV  2200mV 
+ vgpu11                           0    2      0  normal   750mV     0mA   400mV  1193mV 
+    10012000.dvfsrc-vgpu11        0                                 0mA     0mV     0mV
+    mmdvfs_pmqos-vcore            0                                 0mA     0mV     0mV
+ vmodem                           0    0      0  normal   900mV     0mA   400mV  1100mV 
+ vpu                              0    0      0  normal   650mV     0mA   400mV  1193mV 
+ vcore                            0    0      0  normal  1300mV     0mA   506mV  1300mV 
+ vs2                              0    0      0  normal  1462mV     0mA   800mV  1600mV 
+ vpa                              0    0      0  normal   500mV     0mA   500mV  3650mV 
+ vproc2                           0    0      0  normal   750mV     0mA   400mV  1193mV 
+ vproc1                           0    0      0  normal   750mV     0mA   400mV  1193mV 
+ VCORE_SSHUB                      0    0      0  normal   400mV     0mA     0mV     0mV 
+ vaud18                           0    2      0 unknown  1800mV     0mA  1800mV  1800mV 
+    mt6359_snd-vaud18             0                                 0mA     0mV     0mV
+    mt6359_snd-vaud18             0                                 0mA     0mV     0mV
+ vsim1                            0    0      0 unknown  1800mV     0mA  1700mV  3100mV 
+ vibr                             0    0      0 unknown  2800mV     0mA  1200mV  3300mV 
+ vrf12                            0    0      0 unknown  1200mV     0mA  1100mV  1300mV 
+ vusb                             1    1      0 unknown  3000mV     0mA  3000mV  3000mV 
+    11201000.usb0-vusb33          1                                 0mA     0mV     0mV
+ vsram_proc2                      0    1      0  normal   818mV     0mA   500mV  1193mV 
+    mt_cpufreq-vsram_proc2        0                                 0mA     0mV     0mV
+ vio18                            0    0      0 unknown  1800mV     0mA  1700mV  1900mV 
+ vcamio                           0    4      0 unknown  1800mV     0mA  1700mV  1900mV 
+    kd_camera_hw1@1a004000-cam3_vcamio   0                                 0mA     0mV     0mV
+    kd_camera_hw1@1a004000-cam2_vcamio   0                                 0mA     0mV     0mV
+    kd_camera_hw1@1a004000-cam1_vcamio   0                                 0mA     0mV     0mV
+    kd_camera_hw1@1a004000-cam0_vcamio   0                                 0mA     0mV     0mV
+ vcn18                            1    1      0 unknown  1800mV     0mA  1800mV  1800mV 
+    18000000.consys-vcn18         1                                 0mA  1800mV  1800mV
+ vfe28                            0    0      0 unknown  2800mV     0mA  2800mV  2800mV 
+ vcn13                            1    1      0 unknown  1300mV     0mA   900mV  1300mV 
+    18000000.consys-vcn13         1                                 0mA  1300mV  1300mV
+ vcn33_1_bt                       0    1      0 unknown  3300mV     0mA  2800mV  3500mV 
+    18000000.consys-vcn33_1_bt    0                                 0mA  3300mV  3300mV
+ vcn33_1_wifi                     0    1      0 unknown  3300mV     0mA  2800mV  3500mV 
+    18000000.consys-vcn33_1_wifi   0                                 0mA  3300mV  3300mV
+ vaux18                           0    0      0 unknown  1800mV     0mA  1800mV  1800mV 
+ vsram_others                     0    1      0  normal   500mV     0mA   500mV  1193mV 
+    gpufreq-_vsram_gpu            0                                 0mA   800mV  1193mV
+ vefuse                           0    0      0 unknown  1800mV     0mA  1700mV  2000mV 
+ vxo22                            0    0      0 unknown  2200mV     0mA  1800mV  2200mV 
+ vrfck                            0    0      0 unknown  1600mV     0mA  1240mV  1600mV 
+ vbif28                           0    0      0 unknown  2800mV     0mA  2800mV  2800mV 
+ vio28                            0    0      0 unknown  2800mV     0mA  2800mV  3300mV 
+ vemc                             0    0      0 unknown  2500mV     0mA  2500mV  2500mV 
+ vcn33_2_bt                       0    0      0 unknown  3300mV     0mA  2800mV  3500mV 
+ vcn33_2_wifi                     0    1      0 unknown  3300mV     0mA  2800mV  3500mV 
+    18000000.consys-vcn33_2_wifi   0                                 0mA  3300mV  3300mV
+ va12                             0    0      0 unknown  1200mV     0mA  1200mV  1300mV 
+ va09                             0    0      0 unknown   800mV     0mA   800mV  1200mV 
+ vrf18                            0    0      0 unknown  1800mV     0mA  1700mV  1810mV 
+ vsram_md                         0    0      0  normal   850mV     0mA   500mV  1100mV 
+ vufs                             0    0      0 unknown  1800mV     0mA  1700mV  1900mV 
+ vm18                             0    0      0 unknown  1800mV     0mA  1700mV  1900mV 
+ vbbck                            0    0      0 unknown  1200mV     0mA  1100mV  1200mV 
+ vsram_proc1                      0    1      0  normal   750mV     0mA   500mV  1193mV 
+    mt_cpufreq-vsram_proc1        0                                 0mA     0mV     0mV
+ vsim2                            0    0      0 unknown  1800mV     0mA  1700mV  3100mV 
+ VSRAM_OTHERS_SSHUB               0    0      0  normal   500mV     0mA     0mV     0mV 
+ isink_load                       0    0      0 unknown     0mV     0mA     0mA     0mA 
+ 6_vbuck1                         0    1      0  normal   650mV     0mA   300mV  1193mV 
+    mt_cpufreq-6_vbuck1           0                                 0mA     0mV     0mV
+ 6_vbuck3                         0    0      0  normal   750mV     0mA   300mV  1193mV 
+ 7_vbuck1                         0    1      0  normal   800mV     0mA   300mV  1193mV 
+    gpufreq-_vgpu                 0                                 0mA   800mV  1193mV
+ 7_vbuck3                         0    1      0  normal   718mV     0mA   300mV  1193mV 
+    mt_cpufreq-7_vbuck3           0                                 0mA     0mV     0mV
+ 3_vbuck1                         0    1      0  normal   550mV     0mA   300mV  1193mV 
+    3_vbuck1                      0                                 0mA     0mV     0mV
+ 3_vbuck3                         0    1      0 unknown   600mV     0mA   300mV  1193mV 
+    3_vbuck3                      0                                 0mA     0mV     0mV
+ 3_vbuck4                         0    1      0    fast   800mV     0mA   300mV  1193mV 
+    3_vbuck4                      0                                 0mA     0mV     0mV
+ usb-otg-vbus                     0    0      0 unknown  5050mV  1300mA     0mV     0mV 
+ VFP                              0    0      0  normal  1800mV     0mA  1200mV  3600mV 
+ vtp                              1    1      0  normal  3000mV     0mA  1200mV  3600mV 
+    0-0038-vdd_2v8                1                               200mA  3000mV  3000mV
+ VMC                              0    0      0  normal  3000mV     0mA  1200mV  3600mV 
+ VMCH                             1    1      0  normal  3300mV     0mA  3300mV  3300mV 
+    spi1.0-dvdd                   1                               150mA  3300mV  3300mV

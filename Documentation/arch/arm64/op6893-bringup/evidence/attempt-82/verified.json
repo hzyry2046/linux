@@ -1,0 +1,18 @@
+{
+  "image": "89780a5bbea6",
+  "result": -5,
+  "failure_stage": "adie-efuse-engine-state",
+  "engine_complete": false,
+  "observed_flags": "0x20000000",
+  "elapsed_ns": 60345231,
+  "engine_kicks": 1,
+  "control_polls": 1,
+  "private_data_read": false,
+  "parents_retained": true,
+  "retry_refused": true,
+  "nine_cached_hashes_unchanged": true,
+  "ack_backup_unchanged": true,
+  "recovered_image": "b2d5ede80b81",
+  "recovery_conn_off": true,
+  "recovery_usb_ssh": true
+}

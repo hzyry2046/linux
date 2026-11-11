@@ -1,0 +1,2 @@
+op6893-native: enp0s20f0u1i2 ready at 192.0.2.1/30
+bash: line 1: printf: write error: Connection timed out

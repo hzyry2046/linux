@@ -1,0 +1,28 @@
+{
+  "image": "86887415cd34",
+  "boot_sha256": "b95e80866292570ab8d415b04c6e1a3d46f38bc4655694d64d471747b671f779",
+  "result": 0,
+  "route_words": [
+    "0x801f",
+    "0x50305a00",
+    "0x7f0300ff",
+    "0x0",
+    "0x0"
+  ],
+  "route_rounds_equal": true,
+  "sampled_thermal_controls_zero": true,
+  "thermal_owner_checks_passed": true,
+  "digital_route_writes": false,
+  "prefix_restored": true,
+  "mailbox_cleared": true,
+  "all_outer_restored": true,
+  "retry_refused": true,
+  "cached_hashes_unchanged": true,
+  "ap_register_differences": {
+    "drive": [
+      "0x0",
+      "0x8248"
+    ]
+  },
+  "ack_backup_unchanged": true
+}

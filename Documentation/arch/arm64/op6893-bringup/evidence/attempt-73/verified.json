@@ -1,0 +1,29 @@
+{
+  "image": "a75acab430b3",
+  "boot_sha256": "cf50395db8fb9dc34c4fcabf69623b3f06234a1e0c92def0c82029776f5386e7",
+  "result": 0,
+  "adie_id": "0x66358a11",
+  "vendor_revision": "MT6635 E3",
+  "initial_rdat": 0,
+  "busy_seen": false,
+  "polls": 7,
+  "id_valid": true,
+  "reset_released_verified": true,
+  "reset_reasserted_verified": true,
+  "top_addr_before_after": [
+    0,
+    0
+  ],
+  "all_outer_restored": true,
+  "all_dirty_unsafe_clear": true,
+  "cleanup_result": 0,
+  "domain_cleanup_result": 0,
+  "idle_dir_latch_mux_restored": true,
+  "common_active_drive_before_after": [
+    0,
+    33352
+  ],
+  "retry_refused": true,
+  "cached_hashes_unchanged": true,
+  "ack_backup_updated": false
+}

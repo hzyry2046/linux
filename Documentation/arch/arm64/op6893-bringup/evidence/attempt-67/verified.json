@@ -1,0 +1,13 @@
+{
+  "image": "fba0b6f25671",
+  "boot_sha256": "0b1a973d51c994a7e6340fb5113e50e2e97c4ab63fd972e4073ab0d381e130a2",
+  "result": 0,
+  "samples": 39,
+  "config_words": 36,
+  "matching_config_words": 10,
+  "cleanup_result": 0,
+  "domain_cleanup_result": 0,
+  "ack_backup_updated": false,
+  "starting_android_actual_version_user_report": "4.19",
+  "starting_android_uname_spoof": "5.10.0"
+}

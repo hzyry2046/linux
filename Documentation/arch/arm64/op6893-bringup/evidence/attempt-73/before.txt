@@ -1,0 +1,15 @@
+op6893-native: enp0s20f0u1i2 ready at 192.0.2.1/30
+7.3.0-op6893-d1-a75acab430b3+
+cf50395db8fb9dc34c4fcabf69623b3f06234a1e0c92def0c82029776f5386e7  /dev/sdc48
+allowed=1 attempted=0 faulted=0 result=0 cleanup_result=0
+stage=idle failure_stage=none mismatch_reg=0x0 value=0x0
+parent_votes=0,0 rail_refs=0,0 dirty=0,0 uncertain_enable=0
+on_vcn18=0x0,0x0,0x0,0x0 on_vcn13=0x0,0x0,0x0,0x0
+domain_allowed=1 requested=0 uncertain=0 pins_dirty=0 id_read=0 hw=0x0 cfg=0x0
+domain_cleanup_result=0
+access_status=0x0 status2=0x0 control=0x0 protect=0x0 protect2=0x0 host=0x0
+last_status=0x0 status2=0x0 control=0x0 protect=0x0 protect2=0x0 host=0x0
+csr_requested=0 samples=0 clock_raw=0x0 sleep_raw=0x0 timeout_raw=0x0
+id_requested=0 clock_reset_requested=0 off_ready=0 id_samples=0 fresh_clock=0x0 fresh_timeout=0x0 fresh_sleep=0x0
+requested=0 release_issued=0 release_verified=0 triggered=0 busy_seen=0 polls=0 id_read=0 id_valid=0 reset_restored=0 complete=0 reset_dirty=0 addr_dirty=0 unsafe=0 cleanup_result=0
+control=0x0 busy=0x0 wb=0x0 addr_before=0x0 addr_on=0x0 addr_after=0x0 data_before=0x0 id=0x0

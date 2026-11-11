@@ -1,0 +1,2 @@
+Sending 'boot' (32768 KB)                          FAILED (Write to device failed in SendBuffer() (Success))
+fastboot: error: Command failed

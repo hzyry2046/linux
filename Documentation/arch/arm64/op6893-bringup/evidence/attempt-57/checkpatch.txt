@@ -1,0 +1,3 @@
+total: 0 errors, 0 warnings, 95 lines checked
+
+/data/src/mainline/mt6893-direct/evidence/attempt-57/board.patch has no obvious style problems and is ready for submission.

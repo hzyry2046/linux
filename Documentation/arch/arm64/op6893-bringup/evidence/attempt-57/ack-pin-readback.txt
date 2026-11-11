@@ -1,0 +1,12 @@
+pin 155 (GPIO155) 155:pinctrl_mtk_v2 155: 0001001111 (0 1)
+pin 172 (GPIO172) 172:pinctrl_mtk_v2 172: 1001010110
+pin 173 (GPIO173) 173:pinctrl_mtk_v2 173: 1001010111
+pin 174 (GPIO174) 174:pinctrl_mtk_v2 174: 1001000110
+pin 175 (GPIO175) 175:pinctrl_mtk_v2 175: 1000010110
+pin 176 (GPIO176) 176:pinctrl_mtk_v2 176: 1001010110
+pin 177 (GPIO177) 177:pinctrl_mtk_v2 177: 1001010111
+pin 178 (GPIO178) 178:pinctrl_mtk_v2 178: 1000010110
+pin 179 (GPIO179) 179:pinctrl_mtk_v2 179: 1000010110
+pin 180 (GPIO180) 180:pinctrl_mtk_v2 180: 1110010110
+pin 181 (GPIO181) 181:pinctrl_mtk_v2 181: 1000010110
+pin 182 (GPIO182) 182:pinctrl_mtk_v2 182: 1000010110

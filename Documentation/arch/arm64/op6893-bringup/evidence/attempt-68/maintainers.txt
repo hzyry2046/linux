@@ -1,0 +1,5 @@
+Catalin Marinas <catalin.marinas@arm.com> (maintainer:ARM64 PORT (AARCH64 ARCHITECTURE))
+Will Deacon <will@kernel.org> (maintainer:ARM64 PORT (AARCH64 ARCHITECTURE))
+Mark Rutland <mark.rutland@arm.com> (reviewer:ARM64 PORT (AARCH64 ARCHITECTURE))
+linux-arm-kernel@lists.infradead.org (moderated list:ARM64 PORT (AARCH64 ARCHITECTURE))
+linux-kernel@vger.kernel.org (open list)

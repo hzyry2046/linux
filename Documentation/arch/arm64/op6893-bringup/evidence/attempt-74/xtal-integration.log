@@ -1,0 +1,6 @@
+PASS: 158 API fault points, 26 PMIC baseline mismatches, 12 rail mismatches, recursive parent references, uncertain enable, finite polls, live-domain retention, one-shot lockout and invalid triggers
+PASS: exact 21-write ACK sequence, dropped MMIO writes, four dual-ACK timeouts, pin failures, guarded mappings, sleep ACK timeout, bad IDs, retained rails, CSR-only snapshots, reset-requested clock/timeout/sleep gates, partial ID refusal, post-ID and 39-word SPI baselines, reversible remap/RGU writes, baseline refusal, retained failed restoration and one-shot integration
+PASS: actual nested remap/RGU/SPI/SYSRAM/strap/semaphore,held-parent assertions,clean lock denial unwind,inner uncertainty prevents all outer restore writes,every remap/RGU/SPI dropped write,strap faults and one-shot integration
+PASS: actual nested A-die ID,clean unknown/stale ID unwind,all mapping and dropped-write faults,20 write-time guard losses,reset-before-unlock enforcement,busy-timeout containment,earliest-error preservation,outer restore failure and cached one-shot routing
+PASS: nested XTAL command,one-shot caching,9 dropped writes,36 guard losses,both busy timeouts,reset-before-unlock and outer restoration failure
+PASS: extracted snapshot, 128 off states, transition, inherited protection, 20 PMIC faults, identity, 12 regulator faults, interrupted read and retry

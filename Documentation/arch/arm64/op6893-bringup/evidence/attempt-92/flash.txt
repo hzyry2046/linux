@@ -1,0 +1,5 @@
+Sending 'boot' (32768 KB)                          OKAY [  1.042s]
+Writing 'boot'                                     OKAY [  0.158s]
+Finished. Total time: 1.203s
+Rebooting                                          OKAY [  0.000s]
+Finished. Total time: 0.051s

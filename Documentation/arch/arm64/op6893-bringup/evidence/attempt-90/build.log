@@ -1,0 +1,43 @@
+make: Entering directory '/data/src/mainline/linux'
+make[1]: 进入目录“/data/src/mainline/mt6893-direct/out”
+  SYNC    include/config/auto.conf
+  UPD     include/config/kernel.release
+  UPD     include/generated/utsrelease.h
+  GEN     usr/initramfs_data.cpio
+  GZIP    usr/initramfs_inc_data
+  CC      init/version.o
+  CC      kernel/sys.o
+  CC      arch/arm64/kernel/op6893-conn.o
+  AS      usr/initramfs_data.o
+  AR      usr/built-in.a
+  AR      init/built-in.a
+  UPD     kernel/config_data
+  GZIP    kernel/config_data.gz
+  CC      kernel/configs.o
+  AR      kernel/built-in.a
+  AR      arch/arm64/kernel/built-in.a
+  AR      arch/arm64/built-in.a
+  AR      built-in.a
+  AR      built-in-fixup.a
+  COPY    vmlinux.a
+  LD      vmlinux.o
+  MODPOST vmlinux.symvers
+  CC      init/version-timestamp.o
+  KSYMS   .tmp_vmlinux0.kallsyms.S
+  AS      .tmp_vmlinux0.kallsyms.o
+  LD      .tmp_vmlinux1
+  KSYMS   .tmp_vmlinux1.kallsyms.S
+  AS      .tmp_vmlinux1.kallsyms.o
+  LD      .tmp_vmlinux2
+  KSYMS   .tmp_vmlinux2.kallsyms.S
+  AS      .tmp_vmlinux2.kallsyms.o
+  LD      vmlinux.unstripped
+  SYSMAP  System.map
+  SORTTAB vmlinux.unstripped
+  OBJCOPY vmlinux
+  GEN     modules.builtin.modinfo
+  GEN     modules.builtin
+  OBJCOPY arch/arm64/boot/Image
+  GZIP    arch/arm64/boot/Image.gz
+make[1]: 离开目录“/data/src/mainline/mt6893-direct/out”
+make: Leaving directory '/data/src/mainline/linux'

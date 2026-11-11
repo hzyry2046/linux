@@ -1,0 +1,93 @@
+{
+  "release": "7.3.0-op6893-d1-d873de3b8963+",
+  "uptime": "95.00 750.67",
+  "registers": {
+    "hwcid": {
+      "address": "0x8",
+      "value": "0x5930"
+    },
+    "vs2_con": {
+      "address": "0x1888",
+      "value": "0x1"
+    },
+    "vs2_vsel_actual": {
+      "address": "0x18a6",
+      "value": "0x3a2c"
+    },
+    "vs2_status": {
+      "address": "0x18a8",
+      "value": "0x43"
+    },
+    "vs2_vsel_requested": {
+      "address": "0x18b4",
+      "value": "0x30"
+    },
+    "vcn33_1_con": {
+      "address": "0x1be2",
+      "value": "0x0"
+    },
+    "vcn33_1_status": {
+      "address": "0x1be6",
+      "value": "0x0"
+    },
+    "vcn33_1_wifi_enable": {
+      "address": "0x1bf4",
+      "value": "0x0"
+    },
+    "vcn33_2_con": {
+      "address": "0x1c08",
+      "value": "0x0"
+    },
+    "vcn33_2_status": {
+      "address": "0x1c0c",
+      "value": "0x0"
+    },
+    "vcn33_2_wifi_enable": {
+      "address": "0x1c1a",
+      "value": "0x0"
+    },
+    "vcn13_con": {
+      "address": "0x1c1c",
+      "value": "0x0"
+    },
+    "vcn13_status": {
+      "address": "0x1c20",
+      "value": "0x0"
+    },
+    "vcn18_con": {
+      "address": "0x1c2e",
+      "value": "0x0"
+    },
+    "vcn18_status": {
+      "address": "0x1c32",
+      "value": "0x0"
+    },
+    "vcn33_1_vsel": {
+      "address": "0x1f98",
+      "value": "0xf00"
+    },
+    "vcn33_2_vsel": {
+      "address": "0x1f9c",
+      "value": "0xf00"
+    },
+    "vcn13_vsel": {
+      "address": "0x202e",
+      "value": "0x400"
+    }
+  },
+  "decoded": {
+    "vs2_enabled_status": true,
+    "vcn13_enabled_status": false,
+    "vcn18_enabled_status": false,
+    "vcn33_1_enabled_status": false,
+    "vcn33_2_enabled_status": false,
+    "vcn33_probe_sync_would_write": [],
+    "vs2_actual_nominal_uv": 1350000,
+    "vs2_requested_nominal_uv": 1400000
+  },
+  "limits": [
+    "Sequential read-only samples; not atomic.",
+    "Nominal selector voltage, not measured output.",
+    "Probe-sync prediction excludes regulator constraints and other writes."
+  ]
+}

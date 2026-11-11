@@ -1,0 +1,101 @@
+{
+  "release": "6.6.30-4k-g6974e26f087e",
+  "uptime": "37546.06 275163.54",
+  "registers": {
+    "hwcid": {
+      "address": "0x8",
+      "value": "0x5930"
+    },
+    "vs2_con": {
+      "address": "0x1888",
+      "value": "0x1"
+    },
+    "vs2_sleep": {
+      "address": "0x188e",
+      "value": "0x2e"
+    },
+    "vs2_actual": {
+      "address": "0x18a6",
+      "value": "0x2f35"
+    },
+    "vs2_status": {
+      "address": "0x18a8",
+      "value": "0x43"
+    },
+    "vs2_voter": {
+      "address": "0x18aa",
+      "value": "0x10"
+    },
+    "vs2_requested": {
+      "address": "0x18b4",
+      "value": "0x35"
+    },
+    "vcn13_con": {
+      "address": "0x1c1c",
+      "value": "0x3"
+    },
+    "vcn13_status": {
+      "address": "0x1c20",
+      "value": "0x7"
+    },
+    "vcn13_op_en": {
+      "address": "0x1c22",
+      "value": "0x80f0"
+    },
+    "vcn13_op_cfg": {
+      "address": "0x1c28",
+      "value": "0x0"
+    },
+    "vcn18_con": {
+      "address": "0x1c2e",
+      "value": "0x3"
+    },
+    "vcn18_status": {
+      "address": "0x1c32",
+      "value": "0x7"
+    },
+    "vcn18_op_en": {
+      "address": "0x1c34",
+      "value": "0x80f0"
+    },
+    "vcn18_op_cfg": {
+      "address": "0x1c3a",
+      "value": "0x0"
+    },
+    "vcn13_ana": {
+      "address": "0x202e",
+      "value": "0x407"
+    },
+    "vcn33_1_con": {
+      "address": "0x1be2",
+      "value": "0x0"
+    },
+    "vcn33_1_status": {
+      "address": "0x1be6",
+      "value": "0x0"
+    },
+    "vcn33_2_con": {
+      "address": "0x1c08",
+      "value": "0x0"
+    },
+    "vcn33_2_status": {
+      "address": "0x1c0c",
+      "value": "0x0"
+    }
+  },
+  "decoded": {
+    "vs2_requested_nominal_uv": 1462500,
+    "vs2_actual_nominal_uv": 1462500,
+    "vs2_sleep_nominal_uv": 1375000,
+    "vs2_conn_vote_bit4": true,
+    "vcn13_vocal": 7,
+    "vcn13_selector": 4,
+    "vcn13_sw_lp": true,
+    "vcn18_sw_lp": true
+  },
+  "limits": [
+    "Sequential read-only observations during normal ACK runtime, not an isolated power experiment.",
+    "Nominal selector values only; no voltage measurement.",
+    "No SPM RC flag or dark CONN MMIO read."
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "image": "20ec42f843d7",
+  "boot_sha256": "6d80afd3a69128cfe51795c135f1c3f045f2e46b161f3de3e75d5a52169e3464",
+  "result": 0,
+  "id": "0x66358a11",
+  "top_064": [
+    0,
+    0
+  ],
+  "top_0bc": [
+    1,
+    1
+  ],
+  "separator_ids_match": true,
+  "config_busy_mask": 0,
+  "all_responses_changed_rdat": true,
+  "all_outer_restored": true,
+  "retry_refused": true,
+  "cached_hashes_unchanged": true,
+  "gpio180_restored": true,
+  "ack_backup_unchanged": true
+}

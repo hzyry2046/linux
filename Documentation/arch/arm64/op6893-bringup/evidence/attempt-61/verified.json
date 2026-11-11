@@ -1,0 +1,11 @@
+{
+  "image": "764614420260",
+  "trace_points": 7,
+  "after_release_to_settle_ns": 6706770,
+  "bit14_ack_reappeared_with_request_clear": true,
+  "id_read": false,
+  "domain_cleanup_result": 0,
+  "rail_cleanup_result": 0,
+  "repeat_refused_trace_unchanged": true,
+  "boot_root_hashes_match": true
+}

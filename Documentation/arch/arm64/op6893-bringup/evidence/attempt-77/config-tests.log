@@ -1,0 +1,2 @@
+PASS: actual A-die reset/read/reset/address restoration,3 IDs,stale-data refusal,all guard/ownership-read losses,5 dropped writes,25 write-time guard losses,busy timeout,baseline refusal and mapping failures
+PASS: actual two-round fixed config reads,ID separators,21 dropped writes,105 write-time faults,all guard/owner losses,8 timeouts,stale response,bad separator IDs,unstable values and original-error preservation

@@ -1,0 +1,10 @@
+{
+  "samples": 17,
+  "temperature_range_mc": [
+    36919,
+    42252
+  ],
+  "lvts_stopped": true,
+  "pmic_registers_unchanged": 18,
+  "conn_registers_unchanged": 7
+}

@@ -1,0 +1,42 @@
+{
+  "image": "b2d5ede80b81",
+  "boot_sha256": "f9570f51111fc13762629f4a1249454885c8d7dde9549a8879c37eefcd6c733e",
+  "result": 0,
+  "efuse_control_flags": [
+    "0x0",
+    "0x0"
+  ],
+  "efuse_control_stable": true,
+  "efuse_control_reads": 2,
+  "efuse_kick_issued": false,
+  "efuse_data_read": false,
+  "efuse_read_busy_mask": 0,
+  "route_words": [
+    "0x801f",
+    "0x50305a00",
+    "0x7f0300ff",
+    "0x0",
+    "0x0"
+  ],
+  "route_rounds_equal": true,
+  "sampled_thermal_controls_zero": true,
+  "thermal_owner_checks_passed": true,
+  "fm_ctrl_writes": true,
+  "thermal_route_writes": false,
+  "fm_before": "0x801f",
+  "fm_on": "0x0",
+  "fm_after": "0x801f",
+  "fm_restored": true,
+  "prefix_restored": true,
+  "mailbox_cleared": true,
+  "all_outer_restored": true,
+  "retry_refused": true,
+  "cached_hashes_unchanged": true,
+  "ap_register_differences": {
+    "drive": [
+      "0x0",
+      "0x8248"
+    ]
+  },
+  "ack_backup_unchanged": true
+}

@@ -1,0 +1,19 @@
+{
+  "image": "df82e6dfd58a",
+  "boot_sha256": "7ffe211d3f879d842f7c496d21f4f3fffacac95b61cbe94154e7ba7d61aa2da3",
+  "result": 0,
+  "written": 4096,
+  "verified": 4096,
+  "scanned": 4096,
+  "complete": true,
+  "unsafe": false,
+  "rgu_saved": 4,
+  "rgu_applied": 4,
+  "rgu_restored": 4,
+  "rgu_dirty": 0,
+  "cleanup_result": 0,
+  "domain_cleanup_result": 0,
+  "retry_refused": true,
+  "cached_hashes_unchanged": true,
+  "ack_backup_updated": false
+}

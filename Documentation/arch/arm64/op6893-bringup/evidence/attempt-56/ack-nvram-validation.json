@@ -1,0 +1,16 @@
+{
+  "input_size": 6146,
+  "input_sha256": "0e221a8df227b32aafa2876317517715a6f55b7b02d6b5d74ee565792a3fe83d",
+  "record_size": 6144,
+  "prefix_size": 12,
+  "frame_size": 6156,
+  "frame_sha256": "c9e35110a772737213c539ceeb113cad48c8c365c192064143c94b6975bf451f",
+  "record_version_byte_preserved": true,
+  "extra_zero_padding": false,
+  "device_submission": false,
+  "mac_override": false,
+  "record_version_byte": 2,
+  "raw_record_saved": false,
+  "frame_saved": false,
+  "matches_re_dump_hash": true
+}

@@ -1,0 +1,112 @@
+op6893-native: enp0s20f0u1i2 ready at 192.0.2.1/30
+allowed=1 attempted=1 faulted=1 result=-16 cleanup_result=0
+stage=verify-restored failure_stage=id-access-guard mismatch_reg=0x0 value=0x0
+parent_votes=1,1 rail_refs=0,0 dirty=0,0 uncertain_enable=0
+on_vcn18=0x3,0x7,0x80f0,0x0 on_vcn13=0x3,0x7,0x80f0,0x0
+domain_allowed=1 requested=1 uncertain=0 pins_dirty=0 id_read=0 hw=0x0 cfg=0x0
+domain_cleanup_result=0
+last_status=0x10580e01 status2=0x10580e01 control=0x12 protect=0xe70c700e protect2=0xe7 host=0x0
+start_ns=55013089310 end_ns=55013645618 sequential=1
+status=0x10580e01 status2=0x10580e01 control=0x12 rc=0x401425 host=0x0
+protect=0xe70c700e protect1=0x519c0000 protect2=0xe7
+end_status=0x10580e01 end_status2=0x10580e01 end_control=0x12
+off_at_both_samples=1 rc_mode=1 legacy_protection_complete=1
+pmic[0x0008]=0x5930
+pmic[0x1888]=0x0001
+pmic[0x188e]=0x002c
+pmic[0x18a6]=0x3a2c
+pmic[0x18a8]=0x0043
+pmic[0x18aa]=0x0000
+pmic[0x18b4]=0x0030
+pmic[0x1c1c]=0x0000
+pmic[0x1c20]=0x0000
+pmic[0x1c22]=0x8000
+pmic[0x1c28]=0x0000
+pmic[0x1c2e]=0x0000
+pmic[0x1c32]=0x0000
+pmic[0x1c34]=0x8000
+pmic[0x1c3a]=0x0000
+pmic[0x202e]=0x0400
+pmic[0x1be2]=0x0000
+pmic[0x1be6]=0x0000
+pmic[0x1c08]=0x0000
+pmic[0x1c0c]=0x0000
+rail=vs1 enabled=1 nominal_uv=2000000
+rail=vs2 enabled=1 nominal_uv=1400000
+rail=vcn13 enabled=0 nominal_uv=1300000
+rail=vcn18 enabled=0 nominal_uv=1800000
+rail=vcn33-1 enabled=0 nominal_uv=3500000
+rail=vcn33-2 enabled=0 nominal_uv=3500000
+activation_ready=0 upstream_policy=unresolved dark_conn_access=none
+pin 155 (GPIO155) 155:pinctrl_paris 155: 0001001111 (0 1)
+pin 172 (GPIO172) 172:pinctrl_paris 172: 0000010110
+pin 173 (GPIO173) 173:pinctrl_paris 173: 0000010110
+pin 174 (GPIO174) 174:pinctrl_paris 174: 0000000110
+pin 175 (GPIO175) 175:pinctrl_paris 175: 0000010110
+pin 176 (GPIO176) 176:pinctrl_paris 176: 0000010110
+pin 177 (GPIO177) 177:pinctrl_paris 177: 0000010110
+pin 178 (GPIO178) 178:pinctrl_paris 178: 0000010110
+pin 179 (GPIO179) 179:pinctrl_paris 179: 0000010110
+pin 180 (GPIO180) 180:pinctrl_paris 180: 0000010110
+pin 181 (GPIO181) 181:pinctrl_paris 181: 0000010110
+pin 182 (GPIO182) 182:pinctrl_paris 182: 0000010110
+[    0.195947] PM: genpd: Disabling unused power domains
+[    0.195951] initcall genpd_power_off_unused+0x0/0x9c returned 0 after 4 usecs
+[    0.195960] calling  regulator_init_complete+0x0/0x5c @ 1
+[    0.195970] initcall regulator_init_complete+0x0/0x5c returned 0 after 2 usecs
+[    0.195978] calling  of_platform_sync_state_init+0x0/0x18 @ 1
+[    0.195990] initcall of_platform_sync_state_init+0x0/0x18 returned 0 after 0 usecs
+[    0.196032] Warning: unable to open an initial console.
+[    0.208346] sd 0:0:0:1: [sdb] Attached SCSI disk
+[    0.208370] probe of 0:0:0:1 with driver sd returned 0 after 22593 usecs
+[    0.208375] sd 0:0:0:0: [sda] Attached SCSI disk
+[    0.208399] probe of 0:0:0:0 with driver sd returned 0 after 23597 usecs
+[    0.210909] GPT:partition_entry_array_crc32 values don't match: 0xf53247a2 != 0xf502c1ec
+[    0.210920] GPT: Use GNU Parted to correct GPT errors.
+[    0.210983]  sdc: sdc1 sdc2 sdc3 sdc4 sdc5 sdc6 sdc7 sdc8 sdc9 sdc10 sdc11 sdc12 sdc13 sdc14 sdc15 sdc16 sdc17 sdc18 sdc19 sdc20 sdc21 sdc22 sdc23 sdc24 sdc25 sdc26 sdc27 sdc28 sdc29 sdc30 sdc31 sdc32 sdc33 sdc34 sdc35 sdc36 sdc37 sdc38 sdc39 sdc40 sdc41 sdc42 sdc43 sdc46 sdc47 sdc48 sdc49 sdc50 sdc51 sdc52 sdc53 sdc54 sdc55 sdc56 sdc57
+[    0.213701] sd 0:0:0:2: [sdc] Attached SCSI disk
+[    0.213720] probe of 0:0:0:2 with driver sd returned 0 after 27078 usecs
+[    0.214127] Freeing unused kernel memory: 1984K
+[    0.275154] Checked W+X mappings: passed, no W+X pages found
+[    0.275169] Run /init as init process
+[    0.275174]   with arguments:
+[    0.275178]     /init
+[    0.275181]   with environment:
+[    0.275185]     HOME=/
+[    0.275188]     TERM=linux
+[    0.287018] configfs-gadget.op6893 gadget.0: HOST MAC 02:68:93:00:00:01
+[    0.287040] configfs-gadget.op6893 gadget.0: MAC 02:68:93:00:00:02
+[    0.287070] mtu3 11201000.usb: op6893: forced VBUS, misc=0x80000003 u2ctl=0x48
+[    0.287082] mtu3 11201000.usb: gadget (high-speed) pullup D+
+[    0.287107] probe of gadget.0 with driver configfs-gadget.op6893 returned 0 after 430 usecs
+[    0.288128] OP6893-DIRECT: USB_ACM_ECM_READY ip=192.0.2.2
+[    0.289951] OP6893-DIRECT: INITRAMFS_REACHED release=7.3.0-op6893-d1-f69280004fb4+
+[    0.370279] EXT4-fs (sdc55): mounted filesystem df37e030-a3a5-4d2d-bf53-e85cf43a7e4d ro without journal. Quota mode: disabled.
+[    1.336531] loop0: detected capacity change from 0 to 111264
+[    1.510262] OP6893-DIRECT: SWITCH_ROOT_READY
+[    1.547706] OP6893-DIRECT: DIAGNOSTIC_INIT root=debian-overlay release=7.3.0-op6893-d1-f69280004fb4+
+[    1.547977] OP6893-DIRECT: watchdog worker pid=240
+[    1.548872] OP6893-DIRECT: WATCHDOG_POLICY timeout_beats=0 interval=5
+[    5.600011] random: crng init done
+[    5.663524] OP6893-DIRECT: SSH_READY listen=192.0.2.2:22
+[    6.550172] OP6893-DIRECT: userspace heartbeat release=7.3.0-op6893-d1-f69280004fb4+
+[    6.550420] OP6893-DIRECT: UDC 11201000.usb state=configured
+[   11.551275] OP6893-DIRECT: userspace heartbeat release=7.3.0-op6893-d1-f69280004fb4+
+[   11.551432] OP6893-DIRECT: UDC 11201000.usb state=configured
+[   16.552247] OP6893-DIRECT: userspace heartbeat release=7.3.0-op6893-d1-f69280004fb4+
+[   16.552384] OP6893-DIRECT: UDC 11201000.usb state=configured
+[   21.553069] OP6893-DIRECT: userspace heartbeat release=7.3.0-op6893-d1-f69280004fb4+
+[   21.553203] OP6893-DIRECT: UDC 11201000.usb state=configured
+[   26.554046] OP6893-DIRECT: userspace heartbeat release=7.3.0-op6893-d1-f69280004fb4+
+[   26.554244] OP6893-DIRECT: UDC 11201000.usb state=configured
+[   31.555322] OP6893-DIRECT: userspace heartbeat release=7.3.0-op6893-d1-f69280004fb4+
+[   31.555515] OP6893-DIRECT: UDC 11201000.usb state=configured
+[   31.716031] regulator: Not disabling unused regulators
+[   36.556436] OP6893-DIRECT: userspace heartbeat release=7.3.0-op6893-d1-f69280004fb4+
+[   36.556587] OP6893-DIRECT: UDC 11201000.usb state=configured
+[   41.557367] OP6893-DIRECT: userspace heartbeat release=7.3.0-op6893-d1-f69280004fb4+
+[   41.557507] OP6893-DIRECT: UDC 11201000.usb state=configured
+[   46.558293] OP6893-DIRECT: userspace heartbeat release=7.3.0-op6893-d1-f69280004fb4+
+[   46.558484] OP6893-DIRECT: UDC 11201000.usb state=configured
+[   51.559443] OP6893-DIRECT: userspace heartbeat release=7.3.0-op6893-d1-f69280004fb4+
+[   51.559589] OP6893-DIRECT: UDC 11201000.usb state=configured

@@ -1,0 +1,13 @@
+{
+  "image": "/data/src/mainline/mt6893-direct/dist/a75acab430b3/boot.img",
+  "partition_bytes": 33554432,
+  "file_bytes": 33554432,
+  "payload_bytes": 7458816,
+  "free_bytes": 26095616,
+  "gzip_kernel_bytes": 5397140,
+  "appended_dtbs_bytes": 1846225,
+  "header_dtbs_bytes": 210407,
+  "external_ramdisk_bytes": 48,
+  "kernel_memory_bytes": 12386304,
+  "memory_headroom_bytes": 121831424
+}

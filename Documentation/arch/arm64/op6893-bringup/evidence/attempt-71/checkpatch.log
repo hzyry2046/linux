@@ -1,0 +1,18 @@
+-------------------------------
+arch/arm64/kernel/op6893-conn.c
+-------------------------------
+total: 0 errors, 0 warnings, 1039 lines checked
+
+arch/arm64/kernel/op6893-conn.c has no obvious style problems and is ready for submission.
+--------------------------------------
+arch/arm64/kernel/op6893-conn-domain.h
+--------------------------------------
+total: 0 errors, 0 warnings, 643 lines checked
+
+arch/arm64/kernel/op6893-conn-domain.h has no obvious style problems and is ready for submission.
+-------------------------------------
+arch/arm64/kernel/op6893-conn-strap.h
+-------------------------------------
+total: 0 errors, 0 warnings, 127 lines checked
+
+arch/arm64/kernel/op6893-conn-strap.h has no obvious style problems and is ready for submission.

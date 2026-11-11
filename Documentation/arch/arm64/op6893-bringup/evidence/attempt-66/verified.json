@@ -1,0 +1,11 @@
+{
+  "image": "362bb070becb",
+  "boot_sha256": "ccfe4ade8c8b68b1a5110a3e01ec7683aad81df0878646362862f3b9b8ce441b",
+  "result": 0,
+  "saved": 4,
+  "applied": 4,
+  "restored": 4,
+  "dirty": 0,
+  "cleanup_result": 0,
+  "installation": "user-assisted recovery reflash reported; runtime raw boot hash verified"
+}

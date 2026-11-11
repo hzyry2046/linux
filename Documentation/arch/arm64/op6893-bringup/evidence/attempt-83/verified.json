@@ -1,0 +1,34 @@
+{
+  "image": "4434b68988c7",
+  "boot_sha256": "4aa4bd270b870e7996617889a17b8aa315046cd41337f8735ca1b1ffdfaf1316",
+  "result": -5,
+  "engine": {
+    "requested": "1",
+    "issued": "1",
+    "pending": "1",
+    "complete": "0",
+    "engine_busy_seen": "0",
+    "transfers": "3",
+    "spi_busy_count": "0",
+    "polls": "1",
+    "confirmed": "0",
+    "flags": "0x20000000",
+    "elapsed_ns": "60170769",
+    "changed": "0x3b"
+  },
+  "changed_positions": [
+    0,
+    1,
+    3,
+    4,
+    5
+  ],
+  "private_data_read": false,
+  "parents_retained": true,
+  "retry_refused": true,
+  "nine_cached_hashes_unchanged": true,
+  "ack_backup_unchanged": true,
+  "recovered_image": "b2d5ede80b81",
+  "recovery_conn_off": true,
+  "recovery_usb_ssh": true
+}

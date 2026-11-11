@@ -1,0 +1,16 @@
+{
+  "on_rc0": {
+    "injected_api_failures": 10,
+    "all_vendor_returns_zero": true
+  },
+  "on_rc1": {
+    "injected_api_failures": 22,
+    "all_vendor_returns_zero": true
+  },
+  "changed_live_registers": {
+    "vcn18_status": {
+      "before": "0x3",
+      "after": "0x7"
+    }
+  }
+}

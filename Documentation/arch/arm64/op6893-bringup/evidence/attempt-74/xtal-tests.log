@@ -1,0 +1,2 @@
+PASS: actual A-die reset/read/reset/address restoration,3 IDs,stale-data refusal,all guard/ownership-read losses,5 dropped writes,25 write-time guard losses,busy timeout,baseline refusal and mapping failures
+PASS: actual two XTAL reads,per-transfer freshness,all guard/owner losses,9 dropped writes,45 write-time faults and each XTAL busy timeout

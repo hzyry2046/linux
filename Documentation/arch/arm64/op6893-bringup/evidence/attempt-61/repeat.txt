@@ -1,0 +1,14 @@
+op6893-native: enp0s20f0u1i2 ready at 192.0.2.1/30
+5cba8636fb66333e413957f5b25340236b5e302ccec1eabbc2a2cc4280b0a9d9  /sys/devices/platform/conn-preflight/protection_trace
+repeat_refused
+bash: line 1: printf: write error: Operation already in progress
+5cba8636fb66333e413957f5b25340236b5e302ccec1eabbc2a2cc4280b0a9d9  /sys/devices/platform/conn-preflight/protection_trace
+allowed=1 attempted=1 faulted=1 result=-16 cleanup_result=0
+stage=verify-restored failure_stage=id-access-guard mismatch_reg=0x0 value=0x0
+parent_votes=1,1 rail_refs=0,0 dirty=0,0 uncertain_enable=0
+on_vcn18=0x3,0x7,0x80f0,0x0 on_vcn13=0x3,0x7,0x80f0,0x0
+domain_allowed=1 requested=1 uncertain=0 pins_dirty=0 id_read=0 hw=0x0 cfg=0x0
+domain_cleanup_result=0
+access_status=0x10580e03 status2=0x10580e03 control=0xd protect=0xe70c500e protect2=0xe3 host=0x1
+last_status=0x10580e01 status2=0x10580e01 control=0x12 protect=0xe70c700e protect2=0xe7 host=0x0
+configured

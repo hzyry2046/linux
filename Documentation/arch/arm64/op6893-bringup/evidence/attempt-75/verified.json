@@ -1,0 +1,19 @@
+{
+  "image": "862dace1d7cc",
+  "boot_sha256": "65dec43531067220879d6e65aaa775f27a4d6c5de024c99ca172dbdb611d4019",
+  "result": 0,
+  "id": "0x66358a11",
+  "a18_before": "0xf668fff5",
+  "a18_applied": "0xf6e8fff5",
+  "separator_id": "0x66358a11",
+  "a18_restored": "0xf668fff5",
+  "write_busy_mask": 0,
+  "write_applied": true,
+  "write_restored": true,
+  "write_dirty": false,
+  "all_outer_restored": true,
+  "retry_refused": true,
+  "cached_hashes_unchanged": true,
+  "gpio180_restored": true,
+  "ack_backup_unchanged": true
+}

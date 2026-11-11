@@ -1,0 +1,10 @@
+{
+  "/home/hzyry2046/src/conninfra-rev/REPORT.md": "f43cabb264a8b8058e0d07e8d68adbcfc44399e75f5f25f6afcb9a1d1991b2cb",
+  "/home/hzyry2046/src/conninfra-rev/tools/parse_wlan_nvram.py": "1929b0693f4d470ab038078ccdc205e72eea97a3d781c6ee7fa2341aaca55372",
+  "/home/hzyry2046/src/conninfra-rev/tools/parse_fw_container.py": "210d2bcf668eea4b5d23d00aac1cc708b0c7bd2d570f3a996b5d7347b1a98fd0",
+  "/home/hzyry2046/src/conninfra-rev/sources/MANIFEST.sha256": "a8919c30b3878fe13147cba518f45ad2d08a2fc2b44e6ecc0f46b27b488a7f1d",
+  "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/vendor/mediatek/kernel_modules/connectivity/bt/mt66xx/btif/btmtk_mt66xx.c": "96ab4b10115e58e6277502724647160a7d66c2982d557698699f481bf233b128",
+  "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/vendor/mediatek/kernel_modules/connectivity/bt/mt66xx/btmtk_main.c": "78ba92a41039a5cf8f1dcb50f637ad4d451ef1c69a0867cf3d6ebc4f717c314e",
+  "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/vendor/mediatek/kernel_modules/connectivity/wlan/adaptor/wmt_cdev_wifi.c": "06528831296996d73e0c1fd0c8d1dec4ec3cf211e7de1cafcd09f43672f17a5e",
+  "/data/src/6.6-exp/mt6893-gki66/out/android_kernel_modules_oneplus_mt6833/vendor/mediatek/kernel_modules/connectivity/bt/mt66xx/6893/btif/btmtk_mt66xx.o": "8b029f5aba1bcca4634561d7c213afc43cb5935cc727774f17ae8750f55cda2e"
+}

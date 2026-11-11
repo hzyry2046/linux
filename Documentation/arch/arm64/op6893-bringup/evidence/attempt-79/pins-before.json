@@ -1,0 +1,59 @@
+{
+  "release": "7.3.0-op6893-d1-86887415cd34+",
+  "uptime": "32.04 247.16",
+  "registers": {
+    "dir5": {
+      "address": "0x10005050",
+      "value": "0xa2800000"
+    },
+    "dout5": {
+      "address": "0x10005150",
+      "value": "0x2800000"
+    },
+    "din5": {
+      "address": "0x10005250",
+      "value": "0x2800f03"
+    },
+    "mode22": {
+      "address": "0x10005460",
+      "value": "0x0"
+    },
+    "drive": {
+      "address": "0x11ea0000",
+      "value": "0x0"
+    },
+    "ies": {
+      "address": "0x11ea0030",
+      "value": "0xffffffff"
+    },
+    "pd": {
+      "address": "0x11ea0050",
+      "value": "0xc7ffc3f"
+    },
+    "pu": {
+      "address": "0x11ea0070",
+      "value": "0x18003c0"
+    },
+    "smt": {
+      "address": "0x11ea00c0",
+      "value": "0x1c01"
+    }
+  },
+  "gpio180": {
+    "mode": 0,
+    "output_enabled": false,
+    "output_latch": 0,
+    "input_sample": 0,
+    "input_buffer_enabled": true,
+    "pull_up": false,
+    "pull_down": true,
+    "shared_schmitt_178_182": false,
+    "shared_drive_encoding": 0
+  },
+  "limits": [
+    "Sequential AP-only reads, not an atomic snapshot.",
+    "No SET/CLR aliases, pin writes, CONN reads or reset release.",
+    "Input sample is not an oscillator or strap-latching measurement.",
+    "Interpret alongside domain and pinctrl ownership records from the same boot."
+  ]
+}

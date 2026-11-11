@@ -1,0 +1,51 @@
+{
+  "strap_cases": [
+    {
+      "seed": "0x0",
+      "all_six_transitions_match": true
+    },
+    {
+      "seed": "0xffffffff",
+      "all_six_transitions_match": true
+    },
+    {
+      "seed": "0xa5a5a5a5",
+      "all_six_transitions_match": true
+    },
+    {
+      "seed": "0xdeadbeef",
+      "all_six_transitions_match": true
+    }
+  ],
+  "cases": [
+    {
+      "initial_register_fill": "0x0",
+      "active_matches_vendor": true,
+      "idle_matches_vendor": true
+    },
+    {
+      "initial_register_fill": "0xffffffff",
+      "active_matches_vendor": true,
+      "idle_matches_vendor": true
+    },
+    {
+      "initial_register_fill": "0xa5a5a5a5",
+      "active_matches_vendor": true,
+      "idle_matches_vendor": true
+    },
+    {
+      "initial_register_fill": "0xdeadbeef",
+      "active_matches_vendor": true,
+      "idle_matches_vendor": true
+    }
+  ],
+  "gpio155_included": false,
+  "automatic_boot_selection": false,
+  "explicit_consumer": "/conn-preflight",
+  "inputs": {
+    "/data/src/mainline/linux/drivers/pinctrl/mediatek/pinctrl-mt6893.c": "5416044509a467807c1036757307546d46132598af353de45e3be498bb69a67a",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/vendor/mediatek/kernel_modules/connectivity/conninfra/conn_drv/connv2/platform/mt6893/mt6893_pos.c": "29cda08e028cff1b844f5fc66e4c728dc5e3c0d6d450caf946fe56008453693f",
+    "/data/src/mainline/mt6893-direct/dist/e246cd7f80f4/board.dtb": "b86af146b9c5e69e30c5fce439e4cabe3c00e9d6b3dce62a49b5d73f5d56dbee"
+  },
+  "limits": "Offline final-field model; not a hardware or driver lifecycle test."
+}

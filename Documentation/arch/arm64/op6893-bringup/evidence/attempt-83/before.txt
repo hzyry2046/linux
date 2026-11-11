@@ -1,0 +1,50 @@
+op6893-native: enp0s20f0u1i2 ready at 192.0.2.1/30
+7.3.0-op6893-d1-4434b68988c7+
+4aa4bd270b870e7996617889a17b8aa315046cd41337f8735ca1b1ffdfaf1316  /dev/sdc48
+allowed=1 attempted=0 faulted=0 result=0 cleanup_result=0
+stage=idle failure_stage=none mismatch_reg=0x0 value=0x0
+parent_votes=0,0 rail_refs=0,0 dirty=0,0 uncertain_enable=0
+on_vcn18=0x0,0x0,0x0,0x0 on_vcn13=0x0,0x0,0x0,0x0
+domain_allowed=1 requested=0 uncertain=0 pins_dirty=0 id_read=0 hw=0x0 cfg=0x0
+domain_cleanup_result=0
+access_status=0x0 status2=0x0 control=0x0 protect=0x0 protect2=0x0 host=0x0
+last_status=0x0 status2=0x0 control=0x0 protect=0x0 protect2=0x0 host=0x0
+csr_requested=0 samples=0 clock_raw=0x0 sleep_raw=0x0 timeout_raw=0x0
+id_requested=0 clock_reset_requested=0 off_ready=0 id_samples=0 fresh_clock=0x0 fresh_timeout=0x0 fresh_sleep=0x0
+requested=0 release_issued=0 release_verified=0 triggered=0 busy_seen=0 polls=0 id_read=0 id_valid=0 reset_restored=0 complete=0 reset_dirty=0 addr_dirty=0 unsafe=0 cleanup_result=0
+control=0x0 busy=0x0 wb=0x0 addr_before=0x0 addr_on=0x0 addr_after=0x0 data_before=0x0 id=0x0
+xtal_requested=0 xtal_read=0x0 xtal_valid=0x0 xtal_busy_mask=0x0 a18_before=0x0 a18=0x0 a1c_before=0x0 a1c=0x0
+write_requested=0 write_step=0 write_issued=0x0 write_read=0x0 write_busy_mask=0x0 write_applied=0 write_restored=0 write_dirty=0 write_cleanup=0
+apply_before=0x0 apply=0x0 separator_before=0x0 separator=0x0 restore_before=0x0 restore=0x0
+mailbox_requested=0 mailbox_issued=0 mailbox_applied=0 mailbox_restored=0 mailbox_dirty=0 mailbox_cleanup=0 mailbox_on=0x0 mailbox_after=0x0
+config_requested=0 config_read=0x0 config_valid=0x0 config_busy_mask=0x0 config_stable=0
+config_sample=0 before=0x0 value=0x0
+config_sample=1 before=0x0 value=0x0
+config_sample=2 before=0x0 value=0x0
+config_sample=3 before=0x0 value=0x0
+config_sample=4 before=0x0 value=0x0
+config_sample=5 before=0x0 value=0x0
+config_sample=6 before=0x0 value=0x0
+config_sample=7 before=0x0 value=0x0
+prefix_requested=0 prefix_step=0 prefix_issued=0x0 prefix_applied=0x0 prefix_restored=0x0 prefix_dirty=0x0 prefix_read=0x0 prefix_busy_mask=0x0 prefix_cleanup=0
+prefix_sample=0 before=0x0 value=0x0
+prefix_sample=1 before=0x0 value=0x0
+prefix_sample=2 before=0x0 value=0x0
+prefix_sample=3 before=0x0 value=0x0
+prefix_sample=4 before=0x0 value=0x0
+prefix_sample=5 before=0x0 value=0x0
+route_requested=0 route_read=0x0 route_stable=0 route_idle=0
+route_sample=0 value=0x0
+route_sample=1 value=0x0
+route_sample=2 value=0x0
+route_sample=3 value=0x0
+route_sample=4 value=0x0
+route_sample=5 value=0x0
+route_sample=6 value=0x0
+route_sample=7 value=0x0
+route_sample=8 value=0x0
+route_sample=9 value=0x0
+fm_requested=0 fm_issued=0x0 fm_read=0x0 fm_applied=0 fm_restored=0 fm_dirty=0 fm_cleanup=0
+fm_before=0x0 fm_target=0x0 fm_on=0x0 fm_after=0x0 therm_addr=0x0 therm_cr1=0x0 therm_cal=0x0 therm_gpt=0x0
+efuse_ctrl_requested=0 efuse_ctrl_read=0x0 efuse_ctrl_valid=0x0 efuse_ctrl_busy_mask=0x0 efuse_ctrl_stable=0 efuse_ctrl_flags0=0x0 efuse_ctrl_flags1=0x0
+requested=0 issued=0 pending=0 complete=0 engine_busy_seen=0 transfers=0 spi_busy_count=0 polls=0 confirmed=0 flags=0x0 elapsed_ns=0 changed=0x0

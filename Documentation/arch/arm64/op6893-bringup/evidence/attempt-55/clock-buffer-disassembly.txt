@@ -1,0 +1,9 @@
+
+/data/src/6.6-exp/mt6893-gki66/out/android_kernel_modules_oneplus_mt6833/vendor/mediatek/kernel_modules/connectivity/conninfra/conn_drv/connv2/platform/mt6893/mt6893.o:     file format elf64-littleaarch64
+
+
+Disassembly of section .text:
+
+0000000000000078 <consys_clock_buffer_ctrl>:
+  78:	2a1f03e0 	mov	w0, wzr
+  7c:	d65f03c0 	ret

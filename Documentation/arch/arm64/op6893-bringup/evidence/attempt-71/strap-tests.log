@@ -1,0 +1,1 @@
+PASS: actual strap sequence,7 readbacks,all mapping/guard/read-loss points,24 partial state failures,48 adjacent/shared corruptions,baseline refusal and late restore loss

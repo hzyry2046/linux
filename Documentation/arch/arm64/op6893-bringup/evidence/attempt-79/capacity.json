@@ -1,0 +1,13 @@
+{
+  "image": "/data/src/mainline/mt6893-direct/dist/86887415cd34/boot.img",
+  "partition_bytes": 33554432,
+  "file_bytes": 33554432,
+  "payload_bytes": 7460864,
+  "free_bytes": 26093568,
+  "gzip_kernel_bytes": 5398843,
+  "appended_dtbs_bytes": 1846225,
+  "header_dtbs_bytes": 210407,
+  "external_ramdisk_bytes": 48,
+  "kernel_memory_bytes": 12451840,
+  "memory_headroom_bytes": 121765888
+}

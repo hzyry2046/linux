@@ -1,0 +1,17 @@
+{
+  "image": "375b79347f81",
+  "boot_sha256": "52ee36f45754e1fe4e0836de8d5f52316919a8737525fad892909bc03919ecb0",
+  "result": 0,
+  "id": "0x66358a11",
+  "mailbox_address": "0x18052800",
+  "mailbox_on": "0x66358a11",
+  "mailbox_after": 0,
+  "mailbox_applied": true,
+  "mailbox_restored": true,
+  "mailbox_dirty": false,
+  "all_outer_restored": true,
+  "retry_refused": true,
+  "cached_hashes_unchanged": true,
+  "gpio180_restored": true,
+  "ack_backup_unchanged": true
+}

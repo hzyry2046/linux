@@ -1,0 +1,24 @@
+{
+  "release": "7.3.0-op6893-d1-d79c36ef9d28+",
+  "boot_sha256": "435fc65f144584cd0f40236a4a8da1e8b5c1253d012f765c9a64bbe3affafc1c",
+  "usb_ssh": true,
+  "cpus": "0-7",
+  "disk_readonly": true,
+  "rootfs_hash_matches": true,
+  "sysfs_mode": "0400 root",
+  "six_real_leaf_handles_in_summary": true,
+  "upstream_dummy_inputs_remain": true,
+  "lvts_samples": 17,
+  "lvts_host_arithmetic_matches": true,
+  "lvts_min_millidegrees": 35933,
+  "lvts_max_millidegrees": 40603,
+  "lvts_end_controls_all_zero": true,
+  "conn_pins_all_gpio": true,
+  "selected_dmesg_faults": false,
+  "wireless_power_transition": false,
+  "limitations": [
+    "No physical key presses retested.",
+    "ADC and CCF readouts checked for continued availability, not physical calibration.",
+    "No thermal protection, managed upstream supply ownership or Wi-Fi support claimed."
+  ]
+}

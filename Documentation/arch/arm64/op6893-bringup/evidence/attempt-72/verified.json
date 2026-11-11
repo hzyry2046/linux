@@ -1,0 +1,48 @@
+{
+  "image": "681020f5b5b7",
+  "boot_sha256": "a1b8b6e9a291310b19b9899d9b08814cb02c7bea3666b058467a672bdfcd020a",
+  "result": 0,
+  "remap_saved_applied_restored": [
+    4,
+    4,
+    4
+  ],
+  "rgu_saved_applied_restored": [
+    4,
+    4,
+    4
+  ],
+  "spi_saved_applied_restored": [
+    36,
+    36,
+    36
+  ],
+  "sysram_written_verified_scanned": [
+    4096,
+    4096,
+    4096
+  ],
+  "strap_selected_samples": [
+    6,
+    7
+  ],
+  "sema_grant": 1,
+  "sema_released": true,
+  "sema_m2_reports": [
+    0,
+    2048,
+    0
+  ],
+  "all_dirty_unsafe_clear": true,
+  "cleanup_result": 0,
+  "domain_cleanup_result": 0,
+  "idle_dir_latch_mux_restored": true,
+  "common_active_drive_before_after": [
+    0,
+    33352
+  ],
+  "retry_refused": true,
+  "cached_hashes_unchanged": true,
+  "adie_reset_released": false,
+  "ack_backup_updated": false
+}

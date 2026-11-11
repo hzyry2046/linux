@@ -1,0 +1,10 @@
+{
+  "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/vendor/mediatek/kernel_modules/connectivity/conninfra/conn_drv/connv2/platform/mt6893/mt6893.c": "6b8c401a3d743add86fa393393a30bd4500c8c2f27325d76b21e301cb8ca0de6",
+  "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/vendor/mediatek/kernel_modules/connectivity/conninfra/conn_drv/connv2/platform/mt6893/mt6893_pos.c": "29cda08e028cff1b844f5fc66e4c728dc5e3c0d6d450caf946fe56008453693f",
+  "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/vendor/mediatek/kernel_modules/connectivity/conninfra/conn_drv/connv2/platform/consys_hw.c": "3ba6614e663e060450f14e15253e5d20cf5075844f6a67c4f1bd2d6d8181839a",
+  "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/clkbuf/src/dcxo-6359p.c": "b55b055996adf03542ccf5890038bef875857835c2d2e9a4ac15a347890c88d4",
+  "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/connectivity/common/connectivity_build_in_adapter.h": "5a849461146d818ab284b9148b19e321dbd2854edc31e066d0c7709b8fa0153a",
+  "drivers/pinctrl/mediatek/pinctrl-mt6893.c": "5416044509a467807c1036757307546d46132598af353de45e3be498bb69a67a",
+  "/data/src/mikuui/vendor/oplus/op6893/proprietary/vendor/firmware/conninfra.cfg": "47985608830ebb4038ea7b8645e5244dabe848f5033b3493b73a5ea9467993d9",
+  "/data/src/6.6-exp/mt6893-gki66/out/android_kernel_modules_oneplus_mt6833/vendor/mediatek/kernel_modules/connectivity/conninfra/conn_drv/connv2/platform/mt6893/mt6893.o": "b5807a1441ee85ebbd0950d164192804925553890ae359d6d6fe0ed4815b7e12"
+}

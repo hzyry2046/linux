@@ -1,0 +1,93 @@
+{
+  "release": "7.3.0-op6893-d1-d873de3b8963+",
+  "uptime": "803.62 6418.33",
+  "registers": {
+    "gpio_mode19": {
+      "address": "0x10005430",
+      "value": "0x11010110"
+    },
+    "gpio_mode21": {
+      "address": "0x10005450",
+      "value": "0x6666"
+    },
+    "gpio_mode22": {
+      "address": "0x10005460",
+      "value": "0x0"
+    },
+    "iocfg_rt_drive": {
+      "address": "0x11ea0000",
+      "value": "0x0"
+    },
+    "iocfg_rt_pd": {
+      "address": "0x11ea0050",
+      "value": "0xc7ffc3f"
+    },
+    "iocfg_rt_pu": {
+      "address": "0x11ea0070",
+      "value": "0x18003c0"
+    },
+    "ap2conn_host_clock": {
+      "address": "0x1020e504",
+      "value": "0x0"
+    },
+    "hwcid": {
+      "address": "0x8",
+      "value": "0x5930"
+    },
+    "pmrc_con0": {
+      "address": "0x1a6",
+      "value": "0x4007"
+    },
+    "xo_wcn_vote": {
+      "address": "0x54e",
+      "value": "0xf2"
+    },
+    "dcxo_cw00": {
+      "address": "0x788",
+      "value": "0x4a4d"
+    },
+    "dcxo_cw09": {
+      "address": "0x79e",
+      "value": "0x51f0"
+    },
+    "dcxo_cw12": {
+      "address": "0x7a8",
+      "value": "0x8100"
+    },
+    "dcxo_cw13": {
+      "address": "0x7aa",
+      "value": "0x4c"
+    }
+  },
+  "decoded": {
+    "pin_modes_172_182": {
+      "172": 0,
+      "173": 0,
+      "174": 0,
+      "175": 0,
+      "176": 0,
+      "177": 0,
+      "178": 0,
+      "179": 0,
+      "180": 0,
+      "181": 0,
+      "182": 0
+    },
+    "all_conn_pins_function1": false,
+    "gpio155_mode": 0,
+    "ap2conn_host_clock_request": false,
+    "extbuf2_mode": 1,
+    "extbuf2_software_enable": false,
+    "extbuf2_bblpm_mask": false,
+    "xo_wcn_vote_bits": "0xf2",
+    "vendor_drive_bits_match": false,
+    "top_bt_data_pullup_bits": "0x0",
+    "top_bt_data_pulldown_bits": "0x4800"
+  },
+  "limits": [
+    "Sequential read-only snapshot, not atomic.",
+    "No oscillator output/frequency measurement or hardware-ready proof.",
+    "Software enable is not output status in hardware-controlled modes.",
+    "No CONN MMIO, pin reconfiguration, AUXOUT selection or clock writes."
+  ]
+}

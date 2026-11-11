@@ -1,0 +1,2 @@
+PASS: fixed5 baseline gate, fresh trim gate, pad apply/verify/restore/verify,20 dropped writes,80 guard faults,10 timeouts,2 read mismatches,2 deadlines,2 control faults,15 cleanup faults,no-busy,erasure,one-shot; failures retain parents without retry
+PASS: extracted snapshot, 128 off states, transition, inherited protection, 20 PMIC faults, identity, 12 regulator faults, interrupted read and retry

@@ -1,0 +1,49 @@
+[
+  {
+    "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/vendor/mediatek/kernel_modules/connectivity/conninfra/conn_drv/connv2/platform/mt6893/mt6893_pos.c",
+    "sha256": "29cda08e028cff1b844f5fc66e4c728dc5e3c0d6d450caf946fe56008453693f",
+    "calls": [
+      {
+        "line": 1223,
+        "call": "consys_spi_write_mt6893(SYS_SPI_TOP, ATOP_RG_ENCAL_WBTAC_IF_SW, 0x80000000);"
+      },
+      {
+        "line": 1436,
+        "call": "consys_spi_write_mt6893(SYS_SPI_TOP, ATOP_RG_ENCAL_WBTAC_IF_SW, 0x5);"
+      }
+    ]
+  },
+  {
+    "path": "/data/src/6.6-exp/android_kernel_oplus_mt6893/drivers/misc/mediatek/connectivity/conninfra/platform/mt6893/mt6893_pos.c",
+    "sha256": "fb998ea09e10f18006cabf8a0b2a3312cace979386d55b251e0b84679be2512f",
+    "calls": [
+      {
+        "line": 1215,
+        "call": "consys_spi_write_mt6893(SYS_SPI_TOP, ATOP_RG_ENCAL_WBTAC_IF_SW, 0x80000000);"
+      },
+      {
+        "line": 1428,
+        "call": "consys_spi_write_mt6893(SYS_SPI_TOP, ATOP_RG_ENCAL_WBTAC_IF_SW, 0x5);"
+      }
+    ]
+  },
+  {
+    "path": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/connectivity/conninfra/platform/mt6893/mt6893_pos.c",
+    "sha256": "fb998ea09e10f18006cabf8a0b2a3312cace979386d55b251e0b84679be2512f",
+    "calls": [
+      {
+        "line": 1215,
+        "call": "consys_spi_write_mt6893(SYS_SPI_TOP, ATOP_RG_ENCAL_WBTAC_IF_SW, 0x80000000);"
+      },
+      {
+        "line": 1428,
+        "call": "consys_spi_write_mt6893(SYS_SPI_TOP, ATOP_RG_ENCAL_WBTAC_IF_SW, 0x5);"
+      }
+    ]
+  },
+  {
+    "path": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/connectivity/conninfra/platform/mt6983/mt6983_pos_gen.c",
+    "sha256": "64fffdc6b51074a6dd669a3148930c75e83b68156c941333c48f741b8ede4d15",
+    "scope": "connsys_afe_wbg_cal_mt6983_gen ADIE_6635 branch; HighZ then restore CR initial value=5; different SoC, not a bit specification"
+  }
+]

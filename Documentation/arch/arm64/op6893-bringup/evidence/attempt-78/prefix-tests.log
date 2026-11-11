@@ -1,0 +1,3 @@
+PASS: actual A-die reset/read/reset/address restoration,3 IDs,stale-data refusal,all guard/ownership-read losses,5 dropped writes,25 write-time guard losses,busy timeout,baseline refusal and mapping failures
+PASS: actual ID mailbox,7 dropped writes,35 write-time faults,all guard/owner losses,4 map failures,unexpected contents retention,6 prerequisite refusals and clear before reset
+PASS: actual held-mailbox config apply/reverse-restore,43 dropped writes,215 write faults,all guard/owner/mailbox samples,10 timeouts,exact baseline refusal,corrupt/stale responses,partial apply cleanup and first-error preservation

@@ -1,0 +1,4 @@
+make[1]: 进入目录“/data/src/mainline/mt6893-direct/out”
+  UPD     include/generated/compile.h
+  CC      arch/arm64/kernel/op6893-conn.o
+make[1]: 离开目录“/data/src/mainline/mt6893-direct/out”

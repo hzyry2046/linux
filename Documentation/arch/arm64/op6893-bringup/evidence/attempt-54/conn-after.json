@@ -1,0 +1,53 @@
+{
+  "captured_at_utc": "2026-11-02T15:56:39.631314+00:00",
+  "release": "7.3.0-op6893-d1-d873de3b8963+",
+  "uptime": "95.29 752.83",
+  "registers": {
+    "spm_poweron_config": {
+      "address": "0x10006000",
+      "value": "0x1"
+    },
+    "spm_pwr_status": {
+      "address": "0x1000616c",
+      "value": "0x10580e01"
+    },
+    "spm_pwr_status_2nd": {
+      "address": "0x10006170",
+      "value": "0x10580e01"
+    },
+    "spm_conn_pwr_con": {
+      "address": "0x10006304",
+      "value": "0x12"
+    },
+    "infra_protect_sta1": {
+      "address": "0x10001228",
+      "value": "0xe70c500e"
+    },
+    "infra_protect_1_sta1": {
+      "address": "0x10001258",
+      "value": "0x519c0000"
+    },
+    "infra_protect_2_sta1": {
+      "address": "0x10001724",
+      "value": "0xe7"
+    }
+  },
+  "decoded": {
+    "conn_status": "off",
+    "reset_released": false,
+    "isolation": true,
+    "power_on_request": false,
+    "power_on_2nd_request": false,
+    "clock_disabled": true,
+    "ack_protect_step1_bit13": false,
+    "ack_protect_step2_bit14": true,
+    "ack_protect_step2_1_bit2": true,
+    "mainline_extra_step1_bit18": true,
+    "mainline_step3_bit10": false
+  },
+  "limits": [
+    "Sequential read-only snapshot, not atomic.",
+    "No CONN MMIO or SET/CLR writes; no power transition.",
+    "Status does not establish which bus-protection table is correct."
+  ]
+}

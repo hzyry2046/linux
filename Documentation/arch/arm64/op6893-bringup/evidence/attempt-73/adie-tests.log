@@ -1,0 +1,1 @@
+PASS: actual A-die reset/read/reset/address restoration,3 IDs,stale-data refusal,all guard/ownership-read losses,5 dropped writes,25 write-time guard losses,busy timeout,baseline refusal and mapping failures

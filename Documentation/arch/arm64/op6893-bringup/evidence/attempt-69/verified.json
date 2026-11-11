@@ -1,0 +1,19 @@
+{
+  "image": "f43f4198b1b4",
+  "boot_sha256": "028ae377d143e725ae4ab29a68165a22e68efaf792cc543f8af52a963e986b3b",
+  "result": 0,
+  "grant": 1,
+  "acquired": true,
+  "released": true,
+  "pending": false,
+  "unsafe": false,
+  "passive_release_polls": 1,
+  "m2_reports": [
+    0,
+    2048,
+    0
+  ],
+  "cleanup_result": 0,
+  "domain_cleanup_result": 0,
+  "ack_backup_updated": false
+}

@@ -1,0 +1,27 @@
+{
+  "image": "0d4e765c4b11",
+  "boot_sha256": "2978a44953a3cca9446876a008afd3be1347cd2857d7b5407388e2e8e544480e",
+  "result": 0,
+  "id": "0x66358a11",
+  "top_064": {
+    "before": 0,
+    "applied": "0x7700",
+    "restored": 0
+  },
+  "top_0bc": {
+    "before": 1,
+    "applied": "0x21",
+    "restored": 1
+  },
+  "prefix_dirty": 0,
+  "prefix_cleanup": 0,
+  "prefix_busy_mask": 0,
+  "mailbox_held_during_prefix": true,
+  "mailbox_cleared": true,
+  "all_readbacks_changed_rdat": true,
+  "all_outer_restored": true,
+  "retry_refused": true,
+  "cached_hashes_unchanged": true,
+  "gpio180_restored": true,
+  "ack_backup_unchanged": true
+}

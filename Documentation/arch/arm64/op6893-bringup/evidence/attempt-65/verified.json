@@ -1,0 +1,43 @@
+{
+  "image": "e2a490e43787",
+  "boot_hash_match": true,
+  "saved": 4,
+  "applied": 4,
+  "restored": 4,
+  "dirty": 0,
+  "records": [
+    {
+      "offset": "0x1c4",
+      "before": "0x4000",
+      "target": "0x8fb0",
+      "on": "0x8fb0",
+      "after": "0x4000"
+    },
+    {
+      "offset": "0x1d4",
+      "before": "0x1100",
+      "target": "0x1000",
+      "on": "0x1000",
+      "after": "0x1100"
+    },
+    {
+      "offset": "0x1d8",
+      "before": "0x1100",
+      "target": "0x1000",
+      "on": "0x1000",
+      "after": "0x1100"
+    },
+    {
+      "offset": "0x1dc",
+      "before": "0x1100",
+      "target": "0x1000",
+      "on": "0x1000",
+      "after": "0x1100"
+    }
+  ],
+  "remap_cleanup": 0,
+  "domain_cleanup": 0,
+  "rail_cleanup": 0,
+  "repeat_refused_snapshots_unchanged": true,
+  "regressions_pass": true
+}

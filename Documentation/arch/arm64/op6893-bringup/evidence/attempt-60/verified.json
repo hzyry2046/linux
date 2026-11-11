@@ -1,0 +1,30 @@
+{
+  "release": "7.3.0-op6893-d1-6346689c1150+",
+  "domain_cycle_result": -16,
+  "failure_stage": "id-access-guard",
+  "domain_cleanup_result": 0,
+  "rail_cleanup_result": 0,
+  "digital_id_read": false,
+  "dark_domain_mapping": false,
+  "access_sample": {
+    "status": "0x10580e03",
+    "status2": "0x10580e03",
+    "control": "0xd",
+    "protect": "0xe70c500e",
+    "protect2": "0xe3",
+    "host": "0x1"
+  },
+  "finding": "Protection bit14 was clear during release poll but set again after XO settling; source/timing unresolved.",
+  "all_rails_off_after_cleanup": true,
+  "pins_gpio_after_cleanup": true,
+  "shared_parent_votes_retained": true,
+  "usb_ssh": true,
+  "eight_cpus": true,
+  "readonly_rootfs_hash_matches": true,
+  "selected_dmesg_faults": false,
+  "limits": [
+    "No physical voltage or clock measurement.",
+    "Successful bounded shutdown does not explain protection reassertion.",
+    "No firmware/DMA/RF/calibration or Wi-Fi support."
+  ]
+}

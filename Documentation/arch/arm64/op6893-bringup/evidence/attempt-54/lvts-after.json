@@ -1,0 +1,139 @@
+{
+  "release": "7.3.0-op6893-d1-d873de3b8963+",
+  "uptime_s": 203.4,
+  "infra": "0x00000000",
+  "controllers": [
+    {
+      "base": "0x11278000",
+      "registers": {
+        "monitor": "0x0",
+        "interrupt_enable": "0x0",
+        "id_latch": "0x81",
+        "protect_control": "0x0",
+        "protect_threshold": "0x0",
+        "clock_enable": "0x0",
+        "edata0": "0x1769",
+        "edata1": "0x1766",
+        "edata2": "0x0",
+        "edata3": "0x0"
+      },
+      "sensing_mask": 0,
+      "local_clock_enabled": false,
+      "stage3_irq_enabled": false
+    },
+    {
+      "base": "0x11278100",
+      "registers": {
+        "monitor": "0x0",
+        "interrupt_enable": "0x0",
+        "id_latch": "0x82",
+        "protect_control": "0x0",
+        "protect_threshold": "0x0",
+        "clock_enable": "0x0",
+        "edata0": "0x1727",
+        "edata1": "0x1722",
+        "edata2": "0x0",
+        "edata3": "0x0"
+      },
+      "sensing_mask": 0,
+      "local_clock_enabled": false,
+      "stage3_irq_enabled": false
+    },
+    {
+      "base": "0x11278200",
+      "registers": {
+        "monitor": "0x0",
+        "interrupt_enable": "0x0",
+        "id_latch": "0x83",
+        "protect_control": "0x0",
+        "protect_threshold": "0x0",
+        "clock_enable": "0x0",
+        "edata0": "0x1738",
+        "edata1": "0x173c",
+        "edata2": "0x172f",
+        "edata3": "0x1729"
+      },
+      "sensing_mask": 0,
+      "local_clock_enabled": false,
+      "stage3_irq_enabled": false
+    },
+    {
+      "base": "0x1100b000",
+      "registers": {
+        "monitor": "0x0",
+        "interrupt_enable": "0x0",
+        "id_latch": "0x84",
+        "protect_control": "0x0",
+        "protect_threshold": "0x0",
+        "clock_enable": "0x0",
+        "edata0": "0x172e",
+        "edata1": "0x16ec",
+        "edata2": "0x0",
+        "edata3": "0x0"
+      },
+      "sensing_mask": 0,
+      "local_clock_enabled": false,
+      "stage3_irq_enabled": false
+    },
+    {
+      "base": "0x1100b100",
+      "registers": {
+        "monitor": "0x0",
+        "interrupt_enable": "0x0",
+        "id_latch": "0x85",
+        "protect_control": "0x0",
+        "protect_threshold": "0x0",
+        "clock_enable": "0x0",
+        "edata0": "0x177a",
+        "edata1": "0x1748",
+        "edata2": "0x0",
+        "edata3": "0x0"
+      },
+      "sensing_mask": 0,
+      "local_clock_enabled": false,
+      "stage3_irq_enabled": false
+    },
+    {
+      "base": "0x1100b200",
+      "registers": {
+        "monitor": "0x0",
+        "interrupt_enable": "0x0",
+        "id_latch": "0x86",
+        "protect_control": "0x0",
+        "protect_threshold": "0x0",
+        "clock_enable": "0x0",
+        "edata0": "0x16c6",
+        "edata1": "0x1736",
+        "edata2": "0x0",
+        "edata3": "0x0"
+      },
+      "sensing_mask": 0,
+      "local_clock_enabled": false,
+      "stage3_irq_enabled": false
+    },
+    {
+      "base": "0x1100b300",
+      "registers": {
+        "monitor": "0x0",
+        "interrupt_enable": "0x0",
+        "id_latch": "0x87",
+        "protect_control": "0x0",
+        "protect_threshold": "0x0",
+        "clock_enable": "0x0",
+        "edata0": "0x1721",
+        "edata1": "0x172f",
+        "edata2": "0x1719",
+        "edata3": "0x0"
+      },
+      "sensing_mask": 0,
+      "local_clock_enabled": false,
+      "stage3_irq_enabled": false
+    }
+  ],
+  "limits": [
+    "Sequential readback, not proof of exclusive firmware ownership.",
+    "ID is a latch; no identification/update command was issued.",
+    "No reset, LVTS config, IRQ acknowledgement or protection writes.",
+    "No temperature decoding or RGU route inference."
+  ]
+}

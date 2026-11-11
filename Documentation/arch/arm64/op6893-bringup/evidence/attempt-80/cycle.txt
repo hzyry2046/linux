@@ -1,0 +1,46 @@
+op6893-native: enp0s20f0u1i2 ready at 192.0.2.1/30
+allowed=1 attempted=1 faulted=0 result=0 cleanup_result=0
+stage=complete failure_stage=none mismatch_reg=0x0 value=0x0
+parent_votes=1,1 rail_refs=0,0 dirty=0,0 uncertain_enable=0
+on_vcn18=0x3,0x7,0x80f0,0x0 on_vcn13=0x3,0x7,0x80f0,0x0
+domain_allowed=1 requested=1 uncertain=0 pins_dirty=0 id_read=1 hw=0x20010101 cfg=0x3
+domain_cleanup_result=0
+access_status=0x10580e03 status2=0x10580e03 control=0xd protect=0xe70c500e protect2=0xe3 host=0x1
+last_status=0x10580e01 status2=0x10580e01 control=0x12 protect=0xe70c700e protect2=0xe7 host=0x0
+csr_requested=0 samples=0 clock_raw=0x0 sleep_raw=0x0 timeout_raw=0x0
+id_requested=1 clock_reset_requested=1 off_ready=1 id_samples=2 fresh_clock=0x4006 fresh_timeout=0x1 fresh_sleep=0x100
+requested=1 release_issued=1 release_verified=1 triggered=1 busy_seen=0 polls=341 id_read=1 id_valid=1 reset_restored=1 complete=1 reset_dirty=0 addr_dirty=0 unsafe=0 cleanup_result=0
+control=0x2 busy=0x0 wb=0x80000 addr_before=0x0 addr_on=0xb02c addr_after=0x0 data_before=0x0 id=0x66358a11
+xtal_requested=0 xtal_read=0x0 xtal_valid=0x0 xtal_busy_mask=0x0 a18_before=0x0 a18=0x0 a1c_before=0x0 a1c=0x0
+write_requested=0 write_step=0 write_issued=0x0 write_read=0x0 write_busy_mask=0x0 write_applied=0 write_restored=0 write_dirty=0 write_cleanup=0
+apply_before=0x0 apply=0x0 separator_before=0x0 separator=0x0 restore_before=0x0 restore=0x0
+mailbox_requested=1 mailbox_issued=1 mailbox_applied=1 mailbox_restored=1 mailbox_dirty=0 mailbox_cleanup=0 mailbox_on=0x66358a11 mailbox_after=0x0
+config_requested=1 config_read=0xff config_valid=0xff config_busy_mask=0x0 config_stable=1
+config_sample=0 before=0x66358a11 value=0x0
+config_sample=1 before=0x0 value=0x66358a11
+config_sample=2 before=0x66358a11 value=0x1
+config_sample=3 before=0x1 value=0x66358a11
+config_sample=4 before=0x66358a11 value=0x0
+config_sample=5 before=0x0 value=0x66358a11
+config_sample=6 before=0x66358a11 value=0x1
+config_sample=7 before=0x1 value=0x66358a11
+prefix_requested=1 prefix_step=9 prefix_issued=0x95 prefix_applied=0x3 prefix_restored=0x3 prefix_dirty=0x0 prefix_read=0x3f prefix_busy_mask=0x0 prefix_cleanup=0
+prefix_sample=0 before=0x66358a11 value=0x7700
+prefix_sample=1 before=0x7700 value=0x21
+prefix_sample=2 before=0x21 value=0x66358a11
+prefix_sample=3 before=0x66358a11 value=0x1
+prefix_sample=4 before=0x1 value=0x66358a11
+prefix_sample=5 before=0x66358a11 value=0x0
+route_requested=1 route_read=0x3ff route_stable=1 route_idle=1
+route_sample=0 value=0x801f
+route_sample=1 value=0x50305a00
+route_sample=2 value=0x7f0300ff
+route_sample=3 value=0x0
+route_sample=4 value=0x0
+route_sample=5 value=0x801f
+route_sample=6 value=0x50305a00
+route_sample=7 value=0x7f0300ff
+route_sample=8 value=0x0
+route_sample=9 value=0x0
+fm_requested=1 fm_issued=0x3 fm_read=0x7 fm_applied=1 fm_restored=1 fm_dirty=0 fm_cleanup=0
+fm_before=0x801f fm_target=0x0 fm_on=0x0 fm_after=0x801f therm_addr=0x50305a00 therm_cr1=0x7f0300ff therm_cal=0x0 therm_gpt=0x0

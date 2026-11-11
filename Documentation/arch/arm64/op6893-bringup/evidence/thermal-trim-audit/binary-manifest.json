@@ -1,0 +1,14 @@
+[
+  {
+    "label": "419",
+    "path": "/data/src/6.6-exp/android_kernel_oplus_mt6893/out/drivers/misc/mediatek/connectivity/conninfra/platform/mt6893/mt6893_pos.o",
+    "sha256": "e163111bb087800f7219327eb27f225e1124ff7e8b532b23fd438076a4190d64",
+    "note": "Local build artifact; not proven identical to device Android boot"
+  },
+  {
+    "label": "oddo",
+    "path": "/data/src/kernel_oddo_mt6893/out/drivers/misc/mediatek/connectivity/conninfra/platform/mt6893/mt6893_pos.o",
+    "sha256": "e163111bb087800f7219327eb27f225e1124ff7e8b532b23fd438076a4190d64",
+    "note": "Local build artifact; not proven identical to device Android boot"
+  }
+]

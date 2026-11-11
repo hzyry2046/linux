@@ -1,0 +1,51 @@
+{
+  "image": "6033b3cb705f",
+  "boot_sha256": "66ca4b9b1daf20bcac73bbc46437bb6e54860bf0b1d15fc7663685d70351e16a",
+  "result": 0,
+  "engine": {
+    "requested": "1",
+    "issued": "1",
+    "pending": "0",
+    "complete": "1",
+    "engine_busy_seen": "0",
+    "transfers": "7",
+    "spi_busy_count": "0",
+    "polls": "3",
+    "confirmed": "3",
+    "flags": "0x20000000",
+    "elapsed_ns": "171038231",
+    "changed": "0x3b",
+    "observe": "1",
+    "observed": "3",
+    "stable": "1",
+    "delta0": "0x3b",
+    "delta1": "0x3b",
+    "delta2": "0x3b",
+    "stable_cycle": "1",
+    "data_requested": "1",
+    "data_started": "1",
+    "data_complete": "1",
+    "data_cleared": "1",
+    "data_issued": "0xff",
+    "data_read": "0xff",
+    "data_matched": "0xf",
+    "data_transfers": "32",
+    "data_busy_count": "0",
+    "data_elapsed_ns": "809727923"
+  },
+  "private_reads": 8,
+  "repeat_words_matched": 4,
+  "raw_values_published": false,
+  "temporary_data_erased": true,
+  "diagnostics_redacted": true,
+  "all_outer_restored": true,
+  "retry_refused": true,
+  "nine_cached_hashes_unchanged": true,
+  "ap_register_differences": {
+    "drive": [
+      "0x0",
+      "0x8248"
+    ]
+  },
+  "ack_backup_unchanged": true
+}
