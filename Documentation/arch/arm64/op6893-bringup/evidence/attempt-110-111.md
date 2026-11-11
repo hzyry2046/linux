@@ -31,8 +31,24 @@ simplefb 改为 `a8r8g8b8`。用户确认：fbcon 内核日志、`OP6893 MAINLIN
 
 内核提交 `e685422fe`。测试工具 `mt6893-direct/tools/{dsi-dcs.c,fb-bars.c}`。
 
+## attempt112（`047c34605919`）：亮度与熄屏
+
+fbkick 注册 backlight 设备 `/sys/class/backlight/panel`（raw，非线性，max 2047，默认 600）。
+probe 时先发 `0x53 0x20` 选普通亮度范围；不用 HBM（4.19 驱动在 >2047 时发 `0x53 0xE0`）。
+
+用法：
+
+```
+echo 300 > /sys/class/backlight/panel/brightness   # 调亮度，0–2047
+echo 4   > /sys/class/backlight/panel/bl_power     # 熄屏（Display Off，暂停送帧）
+echo 0   > /sys/class/backlight/panel/bl_power     # 亮屏（恢复亮度、Display On、恢复送帧）
+```
+
+实测：50 → 2047 → 600 亮度变化与预期一致（用户确认）；熄屏 3 s 期间帧计数不增长，
+亮屏后 fbcon 内容恢复；无 DCS 超时，无 Oops。
+
 ## 限制
 
-完全依赖 LK 留下的时钟、电源和管线配置；没有面板初始化、DSC 配置、亮度控制或熄屏，
+完全依赖 LK 留下的时钟、电源和管线配置；没有面板初始化或 DSC 配置，
 LK 若未点亮面板（例如某些启动路径）则无输出。fbkick 在 LK 管线不处于命令模式运行时直接
 退出，不动硬件。
