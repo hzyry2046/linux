@@ -506,8 +506,8 @@
 		interrupts = <GIC_SPI 112 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&i2c_ck>, <&i2c_ck>;
 		clock-names = "main", "dma";
-		clock-div = <5>;
-		clock-frequency = <100000>;
+		clock-div = <1>;
+		clock-frequency = <400000>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 
@@ -537,7 +537,7 @@
 		interrupts = <GIC_SPI 117 IRQ_TYPE_LEVEL_HIGH>;
 		clocks = <&i2c_ck>, <&i2c_ck>;
 		clock-names = "main", "dma";
-		clock-div = <5>;
+		clock-div = <1>;
 		clock-frequency = <100000>;
 		mediatek,use-push-pull;
 		#address-cells = <1>;
