@@ -358,7 +358,7 @@ static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
 		} else {
 			memcpy(tsdata->last_report, rdbuf, tsdata->tdata_len);
 			tsdata->stale = false;
-			mod_delayed_work(system_wq, &tsdata->release_work,
+			mod_delayed_work(system_dfl_wq, &tsdata->release_work,
 					 msecs_to_jiffies(EDT_STALE_RELEASE_MS));
 		}
 	}
