@@ -146,10 +146,25 @@ struct edt_ft5x06_ts_data {
 	enum edt_ver version;
 	unsigned int crc_errors;
 	unsigned int header_errors;
+
+	bool stale_release;
+	bool stale;
+	u8 last_report[63];
+	struct delayed_work release_work;
 };
+
+/*
+ * The FT3518 often does not report a lift: the touch registers keep the
+ * last contact frozen until the next touch. A real contact is never
+ * perfectly static (the pressure/area byte keeps changing), so a report
+ * that stays identical for this long is treated as all fingers up.
+ */
+#define EDT_STALE_RELEASE_MS	120
 
 struct edt_i2c_chip_data {
 	int  max_support_points;
+	/* Release contacts once the report stops changing (no lift event) */
+	bool stale_release;
 };
 
 static const struct regmap_config edt_ft5x06_i2c_regmap_config = {
@@ -295,6 +310,30 @@ static const struct regmap_config edt_M06_i2c_regmap_config = {
 	.write = edt_M06_i2c_write,
 };
 
+static void edt_ft5x06_release_work(struct work_struct *work)
+{
+	struct edt_ft5x06_ts_data *tsdata =
+		container_of(work, struct edt_ft5x06_ts_data, release_work.work);
+	int i;
+
+	disable_irq(tsdata->client->irq);
+	tsdata->stale = true;
+	for (i = 0; i < tsdata->max_support_points; i++) {
+		input_mt_slot(tsdata->input, i);
+		input_mt_report_slot_inactive(tsdata->input);
+	}
+	input_mt_report_pointer_emulation(tsdata->input, true);
+	input_sync(tsdata->input);
+	enable_irq(tsdata->client->irq);
+}
+
+static void edt_ft5x06_cancel_release(void *arg)
+{
+	struct edt_ft5x06_ts_data *tsdata = arg;
+
+	cancel_delayed_work_sync(&tsdata->release_work);
+}
+
 static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
 {
 	struct edt_ft5x06_ts_data *tsdata = dev_id;
@@ -310,6 +349,18 @@ static irqreturn_t edt_ft5x06_ts_isr(int irq, void *dev_id)
 		dev_err_ratelimited(dev, "Unable to fetch data, error: %d\n",
 				    error);
 		goto out;
+	}
+
+	if (tsdata->stale_release) {
+		if (!memcmp(rdbuf, tsdata->last_report, tsdata->tdata_len)) {
+			if (tsdata->stale)
+				goto out;
+		} else {
+			memcpy(tsdata->last_report, rdbuf, tsdata->tdata_len);
+			tsdata->stale = false;
+			mod_delayed_work(system_wq, &tsdata->release_work,
+					 msecs_to_jiffies(EDT_STALE_RELEASE_MS));
+		}
 	}
 
 	for (i = 0; i < tsdata->max_support_points; i++) {
@@ -1157,6 +1208,8 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 	}
 
 	tsdata->max_support_points = chip_data->max_support_points;
+	tsdata->stale_release = chip_data->stale_release;
+	INIT_DELAYED_WORK(&tsdata->release_work, edt_ft5x06_release_work);
 
 	tsdata->vcc = devm_regulator_get(&client->dev, "vcc");
 	if (IS_ERR(tsdata->vcc))
@@ -1320,6 +1373,11 @@ static int edt_ft5x06_ts_probe(struct i2c_client *client)
 		return error;
 	}
 
+	error = devm_add_action_or_reset(&client->dev, edt_ft5x06_cancel_release,
+					 tsdata);
+	if (error)
+		return error;
+
 	error = input_register_device(input);
 	if (error)
 		return error;
@@ -1456,6 +1514,7 @@ static const struct edt_i2c_chip_data edt_ft5x06_data = {
 
 static const struct edt_i2c_chip_data edt_ft3518_data = {
 	.max_support_points = 10,
+	.stale_release = true,
 };
 
 static const struct edt_i2c_chip_data edt_ft5452_data = {
