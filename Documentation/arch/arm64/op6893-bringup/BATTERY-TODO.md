@@ -38,3 +38,23 @@ attempt118 中亮屏、Wi-Fi 在线、拔掉 USB 后的记录（`mt6893-direct/e
 5. **VOOC / 电荷泵**：i2c7 上的 BQ25970 和 RT5125 不处理，保持 5 V 普通充电。
 6. **多温度 OCV 表**：目前只放了 25 °C 的表；以后有了温度通道可以把其余 4 张表也加上。
 7. **MT6360 其余功能**：LED、TCPC 等。
+
+## 参考：厂商算法与 6.6 移植经验（用户提供的分析，2026-11-11）
+
+来源：`~/src/reverse-analysis/op6893-battery-userspace-analysis.md`、
+`op6893-6.6-ack-battery-analysis.md`（对 `libfgauge_gm30.so` 做静态逆向，结论属推断）。
+
+- **算法在用户态闭源库里**：`fuelgauged` 只是 dlopen `libfgauge_gm30.so`（32 位 bionic），
+  通过 `NETLINK_FGD=26` 与内核通信；不能搬到主线，只能复刻算法结构。
+- **结构**：c_soc（库仑计）+ v_soc（OCV 表，`OCV = VBAT ± I·R(DOD,T)`）按差值门限融合，
+  再做 UI 平滑（pseudo100、满电保持、低电保持、限速）。门限常数没有恢复。
+- **MT6359P 库仑计寄存器**（6.6 `mt6359p-gauge.c`）：FGADC_CON1 `0xd0a`（SW_READ_PRE
+  bit0 锁存、SW_CLEAR bit3），CAR `0xd16` 起，电流 `0xd8a`；`UNIT_CHARGE=85`、
+  `UNIT_FGCURRENT=610352`，R_FG 5 mΩ（内部值 50），CAR_TUNE 0.95。这是第 1 项待办的起点。
+- **6.6 项目实测：电池已老化**，满电到空约 2.85 Ah，profile 是 4.26–4.38 Ah（约 67%，
+  363 次循环）。厂商的老化学习没有真正生效。因此库仑计 SOC 必须做运行时容量学习，
+  不能照搬 profile 的 Qmax；纯 OCV 估算不受这一影响。
+- pseudo100：20615 的 DT 覆盖为 97/95/95/93/93（分析文档给出的 98/96/96/93/93 是通用值）。
+- 6.6 项目踩过的坑可以直接借鉴：只在电压达到 4282 mV 以上时才把充电结束当作满电
+  （暖区、冷区是限压停充）；NTC 用 `/charger` auxadc3 的 166 点表（上拉 100 kΩ）；
+  `vbatt_power_off` 3300 mV 规则。
