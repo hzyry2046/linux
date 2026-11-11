@@ -265,6 +265,11 @@ enum panfrost_hw_issue {
 #define hw_issues_g57_r0p0 (\
 	BIT_ULL(HW_ISSUE_TTRX_3485))
 
+/* Same TTRx base issues as G57; r0p0 also has TTRX_3485. */
+#define hw_issues_g77 hw_issues_g57
+#define hw_issues_g77_r0p0 hw_issues_g57_r0p0
+#define hw_issues_g77_r0p1 0
+
 #define hw_issues_g68 (\
 	BIT_ULL(HW_ISSUE_TTRX_2968_TTRX_3162))
 

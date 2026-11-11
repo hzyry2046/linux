@@ -966,6 +966,22 @@ static const struct panfrost_compatible mediatek_mt8192_data = {
 	.gpu_quirks = BIT(GPU_QUIRK_FORCE_AARCH64_PGTABLE),
 };
 
+/*
+ * MT6893: MFG1 is the GPU top domain, MFG2-6 the five shader stacks.
+ * The MFG0/MFG1 supplies are owned by the power domains.
+ */
+static const char * const mediatek_mt6893_pm_domains[] = {
+	"core0", "core1", "core2", "core3", "core4", "core5",
+};
+
+static const struct panfrost_compatible mediatek_mt6893_data = {
+	.num_supplies = 0,
+	.num_pm_domains = ARRAY_SIZE(mediatek_mt6893_pm_domains),
+	.pm_domain_names = mediatek_mt6893_pm_domains,
+	.pm_features = BIT(GPU_PM_CLK_DIS),
+	.gpu_quirks = BIT(GPU_QUIRK_FORCE_AARCH64_PGTABLE),
+};
+
 static const struct panfrost_compatible mediatek_mt8370_data = {
 	.num_supplies = ARRAY_SIZE(default_supplies) - 1,
 	.supply_names = default_supplies,
@@ -994,6 +1010,7 @@ static const struct of_device_id dt_match[] = {
 	{ .compatible = "arm,mali-t880", .data = &default_data, },
 	{ .compatible = "arm,mali-bifrost", .data = &default_data, },
 	{ .compatible = "arm,mali-valhall-jm", .data = &default_data, },
+	{ .compatible = "mediatek,mt6893-mali", .data = &mediatek_mt6893_data },
 	{ .compatible = "mediatek,mt8183-mali", .data = &mediatek_mt8183_data },
 	{ .compatible = "mediatek,mt8183b-mali", .data = &mediatek_mt8183_b_data },
 	{ .compatible = "mediatek,mt8186-mali", .data = &mediatek_mt8186_data },
