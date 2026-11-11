@@ -14,10 +14,20 @@
  * Nothing is reconfigured: clocks, power and the pipeline stay as LK left
  * them, which relies on clk_ignore_unused/regulator_ignore_unused. This is a
  * bring-up aid, not a display driver.
+ *
+ * A backlight device controls the panel through DCS: brightness is the
+ * 11-bit Write Display Brightness (0x51, normal range only; the panel's
+ * high-brightness mode above 2047 is not used), and bl_power/blanking sends
+ * Display Off/On (0x28/0x29) and pauses frame transfers meanwhile. Frame
+ * triggers and DCS writes share the DSI command queue, so both run under
+ * one lock.
  */
+#include <linux/backlight.h>
 #include <linux/io.h>
+#include <linux/iopoll.h>
 #include <linux/jiffies.h>
 #include <linux/module.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/workqueue.h>
@@ -39,11 +49,28 @@
 #define DSI_CMDQ_WRITE_MEMORY_START	0x002c3909
 #define MUTEX0_EN			0x020
 
+#define DSI_CONFG_LONG_PACKET		0x02
+#define DSI_DCS_SHORT_WRITE_0		0x05
+#define DSI_DCS_SHORT_WRITE_1		0x15
+#define DSI_DCS_LONG_WRITE		0x39
+#define DCS_SET_DISPLAY_OFF		0x28
+#define DCS_SET_DISPLAY_ON		0x29
+#define DCS_SET_BRIGHTNESS		0x51
+#define DCS_WRITE_CONTROL		0x53
+#define DCS_CONTROL_NORMAL		0x20	/* dimming on, HBM off */
+
+#define FBKICK_MAX_BRIGHTNESS		2047
+#define FBKICK_DEFAULT_BRIGHTNESS	600
+#define FBKICK_IDLE_TIMEOUT_US		100000
+
 #define FBKICK_PERIOD_MS		33
 #define FBKICK_STUCK_RESTART		30	/* ~1 s of a busy DSI */
 
 struct fbkick {
 	void __iomem *base;
+	struct device *dev;
+	struct mutex lock;		/* DSI command queue */
+	bool display_off;
 	struct delayed_work work;
 	unsigned int stuck;
 	unsigned long frames;
@@ -65,12 +92,98 @@ static void fbkick_send(struct fbkick *k, bool restart)
 	writel(1, dsi + DSI_START);
 }
 
+static int fbkick_wait_idle(struct fbkick *k)
+{
+	u32 sta;
+
+	return readl_poll_timeout(k->base + DISP_DSI0 + DSI_INTSTA, sta,
+				  !(sta & DSI_INTSTA_BUSY), 100,
+				  FBKICK_IDLE_TIMEOUT_US);
+}
+
+/* Short or long DCS write through the DSI command queue, lock held. */
+static int fbkick_dcs(struct fbkick *k, u8 cmd, const u8 *data, size_t len)
+{
+	void __iomem *dsi = k->base + DISP_DSI0;
+	size_t i, j;
+	u32 word;
+	int ret;
+
+	if (len > 8)
+		return -EINVAL;
+
+	ret = fbkick_wait_idle(k);
+	if (ret)
+		return ret;
+
+	writel(0, dsi + DSI_INTSTA);
+	if (len > 1) {
+		writel(DSI_CONFG_LONG_PACKET | DSI_DCS_LONG_WRITE << 8 |
+		       (len + 1) << 16, dsi + DSI_CMDQ0);
+		for (i = 0; i < len + 1; i += 4) {
+			word = 0;
+			for (j = 0; j < 4 && i + j < len + 1; j++)
+				word |= (u32)(i + j ? data[i + j - 1] : cmd) <<
+					(8 * j);
+			writel(word, dsi + DSI_CMDQ0 + 4 + i);
+		}
+		writel(2 + len / 4, dsi + DSI_CMDQ_SIZE);
+	} else {
+		writel((len ? DSI_DCS_SHORT_WRITE_1 : DSI_DCS_SHORT_WRITE_0) << 8 |
+		       cmd << 16 | (len ? data[0] : 0) << 24, dsi + DSI_CMDQ0);
+		writel(1, dsi + DSI_CMDQ_SIZE);
+	}
+	writel(0, dsi + DSI_START);
+	writel(1, dsi + DSI_START);
+
+	ret = fbkick_wait_idle(k);
+	if (ret)
+		dev_warn_ratelimited(k->dev, "DCS 0x%02x timed out\n", cmd);
+
+	return ret;
+}
+
+static int fbkick_update_status(struct backlight_device *bl)
+{
+	struct fbkick *k = bl_get_data(bl);
+	int level = backlight_get_brightness(bl);
+	bool off = backlight_is_blank(bl);
+	u8 v[2] = { level >> 8, level & 0xff };
+	int ret = 0;
+
+	guard(mutex)(&k->lock);
+
+	if (off) {
+		if (!k->display_off) {
+			ret = fbkick_dcs(k, DCS_SET_DISPLAY_OFF, NULL, 0);
+			k->display_off = !ret;
+		}
+		return ret;
+	}
+
+	ret = fbkick_dcs(k, DCS_SET_BRIGHTNESS, v, sizeof(v));
+	if (!ret && k->display_off) {
+		ret = fbkick_dcs(k, DCS_SET_DISPLAY_ON, NULL, 0);
+		k->display_off = !!ret;
+	}
+
+	return ret;
+}
+
+static const struct backlight_ops fbkick_bl_ops = {
+	.options = BL_CORE_SUSPENDRESUME,
+	.update_status = fbkick_update_status,
+};
+
 static void fbkick_work(struct work_struct *work)
 {
 	struct fbkick *k = container_of(to_delayed_work(work), struct fbkick,
 					work);
 
-	if (readl(k->base + DISP_DSI0 + DSI_INTSTA) & DSI_INTSTA_BUSY) {
+	mutex_lock(&k->lock);
+	if (k->display_off) {
+		/* Nothing to show; keep the DSI free while the panel is off. */
+	} else if (readl(k->base + DISP_DSI0 + DSI_INTSTA) & DSI_INTSTA_BUSY) {
 		/* A frame that never finishes freezes the panel; drop it. */
 		if (++k->stuck % FBKICK_STUCK_RESTART == 0) {
 			fbkick_send(k, true);
@@ -81,6 +194,7 @@ static void fbkick_work(struct work_struct *work)
 		fbkick_send(k, false);
 		k->frames++;
 	}
+	mutex_unlock(&k->lock);
 
 	schedule_delayed_work(&k->work, msecs_to_jiffies(FBKICK_PERIOD_MS));
 }
@@ -98,8 +212,17 @@ static DEVICE_ATTR_RO(stats);
 static int fbkick_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	struct backlight_properties props = {
+		.type = BACKLIGHT_RAW,
+		.max_brightness = FBKICK_MAX_BRIGHTNESS,
+		.brightness = FBKICK_DEFAULT_BRIGHTNESS,
+		.scale = BACKLIGHT_SCALE_NON_LINEAR,
+	};
+	struct backlight_device *bl;
 	struct fbkick *k;
 	u32 fb, l0, r0;
+	u8 ctl = DCS_CONTROL_NORMAL;
+	int ret;
 
 	if (of_property_read_u32(dev->of_node, "op6893,framebuffer", &fb))
 		return dev_err_probe(dev, -EINVAL, "missing op6893,framebuffer\n");
@@ -133,7 +256,23 @@ static int fbkick_probe(struct platform_device *pdev)
 	writel(fb, k->base + DISP_OVL0_2L + OVL_L0_ADDR);
 	writel(fb + (r0 - l0), k->base + DISP_OVL1_2L + OVL_L0_ADDR);
 
+	k->dev = dev;
+	ret = devm_mutex_init(dev, &k->lock);
+	if (ret)
+		return ret;
 	platform_set_drvdata(pdev, k);
+
+	/* Normal (non-HBM) brightness range before the first level is set. */
+	mutex_lock(&k->lock);
+	fbkick_dcs(k, DCS_WRITE_CONTROL, &ctl, 1);
+	mutex_unlock(&k->lock);
+
+	bl = devm_backlight_device_register(dev, "panel", dev, k,
+					    &fbkick_bl_ops, &props);
+	if (IS_ERR(bl))
+		return dev_err_probe(dev, PTR_ERR(bl), "backlight\n");
+	backlight_update_status(bl);
+
 	INIT_DELAYED_WORK(&k->work, fbkick_work);
 	schedule_delayed_work(&k->work, 0);
 
