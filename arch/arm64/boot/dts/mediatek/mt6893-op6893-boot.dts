@@ -4,6 +4,7 @@
 #include "mt6893-pinfunc.h"
 #include <dt-bindings/pinctrl/mt65xx.h>
 #include <dt-bindings/iio/adc/mediatek,mt6359-auxadc.h>
+#include <dt-bindings/spmi/spmi.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/reset/ti-syscon.h>
@@ -178,6 +179,50 @@
 		#clock-cells = <1>;
 		clocks = <&ulposc>, <&clk26m>, <&apmixedsys CLK_APMIXED_MAINPLL>;
 		clock-names = "ulposc", "clk26m", "mainpll";
+	};
+
+	/* SPMI master clock mux, left as LK set it (no topckgen mux driver). */
+	spmimst_ck: spmimst-clk {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <26000000>;
+		clock-output-names = "spmimst_ck_inherited";
+	};
+
+	/*
+	 * PMIF/SPMI as LK left it: the driver programs no arbiter or master
+	 * registers on probe, it only uses SW channel 2.
+	 */
+	spmi: spmi@10027000 {
+		compatible = "mediatek,mt6873-spmi";
+		reg = <0 0x10027000 0 0x000e00>,
+		      <0 0x10029000 0 0x000100>;
+		reg-names = "pmif", "spmimst";
+		clocks = <&ufs_infracfg CLK_IFRAO_PMIC_AP>,
+			 <&ufs_infracfg CLK_IFRAO_PMIC_TMR>,
+			 <&spmimst_ck>;
+		clock-names = "pmif_sys_ck", "pmif_tmr_ck", "spmimst_clk_mux";
+		#address-cells = <2>;
+		#size-cells = <0>;
+
+		/*
+		 * MT6315 SID 7: vbuck1 is VGPU, vbuck3 is PROC2 (big CPU).
+		 * Named only, no constraints: registration changes nothing.
+		 */
+		mt6315_7: pmic@7 {
+			compatible = "mediatek,mt6315-regulator";
+			reg = <0x7 SPMI_USID>;
+
+			regulators {
+				mt6315_7_vbuck1: vbuck1 {
+					regulator-name = "vgpu";
+				};
+
+				mt6315_7_vbuck3: vbuck3 {
+					regulator-name = "vproc2";
+				};
+			};
+		};
 	};
 
 	/* Diagnostic transport: SPI setup and clock rates remain inherited. */
