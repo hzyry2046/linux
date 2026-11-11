@@ -9,7 +9,7 @@ Android 下无 `/dev/i2c-*`，debugfs 未挂载，无法导出；以 LK 交接�
 
 | 寄存器 | LK 值 | probe 写入 | 结果 |
 |---|---|---|---|
-| CTRL19 VINOVP | 6.5 V | 6.5 V（DT 明确写入） | 不变 |
+| CTRL19 VINOVP | 6.5 V | 6.5 V（DT 明确写入） | 不变（attempt118 实读 0x19=0x3c） |
 | CTRL2 IINLMTSEL | AICR | AICR | 不变 |
 | CTRL3 ILIM_EN | 0 | 0 | 不变 |
 | CTRL10 OTG OC | 0xB | 0xF | 仅 OTG 模式生效 |
@@ -25,5 +25,5 @@ Android 下无 `/dev/i2c-*`，debugfs 未挂载，无法导出；以 LK 交接�
 
 ## Wi-Fi SSH 备用通道
 
-新增 `mt6893-direct/ssh-wifi.sh`（默认地址取最近一次 DHCP，可用
-`OP6893_WIFI_IP` 覆盖），用于 USB 断开时访问。
+新增 `mt6893-direct/ssh-wifi.sh`（默认地址写死为 10.65.84.170，可用
+`OP6893_WIFI_IP` 覆盖），用于 USB 断开时访问；attempt118 实测可用。
