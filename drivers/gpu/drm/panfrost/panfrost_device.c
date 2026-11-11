@@ -341,6 +341,8 @@ int panfrost_device_init(struct panfrost_device *pfdev)
 	pm_runtime_enable(pfdev->base.dev);
 	pm_runtime_set_autosuspend_delay(pfdev->base.dev, 50); /* ~3 frames */
 	pm_runtime_use_autosuspend(pfdev->base.dev);
+	if (pfdev->comp->pm_features & BIT(GPU_PM_NO_RT_SUSPEND))
+		pm_runtime_forbid(pfdev->base.dev);
 
 	/*
 	 * Register the DRM device with the core and the connectors with

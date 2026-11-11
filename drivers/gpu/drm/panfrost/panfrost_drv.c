@@ -978,7 +978,11 @@ static const struct panfrost_compatible mediatek_mt6893_data = {
 	.num_supplies = 0,
 	.num_pm_domains = ARRAY_SIZE(mediatek_mt6893_pm_domains),
 	.pm_domain_names = mediatek_mt6893_pm_domains,
-	.pm_features = BIT(GPU_PM_CLK_DIS),
+	/*
+	 * Cycling the MFG domains through runtime PM leaves the GPU unable to
+	 * reset or power up L2 on the next resume; keep it powered for now.
+	 */
+	.pm_features = BIT(GPU_PM_CLK_DIS) | BIT(GPU_PM_NO_RT_SUSPEND),
 	.gpu_quirks = BIT(GPU_QUIRK_FORCE_AARCH64_PGTABLE),
 };
 
