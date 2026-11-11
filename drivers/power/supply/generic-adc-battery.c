@@ -103,6 +103,35 @@ static int gab_read_channel(struct gab *adc_bat, enum gab_chan_type channel,
 	return 0;
 }
 
+/*
+ * Estimate the capacity from the loaded battery voltage and the OCV table of
+ * the monitored battery. Without a current sense the voltage is not corrected
+ * for the internal resistance, so the estimate reads high while charging and
+ * low under load.
+ */
+static int gab_get_capacity(struct gab *adc_bat, int *capacity)
+{
+	int temp = 250, uv, ret;
+
+	ret = gab_read_channel(adc_bat, GAB_VOLTAGE, &uv);
+	if (ret)
+		return ret;
+
+	if (adc_bat->channel[GAB_TEMP])
+		gab_read_channel(adc_bat, GAB_TEMP, &temp);
+
+	if (!adc_bat->psy->battery_info)
+		return -ENODATA;
+
+	ret = power_supply_batinfo_ocv2cap(adc_bat->psy->battery_info, uv,
+					   temp / 10);
+	if (ret < 0)
+		return ret;
+
+	*capacity = ret;
+	return 0;
+}
+
 static int gab_get_property(struct power_supply *psy,
 		enum power_supply_property psp, union power_supply_propval *val)
 {
@@ -120,6 +149,8 @@ static int gab_get_property(struct power_supply *psy,
 		return gab_read_channel(adc_bat, GAB_POWER, &val->intval);
 	case POWER_SUPPLY_PROP_TEMP:
 		return gab_read_channel(adc_bat, GAB_TEMP, &val->intval);
+	case POWER_SUPPLY_PROP_CAPACITY:
+		return gab_get_capacity(adc_bat, &val->intval);
 	default:
 		return -EINVAL;
 	}
@@ -188,7 +219,7 @@ static int gab_probe(struct platform_device *pdev)
 	 */
 	properties = devm_kcalloc(&pdev->dev,
 				  ARRAY_SIZE(gab_props) +
-				  ARRAY_SIZE(gab_chan_name),
+				  ARRAY_SIZE(gab_chan_name) + 1,
 				  sizeof(*properties),
 				  GFP_KERNEL);
 	if (!properties)
@@ -231,6 +262,14 @@ static int gab_probe(struct platform_device *pdev)
 	 * as come channels may be not be supported by the device.So
 	 * we need to take care of that.
 	 */
+	/*
+	 * The battery info is parsed during registration, so decide on the
+	 * capacity from the DT alone; the OCV table is checked on read.
+	 */
+	if (adc_bat->channel[GAB_VOLTAGE] &&
+	    device_property_present(&pdev->dev, "monitored-battery"))
+		properties[index++] = POWER_SUPPLY_PROP_CAPACITY;
+
 	psy_desc->properties = properties;
 	psy_desc->num_properties = index;
 
