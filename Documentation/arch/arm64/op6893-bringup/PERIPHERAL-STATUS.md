@@ -317,3 +317,11 @@ GPU 尚未执行过作业。见 [121](evidence/attempt-121.md)。
 打了 G77 补丁的 Mesa 26.2.6（panfrost、不依赖 LLVM）识别为 “Mali-G77 MC9 (Panfrost)”，
 GLES 3.1。离屏三角形渲染像素正确，2000 帧无 GPU fault。panvk 不支持 v9。
 见 [122](evidence/attempt-122.md)。
+
+## Attempt123：simpledrm 与 kmscube
+
+帧缓冲改由 simpledrm 驱动，kmscube 通过 kmsro（simpledrm dumb buffer + panfrost）显示。
+修了两个问题：runtime suspend 之后 GPU 无法复位（暂时禁止 MT6893 的 GPU runtime
+suspend，根因未明）；导出的 dumb buffer 与非 coherent 的 GPU 之间没有 cache 同步，
+造成 16 像素长的闪烁短线（在 DRM prime 与 framebuffer helper 中补上同步）。
+全屏纯色翻页测试 3800 帧无错误像素。见 [123](evidence/attempt-123.md)。
