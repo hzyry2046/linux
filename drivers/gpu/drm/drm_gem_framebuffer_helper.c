@@ -5,6 +5,7 @@
  * Copyright (C) 2017 Noralf Trønnes
  */
 
+#include <linux/dma-buf.h>
 #include <linux/export.h>
 #include <linux/slab.h>
 #include <linux/module.h>
@@ -420,11 +421,30 @@ void drm_gem_fb_vunmap(struct drm_framebuffer *fb, struct iosys_map *map)
 }
 EXPORT_SYMBOL(drm_gem_fb_vunmap);
 
+/*
+ * A buffer object that the driver allocated itself can still be written by
+ * another device: user space exports it and a GPU driver imports it as its
+ * render target. Return that dma-buf, with a reference, so that the CPU access
+ * is also bracketed for those importers.
+ */
+static struct dma_buf *drm_gem_fb_get_exported_dma_buf(struct drm_gem_object *obj)
+{
+	struct dma_buf *dma_buf;
+
+	mutex_lock(&obj->dev->object_name_lock);
+	dma_buf = obj->dma_buf;
+	if (dma_buf)
+		get_dma_buf(dma_buf);
+	mutex_unlock(&obj->dev->object_name_lock);
+
+	return dma_buf;
+}
+
 static void __drm_gem_fb_end_cpu_access(struct drm_framebuffer *fb, enum dma_data_direction dir,
 					unsigned int num_planes)
 {
-	struct dma_buf_attachment *import_attach;
 	struct drm_gem_object *obj;
+	struct dma_buf *dma_buf;
 	int ret;
 
 	while (num_planes) {
@@ -432,10 +452,15 @@ static void __drm_gem_fb_end_cpu_access(struct drm_framebuffer *fb, enum dma_dat
 		obj = drm_gem_fb_get_obj(fb, num_planes);
 		if (!obj)
 			continue;
-		import_attach = obj->import_attach;
-		if (!drm_gem_is_imported(obj))
-			continue;
-		ret = dma_buf_end_cpu_access(import_attach->dmabuf, dir);
+		if (drm_gem_is_imported(obj)) {
+			ret = dma_buf_end_cpu_access(obj->import_attach->dmabuf, dir);
+		} else {
+			dma_buf = drm_gem_fb_get_exported_dma_buf(obj);
+			if (!dma_buf)
+				continue;
+			ret = dma_buf_end_cpu_access(dma_buf, dir);
+			dma_buf_put(dma_buf);
+		}
 		if (ret)
 			drm_err(fb->dev, "dma_buf_end_cpu_access(%u, %d) failed: %d\n",
 				ret, num_planes, dir);
@@ -449,7 +474,8 @@ static void __drm_gem_fb_end_cpu_access(struct drm_framebuffer *fb, enum dma_dat
  *
  * Prepares a framebuffer's GEM buffer objects for CPU access. This function
  * must be called before accessing the BO data within the kernel. For imported
- * BOs, the function calls dma_buf_begin_cpu_access().
+ * BOs, and for the driver's own BOs that have been exported, the function
+ * calls dma_buf_begin_cpu_access().
  *
  * See drm_gem_fb_end_cpu_access() for signalling the end of CPU access.
  *
@@ -458,8 +484,8 @@ static void __drm_gem_fb_end_cpu_access(struct drm_framebuffer *fb, enum dma_dat
  */
 int drm_gem_fb_begin_cpu_access(struct drm_framebuffer *fb, enum dma_data_direction dir)
 {
-	struct dma_buf_attachment *import_attach;
 	struct drm_gem_object *obj;
+	struct dma_buf *dma_buf;
 	unsigned int i;
 	int ret;
 
@@ -469,10 +495,15 @@ int drm_gem_fb_begin_cpu_access(struct drm_framebuffer *fb, enum dma_data_direct
 			ret = -EINVAL;
 			goto err___drm_gem_fb_end_cpu_access;
 		}
-		import_attach = obj->import_attach;
-		if (!drm_gem_is_imported(obj))
-			continue;
-		ret = dma_buf_begin_cpu_access(import_attach->dmabuf, dir);
+		if (drm_gem_is_imported(obj)) {
+			ret = dma_buf_begin_cpu_access(obj->import_attach->dmabuf, dir);
+		} else {
+			dma_buf = drm_gem_fb_get_exported_dma_buf(obj);
+			if (!dma_buf)
+				continue;
+			ret = dma_buf_begin_cpu_access(dma_buf, dir);
+			dma_buf_put(dma_buf);
+		}
 		if (ret)
 			goto err___drm_gem_fb_end_cpu_access;
 	}
@@ -492,7 +523,8 @@ EXPORT_SYMBOL(drm_gem_fb_begin_cpu_access);
  *
  * Signals the end of CPU access to the given framebuffer's GEM buffer objects. This
  * function must be paired with a corresponding call to drm_gem_fb_begin_cpu_access().
- * For imported BOs, the function calls dma_buf_end_cpu_access().
+ * For imported BOs, and for the driver's own BOs that have been exported, the
+ * function calls dma_buf_end_cpu_access().
  *
  * See also drm_gem_fb_begin_cpu_access().
  */

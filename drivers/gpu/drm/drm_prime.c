@@ -28,6 +28,7 @@
 
 #include <linux/export.h>
 #include <linux/dma-buf.h>
+#include <linux/dma-resv.h>
 #include <linux/rbtree.h>
 #include <linux/module.h>
 
@@ -680,13 +681,21 @@ struct sg_table *drm_gem_map_dma_buf(struct dma_buf_attachment *attach,
 	if (IS_ERR(sgt))
 		return sgt;
 
-	ret = dma_map_sgtable(attach->dev, sgt, dir,
-			      DMA_ATTR_SKIP_CPU_SYNC);
+	/*
+	 * Do not skip the CPU sync here. Freshly allocated pages can still
+	 * have their zeroes sitting dirty in the CPU caches, and those would
+	 * later be written back over whatever a non-coherent importer stored
+	 * in the buffer.
+	 */
+	ret = dma_map_sgtable(attach->dev, sgt, dir, 0);
 	if (ret) {
 		sg_free_table(sgt);
 		kfree(sgt);
-		sgt = ERR_PTR(ret);
+		return ERR_PTR(ret);
 	}
+
+	/* For drm_gem_dmabuf_begin_cpu_access(); protected by the resv lock. */
+	attach->priv = sgt;
 
 	return sgt;
 }
@@ -707,6 +716,7 @@ void drm_gem_unmap_dma_buf(struct dma_buf_attachment *attach,
 	if (!sgt)
 		return;
 
+	attach->priv = NULL;
 	dma_unmap_sgtable(attach->dev, sgt, dir, DMA_ATTR_SKIP_CPU_SYNC);
 	sg_free_table(sgt);
 	kfree(sgt);
@@ -824,11 +834,78 @@ int drm_gem_dmabuf_mmap(struct dma_buf *dma_buf, struct vm_area_struct *vma)
 }
 EXPORT_SYMBOL(drm_gem_dmabuf_mmap);
 
+/**
+ * drm_gem_dmabuf_begin_cpu_access - dma_buf begin_cpu_access implementation
+ * for GEM
+ * @dma_buf: buffer the CPU is about to access
+ * @dir: direction of the access
+ *
+ * Hands the buffer over from every importer that mapped it with
+ * drm_gem_map_dma_buf() to the CPU. An importer whose device is not
+ * DMA-coherent writes behind the back of the CPU caches, so without this the
+ * exporter reads stale cache lines. This can be used as the
+ * &dma_buf_ops.begin_cpu_access callback.
+ *
+ * Returns 0.
+ */
+int drm_gem_dmabuf_begin_cpu_access(struct dma_buf *dma_buf,
+				    enum dma_data_direction dir)
+{
+	struct dma_buf_attachment *attach;
+
+	dma_resv_lock(dma_buf->resv, NULL);
+	list_for_each_entry(attach, &dma_buf->attachments, node) {
+		struct sg_table *sgt = attach->priv;
+
+		if (sgt)
+			dma_sync_sgtable_for_cpu(attach->dev, sgt, dir);
+	}
+	dma_resv_unlock(dma_buf->resv);
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_gem_dmabuf_begin_cpu_access);
+
+/**
+ * drm_gem_dmabuf_end_cpu_access - dma_buf end_cpu_access implementation for
+ * GEM
+ * @dma_buf: buffer the CPU is done with
+ * @dir: direction of the access
+ *
+ * Counterpart of drm_gem_dmabuf_begin_cpu_access(). This can be used as the
+ * &dma_buf_ops.end_cpu_access callback.
+ *
+ * Returns 0.
+ */
+int drm_gem_dmabuf_end_cpu_access(struct dma_buf *dma_buf,
+				  enum dma_data_direction dir)
+{
+	struct dma_buf_attachment *attach;
+
+	/* The CPU only read the buffer; there is nothing to write back. */
+	if (dir == DMA_FROM_DEVICE)
+		return 0;
+
+	dma_resv_lock(dma_buf->resv, NULL);
+	list_for_each_entry(attach, &dma_buf->attachments, node) {
+		struct sg_table *sgt = attach->priv;
+
+		if (sgt)
+			dma_sync_sgtable_for_device(attach->dev, sgt, dir);
+	}
+	dma_resv_unlock(dma_buf->resv);
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_gem_dmabuf_end_cpu_access);
+
 static const struct dma_buf_ops drm_gem_prime_dmabuf_ops =  {
 	.attach = drm_gem_map_attach,
 	.detach = drm_gem_map_detach,
 	.map_dma_buf = drm_gem_map_dma_buf,
 	.unmap_dma_buf = drm_gem_unmap_dma_buf,
+	.begin_cpu_access = drm_gem_dmabuf_begin_cpu_access,
+	.end_cpu_access = drm_gem_dmabuf_end_cpu_access,
 	.release = drm_gem_dmabuf_release,
 	.mmap = drm_gem_dmabuf_mmap,
 	.vmap = drm_gem_dmabuf_vmap,
