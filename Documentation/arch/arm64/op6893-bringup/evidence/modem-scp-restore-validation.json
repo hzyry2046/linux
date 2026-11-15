@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-15",
+  "base_head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "scope": "pure CPU non-secure two-core restore geometry checker; no caller/executor or hardware operations",
+  "source_sha256": {
+    "ccci-scp-restore.c": "f1e8b9ad02d629cdb61a41c531da20fbc0346963a6ac53c65a542a0e69e17ad8",
+    "ccci-scp-restore.h": "19e804b9f0e0dff60a4b49c2e1883c9461344c3dbb9a8c622f4b499c75b1120f",
+    "Kconfig": "ada04d671093d0ee248277faa9e1a6de8fe2e656b9ac3b01ff03970703d44423",
+    "Makefile": "6b8008608abe84897c00e8bf6b4b94b10de5ee70bbec4277cb7b7662636acffe"
+  },
+  "validation": {
+    "actual_decoder_restore_asan_ubsan": true,
+    "valid_random_layouts": 10000,
+    "header_mutations": 20000,
+    "exact_68_72_and_reject_60": true,
+    "actual_A_V_memory_and_protocol_regressions": true,
+    "source_A_V_Q_audit": true,
+    "A_V_Q_compiled_header_bytes": [
+      72,
+      72,
+      60
+    ],
+    "enabled_default_Image_gz_modules": true,
+    "symbol_isolation": true,
+    "strict_checkpatch": [
+      0,
+      0,
+      0
+    ],
+    "compiler_warnings": 0
+  },
+  "device_accessed": false,
+  "flashed": false,
+  "rebooted": false,
+  "new_boot_image": null,
+  "last_validated_device_image": "4ed57fd98c40",
+  "hardware_support_added": false,
+  "reset_generation": 0,
+  "start_has_caller": false,
+  "limitations": [
+    "Bounds do not prove source/backup validity, coherency or mapping rights",
+    "Reset assertion/completion and stopped senders not proven",
+    "Mailbox old-message isolation not implemented",
+    "No platform integration, executor, SCP/MD start or READY"
+  ],
+  "evidence": "/data/src/mainline/mt6893-direct/evidence/scp-restore-plan"
+}

@@ -1,0 +1,104 @@
+{
+  "date": "2026-11-15",
+  "source_commit": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "scope": "R5.2 offline SCP RV region-header decoder and historical two-core recovery mapping bounds; no hardware entry point",
+  "abi": {
+    "tcm_offset": 4,
+    "snapshot_bytes": 72,
+    "struct_size_offset": 28,
+    "actual_vendor_headers_checked": 2,
+    "actual_firmware_header_verified": false,
+    "dram_size_unit": "bytes",
+    "historical_mapping_formula": "roundup(ap_dram_size, 1024) * 4",
+    "backup_start_is_not_access_authorization": true
+  },
+  "tests": {
+    "actual_helper_c": true,
+    "sanitizers": [
+      "address",
+      "undefined"
+    ],
+    "malformed_headers": 20000,
+    "valid_random_mapping_lengths": 10000,
+    "vendor_sizeof_offsetof_assertions_passed": true,
+    "r5_1_regression_passed": true,
+    "cases": [
+      "exact size/version and unaligned CPU snapshot",
+      "four zero/nonzero pairs, alignment, whole-span u32 bounds",
+      "unknown fields ignored; outputs cleared on error",
+      "trusted-window containment and u64 wrapping rejection",
+      "1024-byte rounding and multiplied-span containment; empty DRAM"
+    ]
+  },
+  "build": {
+    "arch": "arm64",
+    "cross_compile": "aarch64-linux-gnu-",
+    "targets": [
+      "Image.gz",
+      "modules",
+      "modpost"
+    ],
+    "enabled_passed": true,
+    "three_public_functions_linked": true,
+    "default_passed": true,
+    "default_scp_symbols_absent": true,
+    "warnings": 0,
+    "default_defconfigs_unchanged": true,
+    "new_boot_packaged": false,
+    "new_image_flashed": false
+  },
+  "checkpatch": {
+    "strict": true,
+    "errors": 0,
+    "warnings": 0,
+    "checks": 0,
+    "ignored": [
+      "FILE_PATH_CHANGES"
+    ],
+    "files": [
+      "drivers/misc/mediatek/ccci/ccci-scp-memory.c",
+      "drivers/misc/mediatek/ccci/ccci-scp-memory.h",
+      "drivers/misc/mediatek/ccci/Kconfig",
+      "drivers/misc/mediatek/ccci/Makefile"
+    ]
+  },
+  "device": {
+    "user_reported_state": "Android for independent modem analysis",
+    "device_operations_this_round": false
+  },
+  "limits": [
+    "Only the audited 72-byte ABI and strict aligned-pair support policy; no live firmware metadata validation",
+    "Historical DT addresses do not authorize current physical access; dynamic SCP share has no saved reg",
+    "No SCP mapping, firmware loading, SMC, reset, mailbox transport or READY consumer",
+    "No inference of backup_start semantics, firmware source, region ownership or TCM copy capacity",
+    "No additional modem hardware support accepted"
+  ],
+  "source_sha256": {
+    "drivers/misc/mediatek/ccci/ccci-scp-memory.c": "b9e6444dfe5d40c3fc419a6cbcc027fca9a5c41b7148b5a842be0359d582e0c7",
+    "drivers/misc/mediatek/ccci/ccci-scp-memory.h": "f514ee63bfc52389bb2742c10ed65a6e6c5290a7da75960f2118ff8df3d29d5d",
+    "drivers/misc/mediatek/ccci/Kconfig": "9a63b000b2dd3f416544a646653553313faa26e7f16877f036a93b717fb52d9a",
+    "drivers/misc/mediatek/ccci/Makefile": "b4aa7743ac1b74106f77447a84812f52461acfab541b23b5ca962a9c9ac13124",
+    "Documentation/arch/arm64/op6893-bringup/tools/test_modem_scp_memory.py": "e977bff674627d95060742ad5e65ea47b8943be466d7b9f5b43e53bd70e7d988"
+  },
+  "reference_source_sha256": {
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_helper.h": "de9c7b5fdbe1b2142977fbf804441404ccdc099cd4e94a67ae49d9e04e19f818",
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_helper.c": "e180b562c8484a072185dd160c3eb6745a77f87b37f238ce432df9c1f3c11be8",
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_awake.c": "2785079123e3fbf23f8ac0a379a5c96da958d496e8751efcea2ea0003516b121",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_helper.h": "bb2b778698ecab1fd825f11b6f2b9cecde318171a69a92c072248fc85b9630d3",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_helper.c": "2e6278eaef7708d1ad2ebf1ff7895341dbf140815dc9c7927cc40318f31310a2",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_awake.c": "426279da2106dc33909faf2fb8a5f97a34617f8e95b548c63acd155559efdb2f"
+  },
+  "external_logs": {
+    "modem-scp-memory-tests.log": "/data/src/mainline/mt6893-direct/modem-scp-memory-tests.log",
+    "modem-scp-memory-vendor-tests.log": "/data/src/mainline/mt6893-direct/modem-scp-memory-vendor-tests.log",
+    "modem-scp-memory-protocol-regression.log": "/data/src/mainline/mt6893-direct/modem-scp-memory-protocol-regression.log",
+    "modem-scp-memory-build.log": "/data/src/mainline/mt6893-direct/modem-scp-memory-build.log",
+    "modem-scp-memory-default-build.log": "/data/src/mainline/mt6893-direct/modem-scp-memory-default-build.log",
+    "modem-scp-memory-default-config.log": "/data/src/mainline/mt6893-direct/modem-scp-memory-default-config.log",
+    "modem-scp-memory-checkpatch.log": "/data/src/mainline/mt6893-direct/modem-scp-memory-checkpatch.log",
+    "modem-scp-memory-enabled.config": "/data/src/mainline/mt6893-direct/modem-scp-memory-enabled.config",
+    "modem-scp-memory-default.config": "/data/src/mainline/mt6893-direct/modem-scp-memory-default.config",
+    "modem-scp-memory-symbols.log": "/data/src/mainline/mt6893-direct/modem-scp-memory-symbols.log",
+    "modem-scp-memory-default-symbols.log": "/data/src/mainline/mt6893-direct/modem-scp-memory-default-symbols.log"
+  }
+}

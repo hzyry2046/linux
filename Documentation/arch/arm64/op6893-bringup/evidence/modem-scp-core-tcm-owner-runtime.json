@@ -1,0 +1,106 @@
+{
+  "milestone": "R5.20 core0/core1/TCM mapping-only unique owner",
+  "date": "2026-11-15",
+  "head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "ai_assistance": "Codex: implementation, local source comparison, tests, build and runtime validation; human review required, no AI Signed-off-by",
+  "artifact": {
+    "build_id": "db337399ee04",
+    "release": "7.3.0-op6893-d1-db337399ee04+",
+    "boot_sha256": "3bd0ce54f7371c25ad98234df31320e83b534b5ee934007792155ae7b293bfce",
+    "boot_readback_match": true
+  },
+  "source_geometry": {
+    "android4.19": "/data/src/kernel_oddo_mt6893/arch/arm64/boot/dts/mediatek/mt6893.dts",
+    "working6.6": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/arch/arm64/boot/dts/mediatek/mt6893.dtsi",
+    "core0": [
+      "0x10730000",
+      "0x1000"
+    ],
+    "core1": [
+      "0x10740000",
+      "0x1000"
+    ],
+    "tcm": [
+      "0x10500000",
+      "0x180000"
+    ]
+  },
+  "offline": {
+    "actual_owner_asan_ubsan_variants": 4,
+    "resource_geometry_prevalidation": true,
+    "all_map_failures_and_conflicts": true,
+    "all_or_none_publication": true,
+    "legacy_and_receive_regressions": [
+      "core0",
+      "tcm",
+      "resource",
+      "mmio",
+      "receive",
+      "restore"
+    ],
+    "kconfig_mutual_exclusion": true,
+    "binding_validation": true,
+    "enabled_board_and_merged_dtb": true,
+    "default_board_dtb": true,
+    "schema_legacy_six_accepted": true,
+    "schema_partial_or_mismatched_extensions_rejected": [
+      [
+        7,
+        7
+      ],
+      [
+        8,
+        8
+      ],
+      [
+        6,
+        9
+      ],
+      [
+        9,
+        6
+      ]
+    ],
+    "enabled_image_modules": true,
+    "default_image_modules": true,
+    "default_symbol_isolation": true,
+    "strict_checkpatch": {
+      "errors": 0,
+      "warnings": 0,
+      "checks": 0
+    }
+  },
+  "runtime": {
+    "unique_owner_resources": 9,
+    "core_tcm_mapped_bytes": 1581056,
+    "core_tcm_io": 0,
+    "cfg_mailbox_io": 0,
+    "irqs_requested": 5,
+    "gic_masked": 5,
+    "irq_cpu_counts": 0,
+    "generation": 0,
+    "queued_generation": 0,
+    "receive_start_called": false,
+    "probe_resource_request_attempted": false,
+    "explicit_26m_pin_verified": true,
+    "resource_mask": "0x02",
+    "usb_rounds": 3,
+    "wifi_rounds": 3,
+    "online_cpus": 8,
+    "ufs_disks_readonly": true,
+    "cache": "ext4 ro,norecovery",
+    "lower": "squashfs ro",
+    "root": "overlay",
+    "legacy_core0_access": "rejected",
+    "legacy_header_pending_attributes": "absent",
+    "fault_keyword_matches": 0
+  },
+  "limitations": [
+    "Mapping claims do not prove core1/TCM bus access or reset/stop semantics.",
+    "No core0/core1/TCM register reads/writes, reset, copies, awake, pending ACK, IRQ enable, SCP/MD start or READY.",
+    "No firmware/backup identity, coherence or old-message isolation established."
+  ],
+  "device_left_running": "db337399ee04",
+  "output_default_config_restored": true,
+  "evidence_directory": "/data/src/mainline/mt6893-direct/evidence/scp-core-tcm-reserve"
+}

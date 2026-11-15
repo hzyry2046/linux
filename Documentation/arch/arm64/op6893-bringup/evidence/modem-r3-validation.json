@@ -1,0 +1,59 @@
+{
+  "date": "2026-11-14",
+  "source_commit": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "implementation": "MT6893 AP MD1 MTCMOS backend and genpd integration, no board domain node",
+  "source_sha256": {
+    "drivers/pmdomain/mediatek/mt6893-md-power.c": "e8631246ca85c93a7ff2aa7d3f8d6064d998939f680c2cb0ed5fdf2da710fc33",
+    "drivers/pmdomain/mediatek/mt6893-md-power.h": "ed7da1bb62f7b462bb518a068024c41a64f1dff05f15030e2a108692d19d14bd",
+    "drivers/pmdomain/mediatek/mtk-pm-domains.c": "2c61f3a6b42cc57336fdf2f30d8eb0b428c7a807576518a99d75b9cf2d07f2f1",
+    "drivers/pmdomain/mediatek/mtk-pm-domains.h": "168d224e17a5d0d47c07cd64421c68509be5fb362b776646bfa2e075cb593eb7",
+    "drivers/pmdomain/mediatek/mt6893-pm-domains.h": "a0d9eb47cdcac405ee09ceae76e9a9e6437ddcfb2da61219b3e9694cc77d7467",
+    "drivers/pmdomain/mediatek/Makefile": "7d5b97c7e0f6425b793cdcce3e166cc4bdf8461f438b970ec28c97ddfd0e5cd8",
+    "include/dt-bindings/power/mediatek,mt6893-power.h": "d8c062d553159c89a74fe24824624cf3647379abd5bc45d3ebbe5a41d14aa43f",
+    "Documentation/arch/arm64/op6893-bringup/tools/test_modem_power.py": "2fad1ab176f41ada9b946b18b2971003f1042614747883ce427fe853f14a5450"
+  },
+  "host_tests": {
+    "actual_c": true,
+    "sanitizers": [
+      "ASan",
+      "UBSan"
+    ],
+    "normal_order_and_adjacent_bits": "passed",
+    "failed_transition_steps": 21,
+    "initial_read_errors": 6,
+    "rejected_initial_states": 8,
+    "stuck_ack_paths": 5,
+    "fault_latch_both_directions": "passed",
+    "board_and_merged_dtb_no_md1_domain": "passed",
+    "log": "/data/src/mainline/mt6893-direct/modem-r3-tests.log"
+  },
+  "build": {
+    "arch": "arm64",
+    "compiler": "aarch64-linux-gnu-gcc (GCC) 16.2.0",
+    "targets": [
+      "Image.gz",
+      "modules"
+    ],
+    "result": "passed, no compiler warnings",
+    "mt6893_backend_and_genpd": "built-in",
+    "lk_inspector": "n",
+    "resource_inspector": "n (hidden while CCIF option disabled)",
+    "ccif_optional_gates": "n",
+    "config": "/data/src/mainline/mt6893-direct/modem-r3-default.config",
+    "log": "/data/src/mainline/mt6893-direct/modem-r3-build.log"
+  },
+  "checkpatch": {
+    "code": "0 errors, 0 warnings, 0 checks",
+    "dt_binding_header": "0 errors, 0 warnings, 0 checks",
+    "new_c_and_header": "0 errors, 0 warnings, 0 checks"
+  },
+  "hardware_validation": {
+    "M0_image": "fe077e30d191",
+    "R3_power_sequence": "not tested; not in flashed image"
+  },
+  "limits": [
+    "regmap stubs do not emulate physical rails, secure/remote masters or a non-returning bus access",
+    "genpd integration compiled and reviewed, not runtime exercised",
+    "SID3 lifecycle, SCP RV, CCISM, platform resource ownership and ATF release remain prerequisites"
+  ]
+}

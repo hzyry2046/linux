@@ -1,0 +1,113 @@
+{
+  "date": "2026-11-15",
+  "source_commit": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "scope": "R5.1 pure SCP mailbox layout and APCCCI codec; no hardware entry point",
+  "mailbox_fixture": {
+    "source": "saved ACK DTB /scp@10700000 and audited projection",
+    "mboxes": 5,
+    "tx_channels": 14,
+    "rx_channels": 17,
+    "used_words": [
+      38,
+      64,
+      64,
+      36,
+      64
+    ],
+    "apccci_tx": {
+      "channel": 3,
+      "mbox": 1,
+      "word_offset": 0,
+      "irq_bit": 0,
+      "message_bytes": 8
+    },
+    "apccci_rx": {
+      "channel": 7,
+      "mbox": 1,
+      "word_offset": 28,
+      "irq_bit": 14,
+      "message_bytes": 8
+    }
+  },
+  "tests": {
+    "actual_helper_c": true,
+    "sanitizers": [
+      "address",
+      "undefined"
+    ],
+    "vendor_layout_oracles": 2,
+    "valid_random_layouts_per_oracle": 10000,
+    "malformed_random_inputs": 20000,
+    "cases": [
+      "table shape, bounds, duplicates, sorting and shared occupancy",
+      "APCCCI pin format and absence rejection",
+      "unaligned little-endian 8/16-byte encoding and exact 8-byte receive",
+      "short buffer unchanged and failed outputs cleared",
+      "SHM whole-span u32 bounds and u64 overflow candidates"
+    ]
+  },
+  "build": {
+    "arch": "arm64",
+    "cross_compile": "aarch64-linux-gnu-",
+    "targets": [
+      "Image.gz",
+      "modules",
+      "modpost"
+    ],
+    "enabled_passed": true,
+    "enabled_without_lk_resources_ccif": true,
+    "five_public_functions_linked": true,
+    "default_passed": true,
+    "default_symbols_absent": true,
+    "warnings": 0,
+    "new_boot_packaged": false,
+    "new_image_flashed": false,
+    "default_defconfig_unchanged": true
+  },
+  "checkpatch": {
+    "errors": 0,
+    "warnings": 0,
+    "checks": 0,
+    "files": [
+      "ccci-scp-protocol.c",
+      "ccci-scp-protocol.h",
+      "Kconfig",
+      "Makefile"
+    ],
+    "ignored": [
+      "FILE_PATH_CHANGES"
+    ]
+  },
+  "limits": [
+    "No mailbox MMIO, IRQ, locks, barriers, busy/ACK or firmware consumer test",
+    "No OF/property acquisition, clock/awake, memory mapping or remoteproc driver",
+    "No SCP READY or CCISM FSM transitions, restart-generation tracking or timeout implementation",
+    "SHM wire representability does not establish address translation, EMI permission or write ownership",
+    "No device operations this turn; previous runtime image excludes new helpers"
+  ],
+  "source_sha256": {
+    "drivers/misc/mediatek/ccci/ccci-scp-protocol.c": "fa36c12ab906466e7227f68d3df33099c21ac1c43004d15d7c21cdba7c18e740",
+    "drivers/misc/mediatek/ccci/ccci-scp-protocol.h": "8f5908ee5f6e987764ca16476a4dac2913c2aadebfe6c4d1bdc376785ac9e91f",
+    "drivers/misc/mediatek/ccci/Kconfig": "3bf4f8e59ee3e285e08d1c29eaa3b19a8de5799403575aa34b1eececb8639906",
+    "drivers/misc/mediatek/ccci/Makefile": "eaa5a42376d38e7e0d36e903400dbc5013cd0ad42c4f71f305f0bde10824a052",
+    "Documentation/arch/arm64/op6893-bringup/tools/test_modem_scp.py": "28984e1d09d290fa03940d899e49c897bc5ca1f80924b103cf7e1130f1ced9bd"
+  },
+  "reference_source_sha256": {
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_wrapper_ipi.c": "3996015877abf60edc99d0e135a5b90135339fed2a4ff656b84111a7e31a0bd1",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_wrapper_ipi.c": "3996015877abf60edc99d0e135a5b90135339fed2a4ff656b84111a7e31a0bd1",
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/eccci/fsm/ccci_fsm_internal.h": "37de993b60706e1435e8b9c7df12c3784534f895ef968f5df9208f4c17fd6924",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/eccci/fsm/ccci_fsm_scp_c.h": "c53131fc8c07334d0553cd8dd4d4048a1256f6f18063981481a59a611d8987a3",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/eccci/fsm/ccci_fsm_scp_c.c": "f8f17bd1d2a924e1e1d6c926fa01449c6a8de4ce8abc429ef56fac2b91bd29ec"
+  },
+  "external_logs": {
+    "modem-scp-tests.log": "/data/src/mainline/mt6893-direct/modem-scp-tests.log",
+    "modem-scp-tests-with-vendor.log": "/data/src/mainline/mt6893-direct/modem-scp-tests-with-vendor.log",
+    "modem-scp-build.log": "/data/src/mainline/mt6893-direct/modem-scp-build.log",
+    "modem-scp-default-build.log": "/data/src/mainline/mt6893-direct/modem-scp-default-build.log",
+    "modem-scp-checkpatch.log": "/data/src/mainline/mt6893-direct/modem-scp-checkpatch.log",
+    "modem-scp-enabled.config": "/data/src/mainline/mt6893-direct/modem-scp-enabled.config",
+    "modem-scp-default.config": "/data/src/mainline/mt6893-direct/modem-scp-default.config",
+    "modem-scp-symbols.log": "/data/src/mainline/mt6893-direct/modem-scp-symbols.log",
+    "modem-scp-default-symbols.log": "/data/src/mainline/mt6893-direct/modem-scp-default-symbols.log"
+  }
+}

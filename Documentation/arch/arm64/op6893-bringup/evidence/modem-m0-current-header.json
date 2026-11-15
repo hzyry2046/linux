@@ -1,0 +1,19 @@
+{
+  "date": "2026-11-14",
+  "source": "Connected Android device, read-only adb exec-out cat of /proc/device-tree/{chosen,mddriver}/ccci,modem_info_v2",
+  "property_bytes": 48,
+  "copies_identical": true,
+  "base": "0xbff70000",
+  "size": "0xa68",
+  "version": 3,
+  "tag_count": 20,
+  "load_flag": 1,
+  "error": 0,
+  "md_errors": [
+    0,
+    0,
+    0,
+    0
+  ],
+  "limits": "Header only; no physical tag buffer, shared memory, firmware, NVRAM or device identity read. No reboot or flash."
+}

@@ -1,0 +1,1280 @@
+{
+  "date": "2026-11-14",
+  "scope": "Offline source fingerprints and allowlisted historical DT hardware properties only. No device access, DTB hash, private payload or runtime proof.",
+  "sources": {
+    "A": {
+      "root": "/data/src/kernel_oddo_mt6893",
+      "head": "9e2043b0b88ca4ef3970aa64f3498fe608c9ddec",
+      "files": [
+        {
+          "path": "arch/arm64/configs/mt6893_defconfig",
+          "bytes": 174423,
+          "sha256": "7b0cb3b25947bb89304280925e9207e714cbd512b7189741ba0a0c13a4067643",
+          "anchors": {
+            "CONFIG_MTK_TINYSYS_SCP": [
+              2083,
+              2084,
+              2085,
+              2086
+            ]
+          }
+        },
+        {
+          "path": "drivers/clk/mediatek/clk-mt6885-pg.c",
+          "bytes": 165320,
+          "sha256": "a170de98b741aeb62b8d3ef8406540ceedc6094f62edf1f077ecfc8c2b4629aa",
+          "anchors": {
+            "int spm_mtcmos_ctrl_md1(": [
+              1202
+            ]
+          }
+        },
+        {
+          "path": "drivers/clk/mediatek/clk-mt6885.c",
+          "bytes": 89197,
+          "sha256": "9dfe1444a4da39e4002e49ddf3a18809459e2c6b0649ff5321a3856d185d126f",
+          "anchors": {
+            "#define GATE_IFRAO4_IGN": [
+              2229
+            ]
+          }
+        },
+        {
+          "path": "drivers/regulator/mt6315-misc.c",
+          "bytes": 12619,
+          "sha256": "e23893f0964c6633c9c3d63e34502b525c379f1cf79d3cf8fb216740573ffe74",
+          "anchors": {
+            "static void mt6315_S3_default_vosel(": [
+              50
+            ]
+          }
+        },
+        {
+          "path": "include/linux/mfd/mt6315/registers.h",
+          "bytes": 336306,
+          "sha256": "c416c13ae27f94ad0a0328c0679cd936d1de21239c0fe033c60b37c376d45d5e",
+          "anchors": {
+            "#define MT6315_PMIC_DA_VBUCK": [
+              3535,
+              3537,
+              3538,
+              3539,
+              3541,
+              3542,
+              3543,
+              3545,
+              3546,
+              3547,
+              3549,
+              3550,
+              3551,
+              3553,
+              3554,
+              3555,
+              3557,
+              3558,
+              3559,
+              3561,
+              3562,
+              3563,
+              3565,
+              3566,
+              3567,
+              3569,
+              3570,
+              3571,
+              3573,
+              3574,
+              3575,
+              3577,
+              3578,
+              3579,
+              3581,
+              3582,
+              3583,
+              3585,
+              3586,
+              3835,
+              3837,
+              3838,
+              3839,
+              3841,
+              3842,
+              3843,
+              3845,
+              3846,
+              3847,
+              3849,
+              3850,
+              3851,
+              3853,
+              3854,
+              3855,
+              3857,
+              3858,
+              3859,
+              3861,
+              3862,
+              3863,
+              3865,
+              3866,
+              3867,
+              3869,
+              3870,
+              3871,
+              3873,
+              3874,
+              3875,
+              3877,
+              3878,
+              3879,
+              3881,
+              3882,
+              3883,
+              3885,
+              3886,
+              4135,
+              4137,
+              4138,
+              4139,
+              4141,
+              4142,
+              4143,
+              4145,
+              4146,
+              4147,
+              4149,
+              4150,
+              4151,
+              4153,
+              4154,
+              4155,
+              4157,
+              4158,
+              4159,
+              4161,
+              4162,
+              4163,
+              4165,
+              4166,
+              4167,
+              4169,
+              4170,
+              4171,
+              4173,
+              4174,
+              4175,
+              4177,
+              4178,
+              4179,
+              4181,
+              4182,
+              4183,
+              4185,
+              4186,
+              4455,
+              4457,
+              4458,
+              4459,
+              4461,
+              4462,
+              4463,
+              4465,
+              4466,
+              4467,
+              4469,
+              4470,
+              4471,
+              4473,
+              4474,
+              4475,
+              4477,
+              4478,
+              4479,
+              4481,
+              4482,
+              4483,
+              4485,
+              4486,
+              4487,
+              4489,
+              4490,
+              4491,
+              4493,
+              4494,
+              4495,
+              4497,
+              4498,
+              4499,
+              4501,
+              4502,
+              4503,
+              4505,
+              4506
+            ]
+          }
+        },
+        {
+          "path": "drivers/misc/mediatek/pmic/mt6359p/v1/pmic.c",
+          "bytes": 5372,
+          "sha256": "72e7764f212ba39d91fa279a7066f5c578355c7063cd49ae250cc79fea786e13",
+          "anchors": {
+            "void vmd1_pmic_setting_on(": [
+              31
+            ]
+          }
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/mt6885/modem_secure_base.h",
+          "bytes": 967,
+          "sha256": "9efb4af78aecca546bc01621714052b93c9ba1a275ae05e668995f4ef3a3f54f",
+          "anchors": {
+            "enum CCCI_SECURE_REQ_ID": [
+              12
+            ]
+          }
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/mt6885/modem_reg_base.h",
+          "bytes": 902,
+          "sha256": "c8f6da9d1899b73ac5738565ddac21e0f10b27a2f901029ba26db6e047b1edff",
+          "anchors": {
+            "INFRA_AO_MD_SRCCLKENA": [
+              14
+            ]
+          }
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/mt6885/ccci_platform.c",
+          "bytes": 7178,
+          "sha256": "ce9bade3ace7fc9f490bd3ead4f3736cca1bd409e0e1563bbf0ca5ec09984f89",
+          "anchors": {
+            "mt_secure_call(": [
+              45
+            ]
+          }
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/mt6885/md_sys1_platform.c",
+          "bytes": 29025,
+          "sha256": "6a8574b801e57ccfeda9e6152dd34e9e55c0970515de09306e7c3dbec3a99f58",
+          "anchors": {
+            "int md_start_platform(": [
+              68,
+              711
+            ],
+            "int md_cd_power_on(": [
+              69,
+              779
+            ],
+            "int md_cd_let_md_go(": [
+              73,
+              834
+            ]
+          }
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/modem_sys1.c",
+          "bytes": 42637,
+          "sha256": "17d8291d852914ad0513ae10e341e600a62c98f89ccb459f295613e91969fad2",
+          "anchors": {
+            "static int md_cd_start(": [
+              349
+            ]
+          }
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/hif/ccci_hif_ccif.c",
+          "bytes": 71328,
+          "sha256": "26d42e99574d1d00be25d2922dca33c70c64ec0f1ad69554d53ec4364619f80e",
+          "anchors": {
+            "ccif_clk_table[]": [
+              55
+            ],
+            "scp_clk_table[]": [
+              64
+            ],
+            "void scp_set_clk_off(": [
+              1924
+            ]
+          }
+        },
+        {
+          "path": "include/linux/soc/mediatek/mtk_sip_svc.h",
+          "bytes": 5204,
+          "sha256": "c89d5ed834bf66d1d94370190aa69e119f8de47bce9663f2d642d4ae612d5c60",
+          "anchors": {
+            "MTK_SIP_KERNEL_CCCI_CONTROL": [
+              150
+            ]
+          }
+        }
+      ]
+    },
+    "V": {
+      "root": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6",
+      "head": "4a9ae821ffda7776d9c96ecae82aca1038a2a02a",
+      "files": [
+        {
+          "path": "drivers/clk/mediatek/clk-mt6893-pg.c",
+          "bytes": 177025,
+          "sha256": "00434a0558206121494132e0b462791fe0edb88f1b990da1c77373019a5a4480",
+          "anchors": {
+            "PGATE(SCP_SYS_MD1": [
+              5106
+            ]
+          }
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/fsm/md_sys1_platform.c",
+          "bytes": 73161,
+          "sha256": "7890d509a28ebd7dcb2c29db6a3738a372155f702b00a4c05376a5d8dbb03d58",
+          "anchors": {
+            "md_s3_vosel_restore": [
+              1841,
+              1896
+            ]
+          }
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/fsm/ccci_fsm_scp_c.c",
+          "bytes": 17945,
+          "sha256": "f8f17bd1d2a924e1e1d6c926fa01449c6a8de4ce8abc429ef56fac2b91bd29ec",
+          "anchors": {
+            "int fsm_ccism_init_ack_handler(": [
+              382
+            ],
+            "static int ccif_scp_clk_init(": [
+              477
+            ]
+          }
+        },
+        {
+          "path": "drivers/misc/mediatek/scp/Makefile",
+          "bytes": 554,
+          "sha256": "4c99525736ca689e0533eab0622a3e6267fda024834d0e572bdd40707d74a9e6",
+          "anchors": {
+            "CONFIG_MTK_TINYSYS_SCP_CM4_SUPPORT": [
+              13
+            ]
+          }
+        },
+        {
+          "path": "drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "bytes": 104588,
+          "sha256": "2e6278eaef7708d1ad2ebf1ff7895341dbf140815dc9c7927cc40318f31310a2",
+          "anchors": {
+            "void scp_region_info_init(": [
+              2413,
+              2422
+            ],
+            "void scp_recovery_init(": [
+              2425
+            ],
+            "scpsys_of_ids[]": [
+              3443
+            ]
+          }
+        },
+        {
+          "path": "drivers/misc/mediatek/scp/rv/scp_awake.c",
+          "bytes": 11757,
+          "sha256": "426279da2106dc33909faf2fb8a5f97a34617f8e95b548c63acd155559efdb2f",
+          "anchors": {
+            "INFRA_IRQ_SET": [
+              94,
+              96,
+              119,
+              126,
+              131,
+              243,
+              245,
+              268,
+              275
+            ]
+          }
+        }
+      ]
+    },
+    "M": {
+      "root": "/data/src/mainline/linux",
+      "head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+      "files": [
+        {
+          "path": "drivers/pmdomain/mediatek/mtk-pm-domains.c",
+          "bytes": 40505,
+          "sha256": "7c270b5541008e80eba016f0da0aea109af5e824d0d85549843c8810853b415c",
+          "anchors": {
+            "static int scpsys_modem_pwrseq_off(": [
+              648
+            ],
+            "pd->data->ext_buck_iso_offs": [
+              710,
+              711,
+              803,
+              804
+            ]
+          }
+        },
+        {
+          "path": "drivers/pmdomain/mediatek/mt6893-pm-domains.h",
+          "bytes": 18800,
+          "sha256": "e4c7375a5de1545338823a99a585c1b169ad9f965859aac1881cf191f556d774",
+          "anchors": {}
+        },
+        {
+          "path": "drivers/clk/mediatek/clk-mt6893-pmif.c",
+          "bytes": 7890,
+          "sha256": "22a0fceda6b68b2ee0d831a61f2407918f3b4a5f04d521269282d51574773d1a",
+          "anchors": {}
+        },
+        {
+          "path": "drivers/regulator/mt6315-regulator.c",
+          "bytes": 8308,
+          "sha256": "0c0326c9999adeffefe2784d87a86724f50c4f06f39c367fdcaf6b504e2fc952",
+          "anchors": {
+            ".get_voltage_sel": [
+              183
+            ],
+            "MT_BUCK(\"vbuck": [
+              194,
+              195,
+              196,
+              197
+            ]
+          }
+        },
+        {
+          "path": "drivers/regulator/mt6359-regulator.c",
+          "bytes": 43033,
+          "sha256": "8d69fe4466dfdbe848dedde99db964b71ded2c83b000838369011b6e748c861d",
+          "anchors": {
+            "MT6359_DA_VPU_EN_ADDR": [
+              522,
+              752
+            ]
+          }
+        },
+        {
+          "path": "arch/arm64/boot/dts/mediatek/mt6893-op6893-boot.dts",
+          "bytes": 21857,
+          "sha256": "20a642c0b6586e6be612014d6433d1380b6e4f0da96d3ab3052d874cc30f8170",
+          "anchors": {
+            "spmi: spmi@": [
+              308
+            ],
+            "modem-handoff": [
+              19,
+              20
+            ]
+          }
+        }
+      ]
+    },
+    "Q": {
+      "root": "/data/src/mainline/linux-qqcandy-6.18",
+      "head": "3e9df2e462107fcd597f00fdbdc8d9b8f40f36b1",
+      "files": [
+        {
+          "path": "arch/arm64/boot/dts/mediatek/mt6895-oplus-qqcandy.dts",
+          "bytes": 67631,
+          "sha256": "e8ac23cd09ef274b8ff8416d5d1b4376f07ff8a3f0f7d0815ff2f3da32e4acc6",
+          "anchors": {}
+        }
+      ]
+    }
+  },
+  "historical_fdt": {
+    "path": "/data/src/mainline/mt6893-direct/evidence/ack-live.dtb",
+    "cell_encoding": "big-endian u32, rendered as hex; reg is untranslated parent-bus cells",
+    "nodes": {
+      "/scpsys@10006000": {
+        "compatible": [
+          "mediatek,mt6893-scpsys",
+          "syscon"
+        ],
+        "reg": [
+          "0x0",
+          "0x10006000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x10001000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x10000000",
+          "0x0",
+          "0x1000"
+        ]
+      },
+      "/mddriver": {
+        "compatible": [
+          "mediatek,mddriver"
+        ],
+        "clock-names": [
+          "scp-sys-md1-main",
+          "infra-dpmaif-clk",
+          "infra-dpmaif-blk-clk",
+          "infra-ccif-ap",
+          "infra-ccif-md",
+          "infra-ccif1-ap",
+          "infra-ccif1-md",
+          "infra-ccif2-ap",
+          "infra-ccif2-md",
+          "infra-ccif4-md",
+          "infra-ccif5-md"
+        ],
+        "reg": [
+          "0x0",
+          "0x10209000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x1020a000",
+          "0x0",
+          "0x1000"
+        ],
+        "interrupts": [
+          "0x0",
+          "0x4e",
+          "0x1",
+          "0x0",
+          "0xc2",
+          "0x4",
+          "0x0",
+          "0xc3",
+          "0x4"
+        ],
+        "clocks-resolved": [
+          {
+            "provider": "/scpsys@10006000",
+            "args": [
+              0
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              74
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              39
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              33
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              35
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              28
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              29
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              68
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              69
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              76
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              67
+            ]
+          }
+        ]
+      },
+      "/ccifdriver@10209000": {
+        "compatible": [
+          "mediatek,ccci_ccif"
+        ],
+        "clock-names": [
+          "infra-ccif-ap",
+          "infra-ccif-md",
+          "infra-ccif1-ap",
+          "infra-ccif1-md",
+          "infra-ccif2-ap",
+          "infra-ccif2-md",
+          "infra-ccif4-md",
+          "infra-ccif5-md"
+        ],
+        "reg": [
+          "0x0",
+          "0x10209000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x1020a000",
+          "0x0",
+          "0x1000"
+        ],
+        "interrupts": [
+          "0x0",
+          "0xc2",
+          "0x4",
+          "0x0",
+          "0xc3",
+          "0x4"
+        ],
+        "clocks-resolved": [
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              33
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              35
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              28
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              29
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              68
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              69
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              76
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              67
+            ]
+          }
+        ]
+      },
+      "/ap_ccif2@1023c000": {
+        "compatible": [
+          "mediatek,ap_ccif2"
+        ],
+        "reg": [
+          "0x0",
+          "0x1023c000",
+          "0x0",
+          "0x1000"
+        ],
+        "interrupts": [
+          "0x0",
+          "0xc6",
+          "0x4"
+        ]
+      },
+      "/md_ccif2@1023d000": {
+        "compatible": [
+          "mediatek,md_ccif2"
+        ],
+        "reg": [
+          "0x0",
+          "0x1023d000",
+          "0x0",
+          "0x1000"
+        ]
+      },
+      "/dpmaif@10014000": {
+        "compatible": [
+          "mediatek,dpmaif"
+        ],
+        "clock-names": [
+          "infra-dpmaif-clk",
+          "infra-dpmaif-blk-clk"
+        ],
+        "reg": [
+          "0x0",
+          "0x10014000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x1022d000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x1022c000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x1022e000",
+          "0x0",
+          "0x1000"
+        ],
+        "interrupts": [
+          "0x0",
+          "0xd1",
+          "0x4"
+        ],
+        "clocks-resolved": [
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              74
+            ]
+          },
+          {
+            "provider": "/syscon@10001000",
+            "args": [
+              39
+            ]
+          }
+        ]
+      },
+      "/scp@10700000": {
+        "compatible": [
+          "mediatek,scp"
+        ],
+        "unterminated-string-properties": [
+          "status"
+        ],
+        "status": [
+          "okay"
+        ],
+        "reg-names": [
+          "scp_sram_base",
+          "scp_cfgreg",
+          "scp_clkreg",
+          "scp_cfgreg_core0",
+          "scp_cfgreg_core1",
+          "scp_bus_tracker",
+          "scp_l1creg",
+          "scp_cfgreg_sec",
+          "mbox0_base",
+          "mbox0_set",
+          "mbox0_clr",
+          "mbox0_init",
+          "mbox1_base",
+          "mbox1_set",
+          "mbox1_clr",
+          "mbox1_init",
+          "mbox2_base",
+          "mbox2_set",
+          "mbox2_clr",
+          "mbox2_init",
+          "mbox3_base",
+          "mbox3_set",
+          "mbox3_clr",
+          "mbox3_init",
+          "mbox4_base",
+          "mbox4_set",
+          "mbox4_clr",
+          "mbox4_init"
+        ],
+        "interrupt-names": [
+          "ipc0",
+          "ipc1",
+          "mbox0",
+          "mbox1",
+          "mbox2",
+          "mbox3",
+          "mbox4"
+        ],
+        "core_0": [
+          "enable"
+        ],
+        "scp_mem_key": [
+          "mediatek,reserve-memory-scp_share"
+        ],
+        "reg": [
+          "0x0",
+          "0x10500000",
+          "0x0",
+          "0x180000",
+          "0x0",
+          "0x10724000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x10721000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x10730000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x10740000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x10752000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x10760000",
+          "0x0",
+          "0x40000",
+          "0x0",
+          "0x107a5000",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107fb000",
+          "0x0",
+          "0x100",
+          "0x0",
+          "0x107fb100",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107fb10c",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107a5020",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107fc000",
+          "0x0",
+          "0x100",
+          "0x0",
+          "0x107fc100",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107fc10c",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107a5024",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107fd000",
+          "0x0",
+          "0x100",
+          "0x0",
+          "0x107fd100",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107fd10c",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107a5028",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107fe000",
+          "0x0",
+          "0x100",
+          "0x0",
+          "0x107fe100",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107fe10c",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107a502c",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107ff000",
+          "0x0",
+          "0x100",
+          "0x0",
+          "0x107ff100",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107ff10c",
+          "0x0",
+          "0x4",
+          "0x0",
+          "0x107a5030",
+          "0x0",
+          "0x4"
+        ],
+        "interrupts": [
+          "0x0",
+          "0x1b2",
+          "0x4",
+          "0x0",
+          "0x1b3",
+          "0x4",
+          "0x0",
+          "0x1b4",
+          "0x4",
+          "0x0",
+          "0x1b5",
+          "0x4",
+          "0x0",
+          "0x1b6",
+          "0x4",
+          "0x0",
+          "0x1b7",
+          "0x4",
+          "0x0",
+          "0x1b8",
+          "0x4"
+        ],
+        "core_nums": [
+          "0x2"
+        ],
+        "twohart": [
+          "0x0"
+        ],
+        "mbox_count": [
+          "0x5"
+        ],
+        "scp_sramSize": [
+          "0x180000"
+        ],
+        "send_table": [
+          "0x0",
+          "0x0",
+          "0x9",
+          "0x3",
+          "0x1",
+          "0x2",
+          "0x4",
+          "0x1",
+          "0x1",
+          "0x5",
+          "0x1",
+          "0x2",
+          "0x6",
+          "0x1",
+          "0x1",
+          "0x1a",
+          "0x1",
+          "0x9",
+          "0x21",
+          "0x1",
+          "0xa",
+          "0xb",
+          "0x2",
+          "0x22",
+          "0xe",
+          "0x3",
+          "0x1",
+          "0xf",
+          "0x3",
+          "0x2",
+          "0x10",
+          "0x3",
+          "0x1",
+          "0x11",
+          "0x3",
+          "0x6",
+          "0x12",
+          "0x3",
+          "0x2",
+          "0x18",
+          "0x4",
+          "0x22"
+        ],
+        "recv_table": [
+          "0x1",
+          "0x0",
+          "0x2",
+          "0x0",
+          "0x2",
+          "0x0",
+          "0x1a",
+          "0x0",
+          "0x7",
+          "0x1",
+          "0x2",
+          "0x0",
+          "0x8",
+          "0x1",
+          "0xa",
+          "0x0",
+          "0x9",
+          "0x1",
+          "0x1",
+          "0x0",
+          "0xa",
+          "0x1",
+          "0x2",
+          "0x0",
+          "0x1b",
+          "0x1",
+          "0x2",
+          "0x0",
+          "0x1c",
+          "0x1",
+          "0x5",
+          "0x0",
+          "0x5",
+          "0x1",
+          "0x1",
+          "0x1",
+          "0x22",
+          "0x1",
+          "0xa",
+          "0x0",
+          "0xc",
+          "0x2",
+          "0x1e",
+          "0x0",
+          "0x14",
+          "0x3",
+          "0xa",
+          "0x0",
+          "0x15",
+          "0x3",
+          "0x6",
+          "0x0",
+          "0x16",
+          "0x3",
+          "0x1",
+          "0x0",
+          "0x17",
+          "0x3",
+          "0x2",
+          "0x0",
+          "0xf",
+          "0x3",
+          "0x1",
+          "0x1",
+          "0x19",
+          "0x4",
+          "0x1e",
+          "0x0"
+        ],
+        "legacy_table": [
+          "0xb",
+          "0x18",
+          "0xc",
+          "0x19",
+          "0x22",
+          "0x1e"
+        ],
+        "scp_feature_tbl": [
+          "0x0",
+          "0x5",
+          "0x1",
+          "0x1",
+          "0x1d",
+          "0x0",
+          "0x2",
+          "0x1a",
+          "0x0",
+          "0x3",
+          "0x0",
+          "0x0",
+          "0x4",
+          "0xc8",
+          "0x1",
+          "0x5",
+          "0x4d",
+          "0x0",
+          "0x6",
+          "0xc8",
+          "0x1",
+          "0x7",
+          "0xa",
+          "0x1",
+          "0xd",
+          "0xc8",
+          "0x0"
+        ],
+        "scp_mem_tbl": [
+          "0x0",
+          "0x0",
+          "0x1",
+          "0x4a700",
+          "0x2",
+          "0x100000",
+          "0x3",
+          "0x180000",
+          "0x4",
+          "0x19000",
+          "0x5",
+          "0xa000",
+          "0x8",
+          "0x10000",
+          "0x9",
+          "0x1000",
+          "0xa",
+          "0x2000"
+        ]
+      },
+      "/scp_clk_ctrl@10721000": {
+        "compatible": [
+          "mediatek,scp_clk_ctrl",
+          "syscon"
+        ],
+        "reg": [
+          "0x0",
+          "0x10721000",
+          "0x0",
+          "0x1000"
+        ]
+      },
+      "/scp_infra@10001000": {
+        "compatible": [
+          "mediatek,scpinfra",
+          "syscon"
+        ],
+        "reg": [
+          "0x0",
+          "0x10001000",
+          "0x0",
+          "0x1000"
+        ]
+      },
+      "/scp_dvfs": {
+        "compatible": [
+          "mediatek,scp_dvfs"
+        ],
+        "clock-names": [
+          "clk_mux",
+          "clk_pll_0",
+          "clk_pll_1",
+          "clk_pll_2",
+          "clk_pll_3",
+          "clk_pll_4",
+          "clk_pll_5",
+          "clk_pll_6",
+          "clk_pll_7"
+        ],
+        "clocks-resolved": [
+          {
+            "provider": "/syscon@10000000",
+            "args": [
+              191
+            ]
+          },
+          {
+            "provider": "/syscon@10000000",
+            "args": [
+              100
+            ]
+          },
+          {
+            "provider": "/syscon@10000000",
+            "args": [
+              34
+            ]
+          },
+          {
+            "provider": "/syscon@10000000",
+            "args": [
+              19
+            ]
+          },
+          {
+            "provider": "/syscon@10000000",
+            "args": [
+              18
+            ]
+          },
+          {
+            "provider": "/syscon@10000000",
+            "args": [
+              39
+            ]
+          },
+          {
+            "provider": "/syscon@10000000",
+            "args": [
+              10
+            ]
+          },
+          {
+            "provider": "/syscon@10000000",
+            "args": [
+              15
+            ]
+          },
+          {
+            "provider": "/syscon@10000000",
+            "args": [
+              31
+            ]
+          }
+        ]
+      },
+      "/reserved-memory/mblock-21-SCP-reserved": {
+        "compatible": [
+          "mediatek,SCP-reserved"
+        ],
+        "reg": [
+          "0x0",
+          "0x9fa00000",
+          "0x0",
+          "0x500000"
+        ],
+        "no-map": true
+      },
+      "/reserved-memory/reserve-memory-scp_share": {
+        "compatible": [
+          "mediatek,reserve-memory-scp_share"
+        ],
+        "size": [
+          "0x0",
+          "0x320000"
+        ],
+        "alignment": [
+          "0x0",
+          "0x1000000"
+        ],
+        "alloc-ranges": [
+          "0x0",
+          "0x50000000",
+          "0x0",
+          "0x40000000"
+        ],
+        "no-map": true
+      }
+    }
+  }
+}

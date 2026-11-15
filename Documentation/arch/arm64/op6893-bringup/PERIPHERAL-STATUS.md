@@ -11,6 +11,10 @@ attempt97 及之前的寄存器级 CONN 行为保留作历史记录。
 “实测”仅覆盖表中列出的行为；“部分”表示可用但仍依赖 LK 状态、临时配置
 或缺少关键功能；“未启用”不表示硬件损坏或永远无法支持。
 
+2026-11-14 基带接续实测镜像为 `fe077e30d191`：只启用 LK metadata 检查，
+USB/Wi-Fi SSH 和外置 rootfs 正常；MD/SCP 尚未启动。详见 [R3](MODEM-R3.md)。
+上文 attempt106 镜像编号是历史连接性基线，后续各条按所引记录判断。
+
 ## 已运行与部分支持
 
 | 硬件/功能 | 当前状态 | 已验证内容 | 限制与下一步 | 证据 |
@@ -91,7 +95,7 @@ attempt97 及之前的寄存器级 CONN 行为保留作历史记录。
 | 音频 / 耳机检测 | 未启用 | codec、AFE、时钟/供电和路由待实现；accdet 尚未接入 |
 | 摄像头 / ISP | 未启用 | 传感器型号、总线、供电、时钟、ISP 管线待调查 |
 | RTC / 持久时间 | 未启用 | RTC_CLASS 关闭；不能用启动日志时间作为准确实时时钟 |
-| modem / 蜂窝 / GNSS | 未启用 | 远端处理器、固件、共享内存和通信接口待调查 |
+| modem / 蜂窝 / GNSS | 未启用 | LK 及供电/普通 CCIF 引用已验收；SCP 协议基础仅主机验证，transport/固件/CCISM 待实现 |
 | NFC / 指纹 / 振动 / IMU 等传感器 | 未验证、未建立支持 | 需逐项识别本机硬件及资源，不能借用同品牌另一机型结论 |
 | UFS 写入、USB host、运行时自动挂起 | 未验证 | 目前测试策略不覆盖这些行为 |
 | pstore 故障恢复链路 | 历史不可靠，非保证能力 | 用户指出 fastboot oem peek 可读保留内存；不能把无 pstore 当作内核未执行的证明 |
@@ -325,3 +329,259 @@ GLES 3.1。离屏三角形渲染像素正确，2000 帧无 GPU fault。panvk 不
 suspend，根因未明）；导出的 dumb buffer 与非 coherent 的 GPU 之间没有 cache 同步，
 造成 16 像素长的闪烁短线（在 DRM prime 与 framebuffer helper 中补上同步）。
 全屏纯色翻页测试 3800 帧无错误像素。见 [123](evidence/attempt-123.md)。
+
+## 2026-11-14：基带方案分析，尚未启用
+
+完成本机 Android 4.19、同板 6.6 移植与 qqcandy MT6895 的内核侧对比。
+计划以本机硬件定义和 6.6 功能栈为底本，先建立 LK 交接/布局解析、平台资源、
+SCP/CCISM、CCIF/FSM 和端口框架，再接 DPMAIF v2。当前没有主线基带运行证据；
+其他树的 READY 或节点注册不计作本机支持。详见 [MODEM-PLAN](MODEM-PLAN.md)。
+图形后续工作见 [GRAPHICS-TODO](GRAPHICS-TODO.md)。
+
+基带 M0 随后完成交接和被动解析框架、合成输入/真实合并器测试及 ARM64 内核/
+模块构建。Android 两份 header 只读核对通过；未重启刷写，检查节点默认关闭，
+没有主线基带实测支持。见 [MODEM-M0](MODEM-M0.md)。
+
+随后完成 [M1 离线资源审计](MODEM-RESOURCES.md)，校正 SCP RV 分支、
+SID3 三路加 VPU/VRFDIG、六加二 CCIF 时钟及 AP MTCMOS/ATF 边界。
+仅增加文档和离线审计工具，没有新增设备操作或基带支持验收。
+
+后续完成 [R1/R2 第一批资源框架](MODEM-R1-R2.md)：SID3/VPU disabled 描述、
+四个普通 CCIF gate、独立 supply/clock 引用检查模块。开关默认关闭，主机
+测试和 ARM64 编译通过；没有设备操作，也不新增基带可用性结论。
+
+
+## 2026-11-14：M0 主线实机验收与 MD1 电源首版
+
+`fe077e30d191` 的本次 LK header 和真实 tag/layout 检查成功：version 3、
+20 tags、2664 bytes、CCB 存在。USB ECM SSH、独立 Wi-Fi SSH、外网 ping、
+cache ext4 + SquashFS/Overlay rootfs 回归通过。检查器没有启动 modem/SCP。
+
+MD1 AP MTCMOS 序列与 genpd 接入已完成主机错误注入/超时测试和 ARM64 编译；
+没有板级 MD 域节点，未刷入这批电源代码，不能记作基带上下电实测。SID3
+shutdown、电压生命周期、SCP RV/CCISM 和控制栈仍待完成。见 [R3](MODEM-R3.md)、
+[新分析接续及冲突](MODEM-PROTOCOL.md)。
+
+
+## 2026-11-14：基带供电与普通 CCIF 引用实机验收
+
+`7576d31c76a4` 显式启用 SID3/VPU 和引用检查，四路 regulator 与四个
+clock 均绑定成功；两次启动均通过，未 enable/调压或启动 MD/SCP。USB ECM
+SSH、独立 Wi-Fi SSH、外网 ping、只读 cache ext4 与 SquashFS/Overlay rootfs
+回归通过。R3 代码已在镜像内，但没有 MD1 域实例，未实测其电源序列。
+
+正常重启请求后返回同一镜像；pstore 未保留完整退出尾部，不能单独证明
+SID3 shutdown 全部步骤已完成。sysfs 的 SID3 电压为 RG 指令值，不是 DA
+实际值；启动电压恢复仍待实现。详见 [供电生命周期](MODEM-RAILS.md)。
+
+
+## 2026-11-15：SCP mailbox 布局与 CCISM 协议基础
+
+默认关闭的纯 helper 已实现并通过主机测试和 ARM64 编译：完整 mailbox
+表的 64 位布局、APCCCI 通道定位、消息编解码和 u32 SHM 地址跨度校验。
+本机 APCCCI RX 为 mailbox 1 / word offset 28 / IRQ bit 14，不能只保留
+APCCCI 条目后重新分配布局。A/V 两份实际布局函数交叉验证通过。
+
+本轮没有操作设备或打包新镜像；没有 SCP transport、固件加载、真实 READY
+或 CCISM 状态机，仍不能启动主线基带。见 [SCP 记录](MODEM-SCP.md)。
+
+
+## 2026-11-15：SCP TCM 元数据与恢复映射校验
+
+新增默认关闭的纯 header 解码/跨度校验，核对 A/V 72-byte ABI、严格版本、
+可信窗口与 `roundup(bytes,1024)*4` 边界；主机测试与 ARM64 构建通过。
+没有读取设备 TCM、映射/加载固件、复位 SCP 或新增硬件支持验收。
+用户已刷回 Android 供其他分析工作，本轮不连接、重启或刷写设备。
+见 [SCP 内存契约](MODEM-SCP-MEMORY.md)。
+
+2026-11-15 后续离线完成共享 AP awake 后端：首末引用握手、嵌套引用、
+有界等待、W1 清理与故障锁定，默认关闭且没有 provider/caller。真实 C 的
+失败注入、ASan/UBSan、ARM64 启用/关闭构建与 strict checkpatch 通过。
+已准备仅采集软件 READY 和白名单 DT 属性的 Android 脚本，未上传或执行；
+没有新增硬件支持验收，也未访问设备。下一步需要实机核对启动/固件/内存，
+见 [awake 与上机边界](MODEM-SCP-AWAKE.md)。
+
+2026-11-15 用户允许后完成当前 6.6 的被动检查：两次 SCP 软件 READY，
+24 项存在 DT 属性与保存 ACK 一致，另 6 项同为缺失。动态 share 仍无 reg，
+未获取实际分配或 TCM header。没有上传文件、awake 操作、重启或刷写；
+设备保持 6.6，尚不新增主线 SCP 支持验收。
+见 [6.6 被动观测](evidence/modem-scp-6.6-observation.json)。
+
+
+## 2026-11-15：6.6 SCP 缓存与动态保留区实测
+
+用户允许上机后，通过匹配 build ID 的 6.6 驱动缓存观测发现 header 标称
+68 字节，原 72-only helper 正确拒绝。新增严格 68/72-byte 支持并复测成功；
+动态 share 为本次分配的 0x8d000000/0x320000，与驱动缓存一致。loader、
+firmware、DRAM 和完整恢复 mapping 位于静态 SCP 保留区，backup 地址符合
+双核公式；regdump 不在两个已确认窗口内，未映射。主机 sanitizer、ACK 模块
+和主线 ARM64 编译回归见证据。模块和上传文件已清理，设备保持 6.6；
+没有 awake/IPI、TCM 访问、重启或刷写，尚未增加主线 SCP/基带硬件验收。
+见 [缓存与内存观测](MODEM-SCP-OBSERVATION.md)。
+
+
+## 2026-11-15：主线 SCP AP 侧前提观测
+
+c55ce7327907 已刷 boot 并启动，AP TOPCK SCP selector=0（26M）、gate=0，
+连续样本稳定；主线本次动态 share 为 0x8d000000/0x320000，与 ACK 相同但
+没有硬编码地址。USB/Wi-Fi SSH、8 核、cache ext4/SquashFS/overlay、UFS
+只读回归正常。默认关闭的新 observer 只读 AP TOPCK 和内核保留区记账，
+没有 SCP/TCM、IRQ/awake/IPI/reset，READY 仍未知。设备保持主线；下一步
+限定 core0 状态读回及精确 header 观测。见 [实测记录](MODEM-SCP-PREREQUISITES.md)。
+
+
+2026-11-15 SCP core0 限定读回：当前设备运行 `0a53a32dd3b3`，仅显式读取
+CLR/SET bit0 与 STATUS gated/halt，各两次；六次调用均稳定且解释位全0。
+USB/Wi-Fi SSH、8 核、UFS RO、cache/rootfs 回归通过。尚未访问 TCM、建立
+READY 或启动 SCP/MD。详见 [core0 结果](MODEM-SCP-CORE0.md)。
+
+
+2026-11-15 SCP TCM header：当前主线 `3ccec64b58d4`，精确 68-byte
+header 六次显式读取一致；loader/firmware/DRAM/完整 mapping 的静态保留区
+包含、payload 不重叠与 backup 公式检查通过。regdump 位于 firmware/share
+外，未映射。USB/Wi-Fi SSH、8 核、UFS RO/cache/rootfs 回归通过。未建立
+READY、启动 SCP/MD 或发送 awake。见 [TCM 结果](MODEM-SCP-TCM.md)。
+
+
+2026-11-15 SCP RX 离线准备：默认关闭的 copy/board-completion/ACK/deliver
+后端及 READY0 payload 校验已完成 sanitizer 与 ARM64 构建。尚无硬件
+MMIO/IRQ caller，不记作 mailbox 外设已支持。设备保持 `3ccec64b58d4`。
+下一步先做无 ACK/无 IRQ 的 pending 预检，见 [RX 接续](MODEM-SCP-RX.md)。
+
+
+2026-11-15 SCP mailbox pending：当前主线 `b4456f5c54a5`，六次读取五组
+pending/unknown 均0，两轮及前后 core0/mux 稳定；GIC specifiers 通过解析。
+未申请 IRQ、清位、读 mailbox payload 或建立 READY。USB/Wi-Fi、8 核、
+存储/rootfs 回归通过，见 [pending 实测](MODEM-SCP-PENDING.md)。后续先补
+clock/shared-register owner，再接可控 IRQ 与 reset generation。
+
+
+2026-11-15 SCP bootstrap 时钟：当前主线 `6d783d7288f4`，已有 TOPCK
+provider 内的受限26M输出已正式持有，consumer unbind/rebind 实测 CCF
+引用2→1→2，provider常驻引用保留，源/gate与既有core0/header/pending稳定。
+USB/Wi-Fi、8核、存储/rootfs和boot回读通过。默认构建仍关闭实验；SPM资源
+投票、共享cfg/IRQ owner和真实READY仍未完成，未启动SCP/MD。
+详见 [bootstrap 时钟与资源边界](MODEM-SCP-BOOTSTRAP.md)。
+
+
+2026-11-15 SCP SPM 26M资源：当前主线 `5393b5915579`，先验证只读 ATF
+查询，再显式请求一次26M；SCP用户从缺失变为有效user1，资源mask=0x02，
+多次USB/Wi-Fi读回 pin_verified=1、fault=0。CCF引用3/3、26M保持，既有
+core0/header/pending、8核、UFS RO/cache/rootfs与boot回读通过。启用/默认
+构建、schema和sanitizer通过，实验默认关闭。未启动SCP/MD、安装IRQ、
+发awake或建立READY；下一步共享cfg/completion唯一owner，再接IRQ与
+reset generation。见 [SPM资源实测](MODEM-SCP-RESOURCE.md)。
+
+
+2026-11-15 SCP cfg 资源归属：当前主线 `80e79074de00`，已有SPM资源
+owner通过资源管理器占有完整 `0x10724000/0x1000` 窗口，cfg状态
+reserved=1、completion_enabled=0；不读写cfg寄存器。26M pin保持有效，
+USB/Wi-Fi、8核、UFS RO/cache/rootfs、原观测和boot回读通过；启用/默认
+构建、schema及sanitizer通过。未安装IRQ或建立READY，SCP/MD未启动。
+下一步唯一IRQ/worker的预算与generation框架、completion写排序审计。
+详见 [cfg 实现与实测](MODEM-SCP-CFG.md)。
+
+
+2026-11-15 SCP接收排空离线后端：新增默认关闭的五邮箱有界drain与
+STOP两阶段/generation校验，sanitizer与启用/默认ARM64构建通过。
+尚无真实IRQ/worker/MMIO caller、目的队列或READY状态转移；不计作新增
+硬件支持。本轮未刷写/重启，设备保持 `80e79074de00`，被动查询26M pin
+有效、cfg预留且completion关闭。见 [drain边界与接续](MODEM-SCP-DRAIN.md)。
+
+
+2026-11-15 SCP RX目的队列离线准备：默认关闭CPU FIFO覆盖17个RX pin，
+整批容量不足时在硬件completion/ACK前拒绝，故障时擦除CPU队列并失效
+全部RX。实际RX/drain/queue联动sanitizer、启用/默认ARM64构建通过。
+未接真实IRQ/worker/MMIO或READY，不增加硬件验收；本轮未刷写/重启，
+设备保持 `80e79074de00`。见 [队列边界](MODEM-SCP-QUEUE.md)。
+
+
+2026-11-15 SCP mailbox IRQ初始归属：当前主线 `49092bac2836`，唯一cfg/SPM
+owner以NO_AUTOEN申请五个IRQ，GIC hwirq 468–472均masked，所有CPU中断
+计数0，USB/Wi-Fi重复读取unexpected/work_runs均0。26M pin读回mask=0x02、
+pin_verified=1，CCF引用3/3；cfg无寄存器读写、completion关闭，原观测、
+8核、只读存储/rootfs和boot回读通过。启用/默认构建、schema、实际C
+sanitizer与strict checkpatch通过。尚未连接正常RX/worker、启用IRQ、建立
+reset generation或READY，SCP/MD未启动，不计作基带可用。接续MMIO/
+completion排序与可启用IRQ的锁/深度平衡，再闭合受控reset和本代READY。
+详见 [IRQ归属及实测](MODEM-SCP-IRQ.md)。
+
+
+2026-11-15 SCP RX MMIO离线后端：默认关闭，准备六个完整4 KiB页的
+non-posted映射和实际readl/writel操作，completion/ACK后加屏障，避免未证实
+的cfg读回。实际MMIO/queue/RX/drain模型sanitizer、启用/默认ARM64构建、
+屏障反汇编及strict checkpatch通过。尚无platform caller或DT资源接线，
+未进行新映射/寄存器操作，不增加硬件验收；本轮未刷写/重启，设备仍为
+`49092bac2836`。接续唯一owner映射替换、正常IRQ/work、受控reset和READY。
+详见 [MMIO后端与限制](MODEM-SCP-MMIO.md)。
+
+
+2026-11-15 SCP MMIO映射接入准备：新增默认关闭的唯一owner六页non-posted
+预留路径，替换旧cfg映射并在Kconfig排除旧pending observer；不调用prepare
+或寄存器操作，五IRQ仍NO_AUTOEN。owner双路径及后端sanitizer、启用/默认
+构建、定向schema/DTB与strict checkpatch通过。测试镜像`fba1be648ead`已就绪，
+尚待上机，不增加硬件支持验收；设备仍运行`49092bac2836`。
+详见 [映射接入与测试边界](MODEM-SCP-MMIO-OWNER.md)。
+
+
+2026-11-15 SCP MMIO映射实测：当前主线 `fba1be648ead`，六个完整页均由
+唯一resource owner占有，USB/Wi-Fi重复查询寄存器读写0、prepared=0、
+generation=0；初始fault=1表示未prepared的主动封闭。五IRQ保持masked，
+所有CPU中断计数和异常计数0。旧pending observer编译关闭，属性不存在，
+不读取/清理继承消息。26M pin、CCF引用3/3、原core0/header/mux、8核、只读
+存储/rootfs及boot回读通过。未进行真实RX/completion/ACK、IRQ使能或SCP/MD
+启动，不计作基带可用；下一步接真实prerequisite及正常IRQ/work/STOP。
+详见 [实机映射验收](MODEM-SCP-MMIO-OWNER.md)。
+
+
+2026-11-15 SCP Linux IRQ/work 接收层离线准备：默认关闭 adapter 组合现有
+MMIO/queue/drain，完成 IRQ 深度平衡、排队代号及 STOP 同步屏障；新增只读
+资源检查 helper。实际 C sanitizer/既有回归、启用/默认 ARM64 构建和 strict
+checkpatch 通过。尚未替换平台 IRQ owner、启用 IRQ 或执行真实接收；本轮
+不刷写/重启，USB只读复查设备仍为 `fba1be648ead`，六页零寄存器操作、
+五IRQ masked、26M pin有效。下一步先接 dormant constructor/prerequisite，
+再完成真实 reset/旧消息隔离；不计作 SCP/基带可用。
+见 [接收 adapter 和验证范围](MODEM-SCP-RECEIVE.md)。
+
+
+2026-11-15 SCP receive 静默接入实测：当前主线 `4ed57fd98c40`，唯一资源
+owner 以新 adapter 互斥替换旧 IRQ reservation，五个 `op6893-scp-rx` action
+均 masked、所有CPU中断及worker计数0；generation/queued/events=0，六页
+MMIO读写0且未prepare。probe无SMC请求，一次显式26M pin后mask=0x02、
+pin_verified=1，CCF引用3/3。USB/Wi-Fi各三轮、8核、UFS/cache/rootfs只读
+状态及boot回读通过。新增owner prerequisite wrapper已有模型验证，实际
+reset generation仍0，无start caller；不启动SCP/MD、不计作基带可用。
+下一步推进真实reset/旧消息隔离与固件/客户端前提，再考虑启用接收。
+见 [唯一owner接入与实机验收](MODEM-SCP-RECEIVE-OWNER.md)。
+
+
+2026-11-15 SCP reset/恢复布局离线准备：核对A/V/Q初始化释放与恢复worker的
+不同路径、双核TCM/DRAM恢复公式及独立mailbox隔离缺口。编译确认header
+结构A/V/Q为72/72/60字节，本机先前实测68，不照搬Q尾部。新增默认关闭纯
+CPU restore planner，检查完整源/目标范围、重叠、精确header长度与backup
+公式；ASan/UBSan、源码审计、启用/默认ARM64构建及strict checkpatch通过。
+无device caller/映射/复制/reset/IRQ操作，本轮不连接或刷写设备，不增加
+基带验收；上次实机验收为 `4ed57fd98c40`。下一步统一core0/core1/TCM资源
+归属，再规划受限停止观测；真实旧消息隔离和备份来源尚需闭合。
+见 [reset与恢复契约](MODEM-SCP-RESET-RESTORE.md)。
+
+
+2026-11-15 SCP core0/core1/TCM 统一映射实测：新增默认关闭选项，与旧
+core0/TCM/pending reader互斥，在现有唯一owner取得三块完整non-posted窗口。
+主线 `db337399ee04` 的 /proc/iomem 确认cfg/五mailbox/core0/core1/TCM共九块
+均归同一owner；读写仍0，五IRQ masked且全部CPU计数0，generation0。
+一次26M pin、USB/Wi-Fi各三轮、8核/RO存储与boot回读通过；sanitizer、
+Kconfig互斥、启用/默认ARM64构建、schema与strict checkpatch通过。
+本轮只验收映射，不证明core1/TCM读取、复位或停止语义；未启动SCP/MD。
+下一步将受限core/header观测迁到同一owner，审查core1只读allowlist，
+再闭合双核停止和旧消息隔离。见 [统一资源归属](MODEM-SCP-CORE-TCM-OWNER.md)。
+
+
+2026-11-15 SCP 统一 owner 双核/header 只读实测：主线 `cebf84a7d29e`，
+新默认关闭选项在原九块独占映射内、同一mutex下读取。未pin两入口EAGAIN且
+零读；pin后core0/core1仅0/4/0x70受限位均稳定0，TCM header68字节，CPU恢复
+布局geometry检查通过。USB/Wi-Fi各三轮，core/TCM最终252/252读数与预期一致；
+写入、cfg/mailbox读写、IRQ/worker事件仍0，CCF/八核/RO存储和boot回读通过。
+模型/构建/schema/checkpatch通过。设备保留该主线；不把读回解释为reset/停止
+或固件有效，不启动SCP/MD。下一步双核停止和旧消息隔离契约，见
+[统一owner只读观测](MODEM-SCP-OWNER-OBSERVE.md)。

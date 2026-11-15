@@ -1,0 +1,89 @@
+{
+  "date": "2026-11-15",
+  "base_head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "release": "7.3.0-op6893-d1-5393b5915579+",
+  "image_identity": "5393b5915579",
+  "boot_sha256": "92354e93a464091f6ab09c28cff47519ea68dbe6631585a70cbbd31c73889604",
+  "boot_partition_readback_matches": true,
+  "flash_partitions": [
+    "boot"
+  ],
+  "runtime": {
+    "before": {
+      "resources": 6,
+      "users": 1,
+      "scp_present": false,
+      "attempted": false,
+      "fault": false
+    },
+    "after": {
+      "resources": 6,
+      "users": 2,
+      "scp_present": true,
+      "scp_user": 1,
+      "scp_valid": true,
+      "scp_resources": 2,
+      "attempted": true,
+      "accepted": true,
+      "pin_verified": true,
+      "fault": false,
+      "error": 0
+    },
+    "explicit_pin_writes": 1,
+    "resource_release_supported": false,
+    "ccf_enable_prepare_rate": [
+      3,
+      3,
+      26000000
+    ],
+    "ready_known": false,
+    "pending": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "irq_requested": 0,
+    "mailbox_ack_writes": 0,
+    "header_bytes": 68,
+    "cpus_online": "0-7",
+    "usb_ssh": true,
+    "wifi_ssh": true,
+    "ufs_read_only": {
+      "sda": true,
+      "sdb": true,
+      "sdc": true
+    },
+    "cache": "ext4 ro,norecovery",
+    "lower": "squashfs ro",
+    "root": "overlay"
+  },
+  "validation": {
+    "enabled_image_build": true,
+    "default_Image_gz_modules_build": true,
+    "default_symbols_absent": true,
+    "dts_defconfig_restored": true,
+    "bindings_and_enabled_default_board_merged_schema": true,
+    "host_sanitizer_tests_passed": true,
+    "helper_combinations": 2048,
+    "compiler_warnings": 0,
+    "existing_defconfig_reassignment_warnings": [
+      "FW_LOADER",
+      "VT"
+    ],
+    "new_C_H_strict_checkpatch": [
+      0,
+      0,
+      0
+    ],
+    "fault_keyword_scan": "no matches"
+  },
+  "limitations": [
+    "SCP user absent before request; inherited non-26M votes preservation tested on host and audited statically, not exercised on device",
+    "No release, SCP/MD start, reset release, awake, IRQ, completion write, real READY or generation acceptance",
+    "CCF nominal rate and resource membership do not measure physical frequency",
+    "No temperature/button/USB fault-failover validation"
+  ],
+  "full_evidence_directory": "/data/src/mainline/mt6893-direct/evidence/scp-resource-live"
+}

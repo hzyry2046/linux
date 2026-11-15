@@ -1,0 +1,76 @@
+{
+  "date": "2026-11-15",
+  "base_head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "image_identity": "80e79074de00",
+  "boot_sha256": "a31fd773c694ef910e272868dde1902a389f05130a27e4c02c06de0df9441374",
+  "validation": {
+    "enabled_default_Image_gz_modules": true,
+    "enabled_default_board_merged_schema": true,
+    "source_restored": true,
+    "default_symbols_absent": true,
+    "cfg_resource_sanitizer": true,
+    "resource_sanitizer_2048_combinations": true,
+    "rx_sanitizer": true,
+    "compiler_warnings": 0,
+    "strict_checkpatch": [
+      0,
+      0,
+      0
+    ]
+  },
+  "hardware_status": "verified; device left running this mainline image",
+  "limitations": [
+    "No cfg register read/write or completion operation",
+    "No IRQ, payload capture, reset release, SCP/MD start, awake or READY acceptance",
+    "Conflict rejection only tested on host",
+    "cfg zero accesses reflect absence of implementation operations, not hardware counters",
+    "No thermal/buttons/USB fault failover validation"
+  ],
+  "offline_evidence": "/data/src/mainline/mt6893-direct/evidence/scp-cfg-offline",
+  "boot_partition_readback_matches": true,
+  "flash_partitions": [
+    "boot"
+  ],
+  "runtime": {
+    "cfg_reserved": true,
+    "cfg_base": "0x10724000",
+    "cfg_bytes": 4096,
+    "cfg_register_reads": 0,
+    "cfg_register_writes": 0,
+    "completion_enabled": false,
+    "resource_mask": 2,
+    "scp_user": 1,
+    "scp_valid": true,
+    "pin_verified": true,
+    "fault": false,
+    "explicit_pin_writes": 1,
+    "ccf_enable_prepare_rate": [
+      3,
+      3,
+      26000000
+    ],
+    "pending": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "irq_requested": 0,
+    "mailbox_ack_writes": 0,
+    "ready_known": false,
+    "usb_ssh": true,
+    "wifi_ssh": true,
+    "cpus_online": "0-7",
+    "ufs_ro": {
+      "sda": true,
+      "sdb": true,
+      "sdc": true
+    },
+    "cache": "ext4 ro,norecovery",
+    "lower": "squashfs ro",
+    "root": "overlay",
+    "fault_keyword_scan": "no matches"
+  },
+  "runtime_evidence": "/data/src/mainline/mt6893-direct/evidence/scp-cfg-live"
+}

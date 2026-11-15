@@ -1,0 +1,97 @@
+{
+  "date": "2026-11-15",
+  "source_commit": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "image": "3ccec64b58d4",
+  "release": "7.3.0-op6893-d1-3ccec64b58d4+",
+  "boot_sha256": "db21fd1441b9599583bbb4dbf29369f69b527b7ca3338a61c22885f2b0803078",
+  "boot_partition_hash_matches": true,
+  "deployment": {
+    "queued_flash_reboot": true,
+    "sync_sysrq_reboot": true,
+    "fastboot_boot": false,
+    "backup_updated": false,
+    "partition_table_changed": false
+  },
+  "observations": {
+    "explicit_header_reads": 6,
+    "header_bytes": 68,
+    "header_snapshots_equal": true,
+    "loader_bytes": 8192,
+    "loader_allowed": true,
+    "firmware_bytes": 1572864,
+    "firmware_allowed": true,
+    "dram_bytes": 305120,
+    "dram_allowed": true,
+    "dram_mapping_bytes": 1220608,
+    "dram_mapping_allowed": true,
+    "payloads_disjoint": true,
+    "backup_matches": true,
+    "regdump_bytes": 1048576,
+    "regdump_in_firmware": false,
+    "regdump_in_share": false,
+    "regdump_mapped": false,
+    "firmware_content_accessed": false,
+    "mux_selector": 0,
+    "mux_gated": false,
+    "core0_clr_bit": 0,
+    "core0_set_bit": 0,
+    "core0_gated": false,
+    "core0_halt": false,
+    "ready_known": false,
+    "scp_md_started": false,
+    "awake_sent": false
+  },
+  "validation": {
+    "actual_functions_asan_ubsan": true,
+    "actual_68_byte_object": true,
+    "unknown_length_one_read_refusal": true,
+    "every_word_mutation_refused": true,
+    "pre_post_failure_paths": true,
+    "checkpatch_errors_warnings_checks": [
+      0,
+      0,
+      0
+    ],
+    "binding_doc_schema": true,
+    "enabled_board_merged_schema": true,
+    "enabled_image_builder_regressions": true,
+    "default_image_modules": true,
+    "default_observer_symbols_absent": true,
+    "default_node_disabled": true,
+    "default_fdt_merge": true,
+    "dts_defconfig_restored": true,
+    "compiler_warnings": 0,
+    "existing_defconfig_reassignment_warnings": [
+      "FW_LOADER",
+      "VT"
+    ]
+  },
+  "regression": {
+    "usb_ssh": true,
+    "wifi_ssh": true,
+    "online_cpus": 8,
+    "ufs_ro": [
+      1,
+      1,
+      1
+    ],
+    "root_overlay": true,
+    "cache_ext4_ro_norecovery": true,
+    "lower_squashfs": true,
+    "fault_keyword_scan_clear": true,
+    "thermal_tested": false
+  },
+  "remaining": [
+    "mailbox RX MMIO and IRQ resource/ack audit",
+    "clock ownership and unique bootstrap/reset owner",
+    "READY receive and generation lifecycle",
+    "loader and backup validity/provenance",
+    "regdump ownership"
+  ],
+  "final_device_state": "running mainline 3ccec64b58d4",
+  "source_sha256": {
+    "drivers/misc/mediatek/ccci/ccci-scp-observe.c": "58797140d5eb1840538a8d296131d16e80b1ce0f10568e3ba50436653a3abd3e",
+    "drivers/misc/mediatek/ccci/Kconfig": "2107efe25f7de270935d0f0ca093d91e963a884a40c620d62c5ba0d2c8e63142",
+    "Documentation/arch/arm64/op6893-bringup/tools/test_modem_scp_tcm.py": "7210ed1b0bbe863b527f413415b13abeb768d099c9a23b00416a46499b71280a"
+  }
+}

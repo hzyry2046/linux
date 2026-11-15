@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-15",
+  "base_head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "scope": "Offline non-posted MMIO reserve/RX operation backend; no platform caller or DT integration",
+  "validation": {
+    "actual_c_mmio_queue_rx_drain_asan_ubsan": true,
+    "irq_queue_drain_rx_cfg_resource_regressions": true,
+    "enabled_default_Image_gz_modules": true,
+    "enabled_symbols_present": true,
+    "default_symbols_absent": true,
+    "output_config_exactly_restored": true,
+    "ARM64_post_ack_dsb_sy_disassembly": true,
+    "strict_checkpatch": [
+      0,
+      0,
+      0
+    ],
+    "compiler_warnings": 0
+  },
+  "hardware": {
+    "new_boot_image_built": false,
+    "reboot_or_flash": false,
+    "new_mmio_mapping_or_register_access": false,
+    "running_image": "49092bac2836",
+    "read_only_usb_regression": true,
+    "irq_requested": 5,
+    "gic_masked": 5,
+    "pin_verified": true,
+    "cfg_register_reads": 0,
+    "cfg_register_writes": 0,
+    "ready_known": false
+  },
+  "limitations": [
+    "Synthetic MMIO model cannot prove real bus completion, mapping suitability, firmware behavior or Linux IRQ concurrency",
+    "No live IRQ/work/reset/generation owner integration; numeric generation is not hardware reset authority",
+    "Six full-page DT resources and binding changes are still required before a platform caller can map",
+    "Existing cfg and pending mappings must be replaced, never aliased with non-posted mappings",
+    "Ordinary readl/writel cannot return bus errors as callback errno",
+    "Port contexts are persistent and do not independently reject stale work after a new prepare"
+  ],
+  "evidence": "/data/src/mainline/mt6893-direct/evidence/scp-mmio-offline"
+}

@@ -1,0 +1,90 @@
+{
+  "date": "2026-11-15",
+  "base_head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "release": "7.3.0-op6893-d1-6d783d7288f4+",
+  "image_identity": "6d783d7288f4",
+  "boot_sha256": "8ee54e58a634248a994267c31b80ac57b5a0724154170a909b88ce3634440890",
+  "boot_partition_readback_matches": true,
+  "flash_partitions": [
+    "boot"
+  ],
+  "runtime": {
+    "selector": 0,
+    "gated": false,
+    "ccf_rate": 26000000,
+    "ccf_enable_prepare_rate_before_unbind_after_unbind_after_rebind": [
+      [
+        2,
+        2,
+        26000000
+      ],
+      [
+        1,
+        1,
+        26000000
+      ],
+      [
+        2,
+        2,
+        26000000
+      ]
+    ],
+    "consumer_hold": true,
+    "provider_critical": true,
+    "spm_vote": false,
+    "ready_known": false,
+    "pending": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "irq_requested": 0,
+    "mailbox_ack_writes": 0,
+    "header_bytes": 68,
+    "cpus_online": "0-7",
+    "usb_ssh": true,
+    "wifi_ssh": true,
+    "ufs_read_only": {
+      "sda": true,
+      "sdb": true,
+      "sdc": true
+    },
+    "cache": "ext4 ro,norecovery",
+    "lower": "squashfs ro",
+    "root": "overlay"
+  },
+  "validation": {
+    "enabled_image_build": true,
+    "default_Image_gz_modules_build": true,
+    "default_symbols_absent": true,
+    "dts_defconfig_restored": true,
+    "bindings_and_enabled_default_board_merged_schema": true,
+    "host_sanitizer_tests_passed": true,
+    "compiler_warnings": 0,
+    "existing_defconfig_reassignment_warnings": [
+      "FW_LOADER",
+      "VT"
+    ],
+    "observer_strict_checkpatch": [
+      0,
+      0,
+      0
+    ],
+    "clock_file_strict_checkpatch": [
+      0,
+      0,
+      4
+    ],
+    "clock_file_checks": "four pre-existing alignment checks; new callback alignment fixed",
+    "fault_keyword_scan": "no matches after consumer rebind"
+  },
+  "limitations": [
+    "CCF nominal rate and gate readback, not frequency measurement or firmware clock exclusion",
+    "No SPM vote, DVFS, SCP cfg/completion, awake, IRQ owner, reset release, firmware load, READY or modem start",
+    "No temperature, button or USB fault-failover validation",
+    "debugfs required mounting before clk_summary was available; initial missing file was not counted as a successful count check"
+  ],
+  "full_evidence_directory": "/data/src/mainline/mt6893-direct/evidence/scp-bootstrap-live"
+}

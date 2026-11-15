@@ -1,0 +1,89 @@
+{
+  "date": "2026-11-15",
+  "base_head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "image_identity": "4ed57fd98c40",
+  "release": "7.3.0-op6893-d1-4ed57fd98c40+",
+  "boot_sha256": "20c38c94c6fe372f443b5e6c992b8767068977341a2879f81af2edf73c69450d",
+  "validation": {
+    "actual_owner_cfg_mmio_receive_asan_ubsan": true,
+    "actual_owner_prerequisite_resource_smc_asan_ubsan": true,
+    "receive_mmio_queue_rx_drain_regressions": true,
+    "enabled_default_Image_gz_modules": true,
+    "enabled_default_symbol_isolation": true,
+    "compiler_warnings": 0,
+    "strict_checkpatch": [
+      0,
+      0,
+      0
+    ],
+    "packaged_board_merged_resource_checks": true,
+    "source_dts_defconfig_restored": true,
+    "schema_rerun": false
+  },
+  "scope": "dormant constructor handoff only; no start caller, reset generation assignment, IRQ enable, SCP register I/O or SCP/MD start",
+  "runtime": {
+    "new_irq_actions": 5,
+    "old_irq_actions": 0,
+    "gic_hwirqs": [
+      468,
+      469,
+      470,
+      471,
+      472
+    ],
+    "all_cpu_irq_counts_zero": true,
+    "gic_masked": 5,
+    "armed": false,
+    "generation": 0,
+    "queued_generation": 0,
+    "interrupts": 0,
+    "unexpected": 0,
+    "runs": 0,
+    "queued": false,
+    "events": 0,
+    "error": 0,
+    "transport_fault": false,
+    "mapped": 6,
+    "register_reads": 0,
+    "register_writes": 0,
+    "prepared": false,
+    "mmio_initial_fault": true,
+    "probe_resource_request_attempted": false,
+    "explicit_pin_writes": 1,
+    "scp_user": 1,
+    "scp_resources": "0x02",
+    "pin_verified": true,
+    "resource_fault": false,
+    "ccf_enable_prepare_rate": [
+      3,
+      3,
+      26000000
+    ],
+    "usb_repeat_queries": 3,
+    "wifi_repeat_queries": 3,
+    "cpus_online": "0-7",
+    "ufs_ro": [
+      "sda",
+      "sdb",
+      "sdc"
+    ],
+    "cache": "ext4 ro,norecovery",
+    "lower": "squashfs ro",
+    "root": "overlay",
+    "old_pending_attribute_absent": true,
+    "boot_readback_matches": true,
+    "fault_keyword_matches": 0
+  },
+  "instrumentation": "First collection stopped after storage checks because debugfs was not mounted; mounted debugfs, then both paths passed all rounds. Reboot SSH timed out after link loss; fastboot flash/reboot completed and new kernel identity verified.",
+  "limitations": [
+    "Host model cannot prove actual SMP/GIC timing",
+    "Prerequisite wrapper has not run with actual reset authority; current owner generation stays zero",
+    "No pending/payload/completion/ACK operations or real receive/client/READY verification",
+    "No SCP/MD start"
+  ],
+  "evidence": "/data/src/mainline/mt6893-direct/evidence/scp-receive-reserve",
+  "flash_partitions": [
+    "boot"
+  ],
+  "device_left_running": "4ed57fd98c40"
+}

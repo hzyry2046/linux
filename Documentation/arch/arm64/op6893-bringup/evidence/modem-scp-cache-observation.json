@@ -1,0 +1,143 @@
+{
+  "date": "2026-11-15",
+  "source_commit": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "scope": "ACK 6.6 cached SCP metadata/reserved-memory observation and precise 68/72-byte decoder support; not mainline SCP acceptance",
+  "identity": {
+    "kernel_release": "6.6.30-4k-g6974e26f087e",
+    "scp_module_build_id_note_matches_host": true,
+    "firmware_content_or_hash_collected": false
+  },
+  "first_signed_observation": {
+    "ready_before": 1,
+    "ready_after": 1,
+    "samples_equal": true,
+    "cached_struct_size": 68,
+    "decode_result": -93
+  },
+  "second_signed_observation": {
+    "ready_before": 1,
+    "ready_after": 1,
+    "samples_equal": true,
+    "cached_struct_size": 68,
+    "decode_result": 0,
+    "static_lookup_result": 0,
+    "share_lookup_result": 0,
+    "share_matches_driver_cache": true,
+    "share_base": "0x8d000000",
+    "share_size": "0x320000",
+    "loader_bytes": 8192,
+    "firmware_bytes": 1572864,
+    "dram_bytes": 305120,
+    "regdump_bytes": 1048576,
+    "loader_in_static": true,
+    "firmware_in_static": true,
+    "dram_in_static": true,
+    "regdump_in_static": false,
+    "regdump_in_share": false,
+    "dram_mapping_static_result": 0,
+    "dram_mapping_bytes": 1220608,
+    "mapping_overlaps_loader": false,
+    "mapping_overlaps_firmware": false,
+    "mapping_overlaps_regdump": false,
+    "mapping_overlaps_share": false,
+    "backup_matches_two_core_formula": true
+  },
+  "loading": {
+    "unsigned_rejected_before_init": "Protected symbol: is_scp_ready (err -13)",
+    "signed_using_existing_ack_packaging_policy": true,
+    "signature_protection_disabled": false,
+    "selinux_changed": false,
+    "resolver": "disabled handler-free temporary kprobe; one __nocfi private resolver call; fixed scp-qualified cache symbols only",
+    "provider_pinned_by_direct_is_scp_ready_import": true,
+    "signed_successful_load_unload_pairs": 2
+  },
+  "decoder": {
+    "supported_exact_snapshot_lengths": [
+      68,
+      72
+    ],
+    "length_must_equal_struct_size": true,
+    "size_field_offset": 28,
+    "last_decoded_field_offset": 48,
+    "unknown_tail_fields_not_interpreted": true,
+    "cpu_cache_observed": true,
+    "live_tcm_read": false
+  },
+  "validation": {
+    "asan_ubsan_passed": true,
+    "real_68_byte_test_object": true,
+    "random_header_candidates": 20000,
+    "valid_random_mapping_lengths": 10000,
+    "vendor_header_sizeof_offsetof_checks": 2,
+    "protocol_awake_collector_regressions_passed": true,
+    "ack_arm64_module_modpost_btf_passed": true,
+    "mainline_enabled_image_gz_modules_passed": true,
+    "mainline_default_image_gz_modules_passed": true,
+    "mainline_enabled_seven_public_memory_awake_functions_linked": true,
+    "mainline_default_all_scp_symbols_absent": true,
+    "mainline_original_config_restored_exactly": true,
+    "compiler_warnings": 0,
+    "strict_checkpatch": {
+      "errors": 0,
+      "warnings": 0,
+      "checks": 0
+    }
+  },
+  "final_device_state": {
+    "insmod_exit": 0,
+    "insmod_output": "",
+    "rmmod_exit": 0,
+    "rmmod_output": "",
+    "module_absent_after": true,
+    "remove_upload_exit": 0,
+    "ready_after": "SCP A is ready"
+  },
+  "operations": {
+    "temporary_module_uploaded_and_removed": true,
+    "cpu_cache_and_reservation_bookkeeping_read": true,
+    "mmio_read_or_write": false,
+    "firmware_or_tcm_dump": false,
+    "awake_request": false,
+    "ipi": false,
+    "clock_or_power_operation": false,
+    "scp_or_md_reset": false,
+    "reboot": false,
+    "flash": false,
+    "partition_table_changed": false,
+    "restore_backup_updated": false,
+    "new_mainline_boot_packaged": false
+  },
+  "limits": [
+    "Cached 68-byte size and common prefix observed after ACK initialization, not live firmware ABI or LK handoff",
+    "Two equal samples and software READY do not establish reset generation",
+    "Actual share base is specific to this 6.6 boot and must not be hardcoded into mainline",
+    "Regdump outside both confirmed windows; mapping remains unauthorized",
+    "Full pairwise layout, ownership, backup content validity, firmware loading source, TCM/clock access and genuine mainline READY remain unverified",
+    "Diagnostic private symbol lookup is temporary instrumentation, not a production interface",
+    "No mainline awake, SCP transport or modem startup accepted"
+  ],
+  "source_sha256": {
+    "drivers/misc/mediatek/ccci/ccci-scp-memory.c": "7304c73b51bb8849938a571ce438c9431ce986b3893b22ee19ef85198e2ceb58",
+    "drivers/misc/mediatek/ccci/ccci-scp-memory.h": "88b4a0fd9130add2f8b549795a1aedcd4503755871461a03fdcd0afeea5bd38b",
+    "Documentation/arch/arm64/op6893-bringup/tools/test_modem_scp_memory.py": "32753f69bbaa65bf8dce199bd78f1d859558b6a40e95ea660647b756dfb44d25",
+    "Documentation/arch/arm64/op6893-bringup/tools/build_scp_cache_observe.py": "d925408e493603cbe204c06ad83819bd92c2d7142babcb89b5ef0c6ab748f752",
+    "Documentation/arch/arm64/op6893-bringup/tools/scp-cache-observe/observe.c": "ec055cb21342e9baa7371931e57f3abf980e7b5b90f0956b05dd97981f604432",
+    "Documentation/arch/arm64/op6893-bringup/tools/scp-cache-observe/ack-abi.h": "1ecaf6c007b37360b7be06741e63d14e180ba42f6bdf7f79edbcf63031b514c6",
+    "Documentation/arch/arm64/op6893-bringup/tools/scp-cache-observe/Makefile": "ac7aa0fac47a80d5e768873f2a910ecd13def8a0d185ec38558e8dec08c9f2e2"
+  },
+  "external_logs": {
+    "scp-cache-observe-build-v2.log": "/data/src/mainline/mt6893-direct/scp-cache-observe-build-v2.log",
+    "scp-cache-observe-memory-tests-v2.log": "/data/src/mainline/mt6893-direct/scp-cache-observe-memory-tests-v2.log",
+    "scp-cache-observe-checkpatch-v2.log": "/data/src/mainline/mt6893-direct/scp-cache-observe-checkpatch-v2.log",
+    "scp-cache-observe-mainline-enabled.log": "/data/src/mainline/mt6893-direct/scp-cache-observe-mainline-enabled.log",
+    "scp-cache-observe-mainline-default.log": "/data/src/mainline/mt6893-direct/scp-cache-observe-mainline-default.log",
+    "scp-cache-observe-protocol-regression.log": "/data/src/mainline/mt6893-direct/scp-cache-observe-protocol-regression.log",
+    "scp-cache-observe-awake-regression.log": "/data/src/mainline/mt6893-direct/scp-cache-observe-awake-regression.log",
+    "scp-cache-observe-collector-regression.log": "/data/src/mainline/mt6893-direct/scp-cache-observe-collector-regression.log",
+    "scp-cache-observe-runtime-v1.log": "/data/src/mainline/mt6893-direct/scp-cache-observe-runtime-v1.log",
+    "scp-cache-observe-runtime.log": "/data/src/mainline/mt6893-direct/scp-cache-observe-runtime.log",
+    "scp-cache-observe-unsigned-run.json": "/data/src/mainline/mt6893-direct/scp-cache-observe-unsigned-run.json",
+    "scp-cache-observe-run-v1.json": "/data/src/mainline/mt6893-direct/scp-cache-observe-run-v1.json",
+    "scp-cache-observe-run.json": "/data/src/mainline/mt6893-direct/scp-cache-observe-run.json"
+  }
+}

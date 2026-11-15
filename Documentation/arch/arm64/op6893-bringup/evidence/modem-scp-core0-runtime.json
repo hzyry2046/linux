@@ -1,0 +1,68 @@
+{
+  "date": "2026-11-15",
+  "source_commit": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "image": "0a53a32dd3b3",
+  "release": "7.3.0-op6893-d1-0a53a32dd3b3+",
+  "boot_sha256": "90b03d137eae9cf08525e2d8ea9006505cd7afc48a142e3d3a6597154ecbb6bd",
+  "boot_partition_hash_matches": true,
+  "deployment": {
+    "queued_flash_reboot": true,
+    "sync_sysrq_reboot": true,
+    "fastboot_boot": false,
+    "backup_changed": false,
+    "partition_table_changed": false
+  },
+  "observations": {
+    "explicit_reads": 6,
+    "each_mmio_reads": 6,
+    "reset_clr_bit": 0,
+    "reset_set_bit": 0,
+    "core_gated": 0,
+    "core_halt": 0,
+    "samples_equal": true,
+    "mux_selector": 0,
+    "mux_gated": false,
+    "ready_known": false,
+    "tcm_accessed": false,
+    "scp_md_started": false,
+    "awake_sent": false
+  },
+  "validation": {
+    "actual_reader_asan_ubsan": true,
+    "prior_ap_tests": true,
+    "checkpatch_errors_warnings_checks": [
+      0,
+      0,
+      0
+    ],
+    "binding_doc_schema": true,
+    "enabled_board_merged_schema": true,
+    "enabled_image_and_builder_regressions": true,
+    "default_image_modules": true,
+    "default_observer_absent": true,
+    "default_fdt_merge": true,
+    "dts_defconfig_restored": true
+  },
+  "regression": {
+    "usb_ssh": true,
+    "wifi_ssh": true,
+    "online_cpus": 8,
+    "ufs_ro": [
+      1,
+      1,
+      1
+    ],
+    "root_overlay": true,
+    "cache_ext4_ro_norecovery": true,
+    "lower_squashfs": true,
+    "fault_keyword_scan_clear": true,
+    "thermal_tested": false
+  },
+  "remaining": [
+    "exact-length TCM header with separately reviewed mapping",
+    "clock ownership and bootstrap access",
+    "mailbox RX/IRQ and reset generation lifecycle",
+    "real READY before awake"
+  ],
+  "final_device_state": "running mainline 0a53a32dd3b3"
+}

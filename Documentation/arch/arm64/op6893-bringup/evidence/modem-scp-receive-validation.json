@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-15",
+  "base_head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "stage": "offline Linux IRQ/work receive adapter; no platform caller",
+  "validation": {
+    "actual_receive_mmio_queue_rx_drain_asan_ubsan": true,
+    "resource_check_asan_ubsan": true,
+    "regressions": [
+      "irq",
+      "mmio",
+      "mmio_owner",
+      "queue",
+      "drain",
+      "rx"
+    ],
+    "enabled_default_Image_gz_modules": true,
+    "symbol_isolation": true,
+    "compiler_warnings": 0,
+    "strict_checkpatch": [
+      0,
+      0,
+      0
+    ]
+  },
+  "device": {
+    "release": "7.3.0-op6893-d1-fba1be648ead+",
+    "rebooted": false,
+    "flashed": false,
+    "usb_read_only_recheck": true,
+    "mapped": 6,
+    "register_reads": 0,
+    "register_writes": 0,
+    "prepared": false,
+    "generation": 0,
+    "gic_masked": 5,
+    "unexpected": 0,
+    "work_runs": 0,
+    "pin_verified": true,
+    "scp_resources": "0x02",
+    "resource_fault": false
+  },
+  "limitations": [
+    "No platform prerequisite wrapper or new constructor caller",
+    "Host deterministic model does not prove Linux SMP/GIC/workqueue timing",
+    "No actual reset-generation or old-message isolation authority",
+    "No IRQ enable, RX, completion, ACK or SCP/MD start on device",
+    "No client consumer or READY acceptance"
+  ],
+  "evidence": "/data/src/mainline/mt6893-direct/evidence/scp-receive-offline"
+}

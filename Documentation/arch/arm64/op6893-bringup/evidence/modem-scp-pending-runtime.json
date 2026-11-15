@@ -1,0 +1,105 @@
+{
+  "date": "2026-11-15",
+  "source_commit": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "image": "b4456f5c54a5",
+  "release": "7.3.0-op6893-d1-b4456f5c54a5+",
+  "boot_sha256": "0296d5ddc4dafece91b9834f6d52283e74323cfd427032a08e979d1aa363187b",
+  "boot_partition_hash_matches": true,
+  "deployment": {
+    "queued_boot_flash_reboot": true,
+    "sync_sysrq_reboot": true,
+    "fastboot_boot": false,
+    "partition_table_changed": false,
+    "backup_updated": false
+  },
+  "observations": {
+    "explicit_pending_samples": 6,
+    "pending_mmio_reads_per_sample": 10,
+    "pending": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "known_rx_masks": [
+      "0x00000060",
+      "0x0cf0c000",
+      "0x00020000",
+      "0x00039080",
+      "0x00020000"
+    ],
+    "unknown_masks": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "samples_equal": true,
+    "core0_stable": true,
+    "irq_specifiers_validated": 5,
+    "linux_irqs_requested": 0,
+    "ack_writes": 0,
+    "mailbox_payload_read": false,
+    "scp_spm_completion_written": false,
+    "ready_known": false,
+    "awake_sent": false,
+    "scp_md_started": false,
+    "mux_selector": 0,
+    "mux_gated": false,
+    "tcm_header_bytes": 68
+  },
+  "validation": {
+    "actual_pending_and_irq_parser_asan_ubsan": true,
+    "existing_ap_core0_tcm_rx_host_tests": true,
+    "exact_board_and_merged_resources_irq_tables": true,
+    "binding_doc_schema": true,
+    "enabled_default_board_merged_schema": true,
+    "checkpatch_errors_warnings_checks": [
+      0,
+      0,
+      0
+    ],
+    "enabled_image_builder_regressions": true,
+    "default_image_modules": true,
+    "default_node_disabled_symbols_absent": true,
+    "default_fdt_merge": true,
+    "dts_defconfig_restored": true,
+    "compiler_warnings": 0,
+    "existing_config_warnings": [
+      "FW_LOADER",
+      "VT"
+    ]
+  },
+  "regression": {
+    "usb_ssh": true,
+    "wifi_ssh": true,
+    "online_cpus": 8,
+    "ufs_ro": [
+      1,
+      1,
+      1
+    ],
+    "root_overlay": true,
+    "cache_ext4_ro_norecovery": true,
+    "lower_squashfs": true,
+    "fault_keyword_scan_clear": true,
+    "thermal_tested": false
+  },
+  "remaining": [
+    "owned bootstrap clock/provider",
+    "shared SCP-to-SPM completion owner",
+    "IRQ owner with bounded drain and fault containment",
+    "all RX destinations and lifecycle",
+    "unique startup/reset generation and genuine READY"
+  ],
+  "final_device_state": "running mainline b4456f5c54a5",
+  "source_sha256": {
+    "drivers/misc/mediatek/ccci/ccci-scp-observe.c": "4241f0628018c338344050cffc637f98ac989965d6a0b786d6d5abe0443c9d69",
+    "drivers/misc/mediatek/ccci/Kconfig": "bf02020a3368c66003d0cc4e748304591f6448b26c02721a8e568c3dd2c14a20",
+    "arch/arm64/boot/dts/mediatek/mt6893-op6893-boot.dts": "2962203de0cb1c0060755dcb59f207ed9d9b829f4568b1c57a6c59c6676dedff",
+    "Documentation/devicetree/bindings/misc/realme,op6893-scp-observe.yaml": "d628a6b0e713fb5671a930d4f568ca4153c37b432d5c277e3ded7367b1baaf05",
+    "Documentation/arch/arm64/op6893-bringup/tools/test_modem_scp_pending.py": "6666f74a5939232eea39198a892a246e8bfc028de93d3ba875b512da3348a682"
+  }
+}

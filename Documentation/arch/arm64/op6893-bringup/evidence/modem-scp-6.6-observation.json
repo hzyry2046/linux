@@ -1,0 +1,543 @@
+{
+  "date": "2026-11-15",
+  "scope": "passive observation on user-reported 6.6 Android; no mainline boot or new backend hardware test",
+  "kernel_release_reported": "6.6.30-4k-g6974e26f087e",
+  "transport": "existing root adb shell -T sh, collector supplied on stdin; no push/install",
+  "software_ready_before": "ready",
+  "software_ready_after": "ready",
+  "comparison": {
+    "saved_fixture": "/data/src/mainline/mt6893-direct/evidence/ack-live.dtb",
+    "present_properties_matching_bytes": 24,
+    "properties_absent_in_both": 6,
+    "differences": 0,
+    "clock_phandle_cells_match_only_not_live_provider_resolution": true
+  },
+  "properties": {
+    "scp@10700000/reg": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        0,
+        273678336,
+        0,
+        1572864,
+        0,
+        275922944,
+        0,
+        4096,
+        0,
+        275910656,
+        0,
+        4096,
+        0,
+        275972096,
+        0,
+        4096,
+        0,
+        276037632,
+        0,
+        4096,
+        0,
+        276111360,
+        0,
+        4096,
+        0,
+        276168704,
+        0,
+        262144,
+        0,
+        276451328,
+        0,
+        4,
+        0,
+        276803584,
+        0,
+        256,
+        0,
+        276803840,
+        0,
+        4,
+        0,
+        276803852,
+        0,
+        4,
+        0,
+        276451360,
+        0,
+        4,
+        0,
+        276807680,
+        0,
+        256,
+        0,
+        276807936,
+        0,
+        4,
+        0,
+        276807948,
+        0,
+        4,
+        0,
+        276451364,
+        0,
+        4,
+        0,
+        276811776,
+        0,
+        256,
+        0,
+        276812032,
+        0,
+        4,
+        0,
+        276812044,
+        0,
+        4,
+        0,
+        276451368,
+        0,
+        4,
+        0,
+        276815872,
+        0,
+        256,
+        0,
+        276816128,
+        0,
+        4,
+        0,
+        276816140,
+        0,
+        4,
+        0,
+        276451372,
+        0,
+        4,
+        0,
+        276819968,
+        0,
+        256,
+        0,
+        276820224,
+        0,
+        4,
+        0,
+        276820236,
+        0,
+        4,
+        0,
+        276451376,
+        0,
+        4
+      ]
+    },
+    "scp@10700000/reg-names": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "strings": [
+        "scp_sram_base",
+        "scp_cfgreg",
+        "scp_clkreg",
+        "scp_cfgreg_core0",
+        "scp_cfgreg_core1",
+        "scp_bus_tracker",
+        "scp_l1creg",
+        "scp_cfgreg_sec",
+        "mbox0_base",
+        "mbox0_set",
+        "mbox0_clr",
+        "mbox0_init",
+        "mbox1_base",
+        "mbox1_set",
+        "mbox1_clr",
+        "mbox1_init",
+        "mbox2_base",
+        "mbox2_set",
+        "mbox2_clr",
+        "mbox2_init",
+        "mbox3_base",
+        "mbox3_set",
+        "mbox3_clr",
+        "mbox3_init",
+        "mbox4_base",
+        "mbox4_set",
+        "mbox4_clr",
+        "mbox4_init"
+      ]
+    },
+    "scp@10700000/interrupts": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        0,
+        434,
+        4,
+        0,
+        435,
+        4,
+        0,
+        436,
+        4,
+        0,
+        437,
+        4,
+        0,
+        438,
+        4,
+        0,
+        439,
+        4,
+        0,
+        440,
+        4
+      ]
+    },
+    "scp@10700000/interrupt-names": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "strings": [
+        "ipc0",
+        "ipc1",
+        "mbox0",
+        "mbox1",
+        "mbox2",
+        "mbox3",
+        "mbox4"
+      ]
+    },
+    "scp@10700000/core_nums": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        2
+      ]
+    },
+    "scp@10700000/core_0": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "strings": [
+        "enable"
+      ]
+    },
+    "scp@10700000/core_1": {
+      "available": false,
+      "matches_saved_ack_absence": true
+    },
+    "scp@10700000/twohart": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        0
+      ]
+    },
+    "scp@10700000/scp_sramSize": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        1572864
+      ]
+    },
+    "scp@10700000/secure_dump": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "strings": [
+        "disable"
+      ]
+    },
+    "scp@10700000/scp_hwvoter": {
+      "available": false,
+      "matches_saved_ack_absence": true
+    },
+    "scp@10700000/scp-read-infra-irq-status": {
+      "available": false,
+      "matches_saved_ack_absence": true
+    },
+    "scp@10700000/scp-scpsys-regmap": {
+      "available": false,
+      "matches_saved_ack_absence": true
+    },
+    "scp@10700000/awake-timeout": {
+      "available": false,
+      "matches_saved_ack_absence": true
+    },
+    "scp@10700000/mbox_count": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        5
+      ]
+    },
+    "scp@10700000/send_table": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        0,
+        0,
+        9,
+        3,
+        1,
+        2,
+        4,
+        1,
+        1,
+        5,
+        1,
+        2,
+        6,
+        1,
+        1,
+        26,
+        1,
+        9,
+        33,
+        1,
+        10,
+        11,
+        2,
+        34,
+        14,
+        3,
+        1,
+        15,
+        3,
+        2,
+        16,
+        3,
+        1,
+        17,
+        3,
+        6,
+        18,
+        3,
+        2,
+        24,
+        4,
+        34
+      ]
+    },
+    "scp@10700000/recv_table": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        1,
+        0,
+        2,
+        0,
+        2,
+        0,
+        26,
+        0,
+        7,
+        1,
+        2,
+        0,
+        8,
+        1,
+        10,
+        0,
+        9,
+        1,
+        1,
+        0,
+        10,
+        1,
+        2,
+        0,
+        27,
+        1,
+        2,
+        0,
+        28,
+        1,
+        5,
+        0,
+        5,
+        1,
+        1,
+        1,
+        34,
+        1,
+        10,
+        0,
+        12,
+        2,
+        30,
+        0,
+        20,
+        3,
+        10,
+        0,
+        21,
+        3,
+        6,
+        0,
+        22,
+        3,
+        1,
+        0,
+        23,
+        3,
+        2,
+        0,
+        15,
+        3,
+        1,
+        1,
+        25,
+        4,
+        30,
+        0
+      ]
+    },
+    "scp_dvfs/clock-names": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "strings": [
+        "clk_mux",
+        "clk_pll_0",
+        "clk_pll_1",
+        "clk_pll_2",
+        "clk_pll_3",
+        "clk_pll_4",
+        "clk_pll_5",
+        "clk_pll_6",
+        "clk_pll_7"
+      ]
+    },
+    "scp_dvfs/clocks": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        59,
+        191,
+        59,
+        100,
+        59,
+        34,
+        59,
+        19,
+        59,
+        18,
+        59,
+        39,
+        59,
+        10,
+        59,
+        15,
+        59,
+        31
+      ]
+    },
+    "scp_dvfs/scp-clk-hw-ver": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "strings": [
+        "v1"
+      ]
+    },
+    "scp_dvfs/scp-dvfs-feature": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "strings": [
+        "enable"
+      ]
+    },
+    "scp_clk_ctrl@10721000/reg": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        0,
+        275910656,
+        0,
+        4096
+      ]
+    },
+    "scp_infra@10001000/reg": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        0,
+        268439552,
+        0,
+        4096
+      ]
+    },
+    "reserved-memory/mblock-21-SCP-reserved/reg": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        0,
+        2678063104,
+        0,
+        5242880
+      ]
+    },
+    "reserved-memory/mblock-21-SCP-reserved/no-map": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "boolean": true
+    },
+    "reserved-memory/reserve-memory-scp_share/reg": {
+      "available": false,
+      "matches_saved_ack_absence": true
+    },
+    "reserved-memory/reserve-memory-scp_share/size": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        0,
+        3276800
+      ]
+    },
+    "reserved-memory/reserve-memory-scp_share/alignment": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        0,
+        16777216
+      ]
+    },
+    "reserved-memory/reserve-memory-scp_share/alloc-ranges": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "cells": [
+        0,
+        1342177280,
+        0,
+        1073741824
+      ]
+    },
+    "reserved-memory/reserve-memory-scp_share/no-map": {
+      "available": true,
+      "matches_saved_ack_bytes": true,
+      "boolean": true
+    }
+  },
+  "limits": [
+    "READY is the driver software flag, not a mainline handoff observation or proof of reset-free interval",
+    "Unavailable properties are not dynamically allocated addresses or default-value authorization",
+    "Dynamic scp_share reg remains absent; actual reserved allocation not obtained",
+    "No TCM or cached region header was read; struct_size and firmware provenance remain unverified",
+    "No register reads/writes, awake request, SCP/MD restart, reboot, flashing or backup update"
+  ],
+  "collector_sha256": "7c89a200408d37b010dd17e871cbad6f5f61d6e630c17e8a72f6f6a583a78ce5",
+  "external_allowlisted_log": "/data/src/mainline/mt6893-direct/modem-scp-6.6-metadata-direct.log",
+  "actions": {
+    "collector_executed": true,
+    "reboot": false,
+    "flash": false,
+    "awake_handshake": false,
+    "firmware_or_identity_dump": false,
+    "device_file_uploaded": false
+  },
+  "existing_memory_boot_log_query": {
+    "read_only": true,
+    "patterns": [
+      "scp_ap_dram_virt map:",
+      "scp_regdump_virt map:",
+      "reserve-memory-scp_share"
+    ],
+    "matching_lines": 0,
+    "negative_result_does_not_establish_no_allocation_or_failure": true
+  }
+}

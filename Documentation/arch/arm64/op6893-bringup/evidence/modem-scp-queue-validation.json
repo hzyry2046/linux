@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-15",
+  "base_head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "stage": "offline CPU queue adapter; no IRQ/worker/MMIO caller",
+  "validation": {
+    "actual_protocol_rx_drain_queue_sanitizer": true,
+    "rx_pins": 17,
+    "capacity_mailbox_combinations": 320,
+    "capacity_range": [
+      1,
+      64
+    ],
+    "ring_wrap_events": 1000,
+    "exact_full_capacity_tested": true,
+    "whole_batch_capacity_before_hardware_completion_ACK": true,
+    "destructive_ack_snapshot_preserved": true,
+    "all_hardware_callback_failures": true,
+    "full_payload_scrubbing": true,
+    "drain_rx_resource_cfg_regressions": true,
+    "enabled_default_Image_gz_modules": true,
+    "enabled_symbols_present": true,
+    "default_symbols_absent": true,
+    "defconfig_restored": true,
+    "compiler_warnings": 0,
+    "new_C_H_strict_checkpatch": [
+      0,
+      0,
+      0
+    ]
+  },
+  "device": {
+    "release": "7.3.0-op6893-d1-80e79074de00+",
+    "read_only_observation": true,
+    "pin_verified": true,
+    "fault": false,
+    "cfg_reserved": true,
+    "completion_enabled": false,
+    "rebooted": false,
+    "flashed": false
+  },
+  "limitations": [
+    "No real IRQ/workqueue adapter or concurrency verification",
+    "Owner must invalidate CPU queue on all external drain errors and synchronize clients/worker/IRQs before reinitialization",
+    "No completion MMIO ordering or hardware writes",
+    "Queue full abandons current software generation and scrubs existing events; not continuous traffic support",
+    "No READY acceptance, reset release or SCP/MD start"
+  ],
+  "evidence_directory": "/data/src/mainline/mt6893-direct/evidence/scp-queue-offline"
+}

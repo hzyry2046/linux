@@ -1,0 +1,192 @@
+{
+  "date": "2026-11-15",
+  "source_commit": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "scope": "R5.3 shared AP awake backend and prepared Android metadata observation; no provider/caller or device operations",
+  "register_contract": {
+    "map": "caller-supplied shared uncached infracfg MMIO syscon",
+    "set_and_poll_offset": "0xb14",
+    "clear_offset": "0xb18",
+    "marker": "0xa0",
+    "lock_request": "0xa1",
+    "unlock_request": "0xa2",
+    "poll_delay_us": 10,
+    "poll_budget_us": 1000000,
+    "status_0xb10_supported": false,
+    "automatic_reset": false
+  },
+  "tests": {
+    "actual_backend_c": true,
+    "sanitizers": [
+      "address",
+      "undefined"
+    ],
+    "lock_and_unlock_all_io_failures": true,
+    "ambiguous_failed_set_cleanup": true,
+    "primary_and_cleanup_error_preservation": true,
+    "pending_ap_request_no_write": true,
+    "nested_users_and_count_bounds": true,
+    "fault_retry_refused": true,
+    "stop_invalidate_no_io": true,
+    "poll_timeout_and_missing_marker": true,
+    "delayed_ack_read_counts_tested": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33
+    ],
+    "adjacent_connsys_bits_preserved_by_mock": true,
+    "actual_connsys_concurrency_validated": false,
+    "r5_1_actual_vendor_oracle_regression_passed": true,
+    "r5_2_actual_vendor_header_regression_passed": true
+  },
+  "collector": {
+    "executed_only_against_temporary_fixtures": true,
+    "side_effect_sysfs_attributes_replaced_with_fifo_traps": true,
+    "unknown_status_and_cmdline_sentinels_not_exported": true,
+    "missing_empty_oversize_read_error_and_proc_fallback_passed": true,
+    "ready_is_software_flag_only": true,
+    "uploaded_or_executed_on_device": false,
+    "tcm_or_firmware_read": false
+  },
+  "saved_ack_dt": {
+    "scope": "historical ACK DT only; no current device operations",
+    "properties": {
+      "/scp@10700000": {
+        "scp-read-infra-irq-status": null,
+        "scp-scpsys-regmap": null,
+        "awake-timeout": null,
+        "twohart": 0,
+        "scp_sramSize": 1572864,
+        "secure_dump": "disable"
+      },
+      "/scp_dvfs": {
+        "scp-dvfs-feature": "enable",
+        "scp-clk-hw-ver": "v1",
+        "do-ulposc-cali": true
+      }
+    }
+  },
+  "build": {
+    "arch": "arm64",
+    "cross_compile": "aarch64-linux-gnu-",
+    "targets": [
+      "Image.gz",
+      "modules",
+      "modpost"
+    ],
+    "enabled_passed": true,
+    "four_awake_functions_linked": true,
+    "default_passed": true,
+    "default_scp_symbols_absent": true,
+    "default_defconfigs_unchanged": true,
+    "warnings": 0,
+    "new_boot_packaged": false,
+    "new_image_flashed": false
+  },
+  "checkpatch": {
+    "strict": true,
+    "errors": 0,
+    "warnings": 0,
+    "checks": 0,
+    "files": [
+      "drivers/misc/mediatek/ccci/ccci-scp-awake.c",
+      "drivers/misc/mediatek/ccci/ccci-scp-awake.h",
+      "drivers/misc/mediatek/ccci/Kconfig",
+      "drivers/misc/mediatek/ccci/Makefile"
+    ],
+    "ignored": [
+      "FILE_PATH_CHANGES"
+    ]
+  },
+  "device": {
+    "user_reported_state": "Android for another modem analysis agent",
+    "device_operations_this_round": false
+  },
+  "next_hardware_checkpoint": {
+    "first": "Explicit passive Android metadata collector: software READY and fixed DT properties only",
+    "then": [
+      "actual TCM metadata ABI and firmware loading ownership through a separately reviewed observation path",
+      "current static/dynamic reserved allocation and trusted local phandle ownership",
+      "boot handoff vs actual READY, clock/source ownership and reset generation"
+    ],
+    "awake_backend_hardware_test_ready": false,
+    "reason": "No verified READY/clock/firmware contract or provider yet; collector does not acquire TCM header or dynamic allocation"
+  },
+  "limits": [
+    "Caller must serialize all AP users with STOP/reset and independently validate actual READY and stable clocks",
+    "Init is not hardware recovery; get is not READY detection or TCM/mailbox access authorization",
+    "Mock polling bounds do not guarantee bus-level timeout; no real concurrent CONNSYS validation",
+    "SCP mux and eight source clocks/DVFS not provided by existing mainline subset",
+    "No transport, IRQ, firmware loading, SCP reset/start, MD startup or new hardware acceptance"
+  ],
+  "source_sha256": {
+    "drivers/misc/mediatek/ccci/ccci-scp-awake.c": "88857dba165d951e845993f2ffe28b6a21455b4f190e28c77c7f1faf550b5b31",
+    "drivers/misc/mediatek/ccci/ccci-scp-awake.h": "2e986ae17f8ae59c7e434aefde30fe285a50ee24cb569868683651db2e0ed943",
+    "drivers/misc/mediatek/ccci/Kconfig": "03d1118294bba868c6167f8ca2ec62f370a17a5d08fc25b32da3c196f547db0b",
+    "drivers/misc/mediatek/ccci/Makefile": "03ba2695095e6e4cc93df801fd8875f8a31b6bf498fd68d698b1dbdfef27de6a",
+    "Documentation/arch/arm64/op6893-bringup/tools/test_modem_scp_awake.py": "9cb524e2e8cc90116feb7192b0ccedf7673872333ba820365c8f986fa746ca99",
+    "Documentation/arch/arm64/op6893-bringup/tools/test_modem_scp_observe.py": "608b4174bd5b19e8bde3a306e9b7f55cc400ab36085734fe258fb1729f70a602",
+    "Documentation/arch/arm64/op6893-bringup/tools/collect_modem_scp_metadata.sh": "7c89a200408d37b010dd17e871cbad6f5f61d6e630c17e8a72f6f6a583a78ce5"
+  },
+  "reference_source_sha256": {
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_awake.c": "2785079123e3fbf23f8ac0a379a5c96da958d496e8751efcea2ea0003516b121",
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_reg.h": "e6533f70c52937d68589855852bf141a64e82021cf4d4f11a7353bc71bb10826",
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_helper.c": "e180b562c8484a072185dd160c3eb6745a77f87b37f238ce432df9c1f3c11be8",
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_ipi_table.h": "7f37d4b99c199bb1cfe692f35b92e9163578aaad756028707930f73bcead858e",
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_ipi_pin.h": "111bc1726675ffe42601a04a55b97ac45c56be25c7f32e8202540b32fe2ee3ff",
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_dvfs.c": "df3ef342ac5736b91e1239a40c74f051d92f8c974233bb0ef59f10bc77dd6475",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_awake.c": "426279da2106dc33909faf2fb8a5f97a34617f8e95b548c63acd155559efdb2f",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_reg.h": "baa5c462a9d3ec98026c9392d089862c5edf0dc5268229f12c081c00ff098928",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_helper.c": "2e6278eaef7708d1ad2ebf1ff7895341dbf140815dc9c7927cc40318f31310a2",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_ipi_table.h": "9d89a2bde7ca0d5e3297c94ee207cc8d8c94b39b9afb1343a27eef823cbe6583",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_ipi_pin.h": "28e09d0dc19ca6d36a0f90e475638954497f86a90a74fddb24449a50177a5310",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_dvfs.c": "ef24d6f7617b7c0f892ee7c56221e8c494a739629bff1491c326c8640ee09fd1",
+    "/data/src/kernel_oddo_mt6893/drivers/clk/mediatek/clk-mt6885.c": "9dfe1444a4da39e4002e49ddf3a18809459e2c6b0649ff5321a3856d185d126f"
+  },
+  "external_build_script_sha256": "36aa226f67362b9ab5f4ea96060bab2ad7ffdd0b30856dcd371cb739ad0851f8",
+  "external_logs": {
+    "modem-scp-awake-tests.log": "/data/src/mainline/mt6893-direct/modem-scp-awake-tests.log",
+    "modem-scp-observe-tests.log": "/data/src/mainline/mt6893-direct/modem-scp-observe-tests.log",
+    "modem-scp-awake-protocol-regression.log": "/data/src/mainline/mt6893-direct/modem-scp-awake-protocol-regression.log",
+    "modem-scp-awake-memory-regression.log": "/data/src/mainline/mt6893-direct/modem-scp-awake-memory-regression.log",
+    "modem-scp-awake-build.log": "/data/src/mainline/mt6893-direct/modem-scp-awake-build.log",
+    "modem-scp-awake-default-build.log": "/data/src/mainline/mt6893-direct/modem-scp-awake-default-build.log",
+    "modem-scp-awake-config.log": "/data/src/mainline/mt6893-direct/modem-scp-awake-config.log",
+    "modem-scp-awake-default-config.log": "/data/src/mainline/mt6893-direct/modem-scp-awake-default-config.log",
+    "modem-scp-awake-checkpatch.log": "/data/src/mainline/mt6893-direct/modem-scp-awake-checkpatch.log",
+    "modem-scp-awake-enabled.config": "/data/src/mainline/mt6893-direct/modem-scp-awake-enabled.config",
+    "modem-scp-awake-default.config": "/data/src/mainline/mt6893-direct/modem-scp-awake-default.config",
+    "modem-scp-awake-symbols.log": "/data/src/mainline/mt6893-direct/modem-scp-awake-symbols.log",
+    "modem-scp-awake-default-symbols.log": "/data/src/mainline/mt6893-direct/modem-scp-awake-default-symbols.log",
+    "modem-scp-awake-saved-dt.json": "/data/src/mainline/mt6893-direct/modem-scp-awake-saved-dt.json"
+  }
+}

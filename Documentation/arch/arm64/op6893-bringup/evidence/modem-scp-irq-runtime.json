@@ -1,0 +1,99 @@
+{
+  "date": "2026-11-15",
+  "base_head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "image_identity": "49092bac2836",
+  "release": "7.3.0-op6893-d1-49092bac2836+",
+  "boot_sha256": "39b02b54144c93ca66dc41b23baa0c17e07a0551233ef761fad69e84e9141805",
+  "validation": {
+    "enabled_default_Image_gz_modules": true,
+    "enabled_default_board_merged_directed_schema": true,
+    "source_restored": true,
+    "default_experiment_disabled": true,
+    "irq_actual_c_asan_ubsan": true,
+    "queue_drain_rx_resource_cfg_regressions": true,
+    "compiler_warnings": 0,
+    "strict_checkpatch": [
+      0,
+      0,
+      0
+    ]
+  },
+  "hardware_status": "verified IRQ ownership and masking only; device left on this image",
+  "flash_partitions": [
+    "boot"
+  ],
+  "boot_partition_readback_matches": true,
+  "runtime": {
+    "irq_requested": 5,
+    "gic_hwirqs": [
+      468,
+      469,
+      470,
+      471,
+      472
+    ],
+    "gic_masked": 5,
+    "all_irq_cpu_counts_zero": true,
+    "unexpected": 0,
+    "work_runs": 0,
+    "closing": false,
+    "auto_enable": false,
+    "arm_supported": false,
+    "generation": 0,
+    "queue_active": false,
+    "ready_known": false,
+    "usb_repeat_queries": 3,
+    "wifi_repeat_queries": 3,
+    "cfg_reserved_bytes": 4096,
+    "cfg_register_reads": 0,
+    "cfg_register_writes": 0,
+    "completion_enabled": false,
+    "explicit_pin_writes": 1,
+    "scp_user": 1,
+    "resource_mask": 2,
+    "pin_verified": true,
+    "fault": false,
+    "ccf_enable_prepare_rate": [
+      3,
+      3,
+      26000000
+    ],
+    "pending": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "unknown_pending": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "core0_header_stable": true,
+    "usb_ssh": true,
+    "wifi_ssh": true,
+    "cpus_online": "0-7",
+    "ufs_ro": {
+      "sda": true,
+      "sdb": true,
+      "sdc": true
+    },
+    "cache": "ext4 ro,norecovery",
+    "lower": "squashfs ro",
+    "root": "overlay",
+    "fault_keyword_scan": "no matches"
+  },
+  "limitations": [
+    "No hardware IRQ delivery or unexpected-handler injection test",
+    "No normal RX/drain/client adapter or IRQ enable API",
+    "No SCP/mailbox completion or ACK writes, payload capture, awake, reset release, SCP/MD start or READY acceptance",
+    "Host sanitizer models do not prove Linux IRQ concurrency or actual hardware cleanup",
+    "Mask observations are separate reads, not an atomic global snapshot",
+    "Observer irq_requested=0 is scoped to observer; resource owner holds all five actions",
+    "No partition-table or recovery backup changes"
+  ],
+  "evidence": "/data/src/mainline/mt6893-direct/evidence/scp-irq-live"
+}

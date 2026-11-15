@@ -1,0 +1,348 @@
+{
+  "date": "2026-11-14",
+  "scope": "Offline source audit and allowlisted historical FDT projection; no runtime modem validation. Hashes cover source files only, never private device contents.",
+  "sources": {
+    "M": {
+      "root": "/data/src/mainline/linux",
+      "head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+      "files": [
+        {
+          "path": "arch/arm64/kernel/op6893-fdt.c",
+          "bytes": 4894,
+          "sha256": "45c5a871d1df110ee0fc594b16604e35f70f81f0a24143977c590b1c149feb9a"
+        },
+        {
+          "path": "arch/arm64/boot/dts/mediatek/mt6893-op6893.dts",
+          "bytes": 4501,
+          "sha256": "0fee190a8c27f223bc2fe8b75318e5ce9c59b448cef000cafbc53464d367f444"
+        },
+        {
+          "path": "drivers/pmdomain/mediatek/mt6893-pm-domains.h",
+          "bytes": 18800,
+          "sha256": "e4c7375a5de1545338823a99a585c1b169ad9f965859aac1881cf191f556d774"
+        },
+        {
+          "path": "drivers/pmdomain/mediatek/mtk-pm-domains.c",
+          "bytes": 40505,
+          "sha256": "7c270b5541008e80eba016f0da0aea109af5e824d0d85549843c8810853b415c"
+        },
+        {
+          "path": "drivers/remoteproc/mtk_scp.c",
+          "bytes": 44764,
+          "sha256": "99fd0a176029abb1c7e3efe0d5f0dde1e5a74fcd70672136080dccdf37bb0066"
+        },
+        {
+          "path": "drivers/net/wwan/t7xx/t7xx_pci.c",
+          "bytes": 24470,
+          "sha256": "cc96758728863cdd3521d475adc630c8986ce12af98dbc914fa390e558a0a95a"
+        }
+      ]
+    },
+    "A": {
+      "root": "/data/src/kernel_oddo_mt6893",
+      "head": "9e2043b0b88ca4ef3970aa64f3498fe608c9ddec",
+      "files": [
+        {
+          "path": "arch/arm64/configs/mt6893_defconfig",
+          "bytes": 174423,
+          "sha256": "7b0cb3b25947bb89304280925e9207e714cbd512b7189741ba0a0c13a4067643"
+        },
+        {
+          "path": "drivers/misc/mediatek/ccci_util/ccci_util_lib_fo.c",
+          "bytes": 48766,
+          "sha256": "420e21279c890b4d797ba7797fc2816a7ff4b8844d4cc70c12e8de0a7ece57c6"
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/Makefile",
+          "bytes": 5851,
+          "sha256": "293bcf069718d5b5382d088a79c800171e410abb74967a7a75f549c8bc065250"
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/mt6885/ccci_config.h",
+          "bytes": 2795,
+          "sha256": "c38e31c1507a391d2851d498601c88f7e1401369016a8f149c1a01f3cd1962ab"
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/mt6885/modem_secure_base.h",
+          "bytes": 967,
+          "sha256": "9efb4af78aecca546bc01621714052b93c9ba1a275ae05e668995f4ef3a3f54f"
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/mt6885/md_sys1_platform.c",
+          "bytes": 29025,
+          "sha256": "6a8574b801e57ccfeda9e6152dd34e9e55c0970515de09306e7c3dbec3a99f58"
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/port/port_cfg.c",
+          "bytes": 20395,
+          "sha256": "74cd62d2a69bad6283e5ca4aab7705636a405390f60e7f259c29b483773323da"
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/port/port_rpc.c",
+          "bytes": 41966,
+          "sha256": "4319787e8a0523a0021ae653569af886f94263bf8cede3f55282f7e073fa11d5"
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/inc/ccci_core.h",
+          "bytes": 18263,
+          "sha256": "d9cae779f8ed219c8edd73a50e6cab3334d89fe7cd9a7f4936fed1ef5c3997e2"
+        }
+      ]
+    },
+    "V": {
+      "root": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833",
+      "head": "4a9ae821ffda7776d9c96ecae82aca1038a2a02a",
+      "files": [
+        {
+          "path": "kernel/kernel_device_modules-6.6/drivers/misc/mediatek/eccci/ccci_modem.c",
+          "bytes": 807,
+          "sha256": "aecf11afa2bbbe8d3245f92533ad7427021b38dbe2b5e206c4b02ae8707cb29c"
+        },
+        {
+          "path": "kernel/kernel_device_modules-6.6/drivers/misc/mediatek/eccci/fsm/md_sys1_platform.c",
+          "bytes": 73161,
+          "sha256": "7890d509a28ebd7dcb2c29db6a3738a372155f702b00a4c05376a5d8dbb03d58"
+        },
+        {
+          "path": "kernel/kernel_device_modules-6.6/drivers/misc/mediatek/eccci/fsm/ccci_fsm_scp_c.c",
+          "bytes": 17945,
+          "sha256": "f8f17bd1d2a924e1e1d6c926fa01449c6a8de4ce8abc429ef56fac2b91bd29ec"
+        },
+        {
+          "path": "kernel/kernel_device_modules-6.6/drivers/misc/mediatek/eccci/hif/ccci_hif_ccif.c",
+          "bytes": 57488,
+          "sha256": "43d145105a3827c09d330f5b3e33e7be8732389f3dc80223db52f56975812ffe"
+        },
+        {
+          "path": "kernel/kernel_device_modules-6.6/drivers/misc/mediatek/eccci/hif/ccci_dpmaif_drv_v2.c",
+          "bytes": 37416,
+          "sha256": "16b5ecdd799d22b9682da571fcc995ff5c5050d47f6d43ccf7a5734684738d06"
+        },
+        {
+          "path": "kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/cm4/v01/scp_helper.c",
+          "bytes": 52480,
+          "sha256": "a1932d5d3eca22332a4d2479d968098c88b64ef215a87b57c23d88792b5055df"
+        },
+        {
+          "path": "kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/cm4/v01/scp_ipi.c",
+          "bytes": 10141,
+          "sha256": "1f2bf5cb572a7735b25c53ee2e9baafa1612309083906b1988d00b43149ed2a3"
+        },
+        {
+          "path": "kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/cm4/scp_dvfs.c",
+          "bytes": 42113,
+          "sha256": "ffbbab26fe91a3cacebb10b6121d577e0d8f5443d58e07f61292377bc1b1c72f"
+        }
+      ]
+    },
+    "Q": {
+      "root": "/data/src/mainline/linux-qqcandy-6.18",
+      "head": "3e9df2e462107fcd597f00fdbdc8d9b8f40f36b1",
+      "files": [
+        {
+          "path": "arch/arm64/boot/dts/mediatek/mt6895-oplus-qqcandy.dts",
+          "bytes": 67631,
+          "sha256": "e8ac23cd09ef274b8ff8416d5d1b4376f07ff8a3f0f7d0815ff2f3da32e4acc6"
+        },
+        {
+          "path": "arch/arm64/configs/qqcandy.config",
+          "bytes": 13439,
+          "sha256": "49b7b51004ae4b77dc0f62f97b1f05ed3c3d91c4d1bd2c652cbb24e334ac12a8"
+        },
+        {
+          "path": "arch/arm64/kernel/setup.c",
+          "bytes": 48563,
+          "sha256": "b073a62d60fb618850c4c2d1695c8e6f4c4449fdbbec518c1e1b23bed6ad09a1"
+        },
+        {
+          "path": "drivers/misc/mediatek/ccci_util/ccci_util_lib_fo.c",
+          "bytes": 50857,
+          "sha256": "0b1f455b4862040c7fa729cafd825d8dad4c71fc77d341c57ade883654d432d8"
+        },
+        {
+          "path": "drivers/misc/mediatek/ccci_core/ccci_main.c",
+          "bytes": 4956,
+          "sha256": "82a031049d2cc133991222122b09396361b06bae2fc266361d392e61db87d687"
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/port/port_tty.c",
+          "bytes": 12253,
+          "sha256": "8733c5adfbcc00fb4e6b7f42794008c455a2529a36740659a46b85b1d7073319"
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/port/port_rpc.c",
+          "bytes": 60375,
+          "sha256": "5c868a6297215fb46b7bb3acee51ccf5a3a30e1b09bdee719ab70dc3f6d540f9"
+        },
+        {
+          "path": "drivers/misc/mediatek/eccci/ccci_modem.c",
+          "bytes": 84506,
+          "sha256": "f22a0f39a790add5adc39291a2e165be30cd750856f4a40eae7f4f3b764f6674"
+        }
+      ]
+    }
+  },
+  "historical_ack_fdt": {
+    "path": "/data/src/mainline/mt6893-direct/evidence/ack-live.dtb",
+    "warning": "Saved ACK snapshot, not current LK handoff. No full FDT or private payload hash recorded.",
+    "raw_cells": "reg uses address-cells=2 and size-cells=2; interrupts are GIC triples (type, SPI number, flags).",
+    "nodes": {
+      "/chosen": {
+        "ccci,modem_info_v2": {
+          "property_bytes": 48,
+          "base": "0xbff70000",
+          "size": "0xa68",
+          "error": 0,
+          "version": 3,
+          "tag_count": 20,
+          "load_flag": 1,
+          "md_errors": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "tail_padding_bytes": 4
+        }
+      },
+      "/mddriver": {
+        "ccci,modem_info_v2": {
+          "property_bytes": 48,
+          "base": "0xbff70000",
+          "size": "0xa68",
+          "error": 0,
+          "version": 3,
+          "tag_count": 20,
+          "load_flag": 1,
+          "md_errors": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "tail_padding_bytes": 4
+        },
+        "compatible": [
+          "mediatek,mddriver"
+        ],
+        "reg": [
+          "0x0",
+          "0x10209000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x1020a000",
+          "0x0",
+          "0x1000"
+        ],
+        "interrupts": [
+          "0x0",
+          "0x4e",
+          "0x1",
+          "0x0",
+          "0xc2",
+          "0x4",
+          "0x0",
+          "0xc3",
+          "0x4"
+        ],
+        "clock-names": [
+          "scp-sys-md1-main",
+          "infra-dpmaif-clk",
+          "infra-dpmaif-blk-clk",
+          "infra-ccif-ap",
+          "infra-ccif-md",
+          "infra-ccif1-ap",
+          "infra-ccif1-md",
+          "infra-ccif2-ap",
+          "infra-ccif2-md",
+          "infra-ccif4-md",
+          "infra-ccif5-md"
+        ],
+        "mediatek,mdhif_type": [
+          "0x6"
+        ]
+      },
+      "/ccifdriver@10209000": {
+        "compatible": [
+          "mediatek,ccci_ccif"
+        ],
+        "reg": [
+          "0x0",
+          "0x10209000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x1020a000",
+          "0x0",
+          "0x1000"
+        ],
+        "interrupts": [
+          "0x0",
+          "0xc2",
+          "0x4",
+          "0x0",
+          "0xc3",
+          "0x4"
+        ],
+        "clock-names": [
+          "infra-ccif-ap",
+          "infra-ccif-md",
+          "infra-ccif1-ap",
+          "infra-ccif1-md",
+          "infra-ccif2-ap",
+          "infra-ccif2-md",
+          "infra-ccif4-md",
+          "infra-ccif5-md"
+        ],
+        "mediatek,sram_size": [
+          "0x200"
+        ]
+      },
+      "/dpmaif@10014000": {
+        "compatible": [
+          "mediatek,dpmaif"
+        ],
+        "reg": [
+          "0x0",
+          "0x10014000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x1022d000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x1022c000",
+          "0x0",
+          "0x1000",
+          "0x0",
+          "0x1022e000",
+          "0x0",
+          "0x1000"
+        ],
+        "interrupts": [
+          "0x0",
+          "0xd1",
+          "0x4"
+        ],
+        "clock-names": [
+          "infra-dpmaif-clk",
+          "infra-dpmaif-blk-clk"
+        ],
+        "mediatek,dpmaif_capability": [
+          "0xe"
+        ]
+      }
+    }
+  },
+  "historical_merged_preview": {
+    "path": "/data/src/mainline/mt6893-direct/dist/7969e0599430/merged-preview.dtb",
+    "present": {
+      "/mddriver": false,
+      "/ccifdriver@10209000": false,
+      "/dpmaif@10014000": false,
+      "/chosen:ccci,modem_info_v2": false
+    }
+  }
+}

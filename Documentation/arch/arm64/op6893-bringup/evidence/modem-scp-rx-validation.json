@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-15",
+  "source_commit": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "scope": "default-off RX transaction backend without hardware caller",
+  "validation": {
+    "actual_protocol_rx_asan_ubsan": true,
+    "full_fixture_batch_cases": 750,
+    "ordered_copy_post_ack_deliver": true,
+    "overwrite_after_ack": true,
+    "all_operation_failures": true,
+    "unexpected_and_unregistered_no_ack": true,
+    "sticky_fault_stop": true,
+    "irq31_and_64_word_boundary": true,
+    "ready0_exact_payload": true,
+    "existing_layout_wire_regressions": true,
+    "enabled_arm64_image_modules": true,
+    "enabled_symbols_present": true,
+    "default_arm64_image_modules": true,
+    "default_symbols_absent": true,
+    "compiler_warnings": 0,
+    "checkpatch_errors_warnings_checks": [
+      0,
+      0,
+      0
+    ]
+  },
+  "device": {
+    "current_image": "3ccec64b58d4",
+    "rebooted": false,
+    "flashed": false,
+    "mailbox_accessed": false,
+    "irq_registered": false,
+    "ready_received": false,
+    "scp_md_started": false,
+    "awake_sent": false
+  },
+  "remaining": [
+    "live mailbox pending preflight without clear or IRQ",
+    "shared SCP-to-SPM completion ownership",
+    "clock and reset generation provider",
+    "IRQ containment and bounded drain",
+    "all RX destinations and lifecycle",
+    "genuine current-generation READY acceptance"
+  ],
+  "source_sha256": {
+    "drivers/misc/mediatek/ccci/ccci-scp-rx.c": "2fdfcd76471f41d0d756a6e3bf5c1190d3f42cff2742eb6b607cb748309c938a",
+    "drivers/misc/mediatek/ccci/ccci-scp-rx.h": "4ec27975b39bcff7c79dd516074d9852b6d621fedddc0f650d704de7b1701366",
+    "drivers/misc/mediatek/ccci/Kconfig": "8164a4649a8a606d4016e5dea23888cae4553f6de6589ce0a1bb800b0e813f54",
+    "drivers/misc/mediatek/ccci/Makefile": "725e59323d39ab722e76b4639f9baf368ecea5aff65683038a9569444492ec3e",
+    "Documentation/arch/arm64/op6893-bringup/tools/test_modem_scp_rx.py": "59490df0fb45a124ed31051231e2ef428ec6164592d4d91574e83f0ff07c4dcc"
+  }
+}

@@ -1,0 +1,104 @@
+{
+  "date": "2026-11-15",
+  "source_commit": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "scope": "mainline AP TOPCK SCP mux and reservation bookkeeping only",
+  "image": {
+    "id": "c55ce7327907",
+    "release": "7.3.0-op6893-d1-c55ce7327907+",
+    "boot_sha256": "33c918d3a0d7617e8f4a5cd19f6193cc63d735ac4b69324752b23439d5f0e85c",
+    "partition_free_bytes": 22276096,
+    "source_manifest": "/data/src/mainline/mt6893-direct/dist/c55ce7327907/manifest.json"
+  },
+  "prior_device_release": "6.6.30-4k-g061b7bdafc86",
+  "deployment": {
+    "queued_flash_then_reboot": true,
+    "flash_boot_success": true,
+    "fastboot_boot_used": false,
+    "partition_table_changed": false,
+    "restore_backup_updated": false
+  },
+  "observations": {
+    "selector": 0,
+    "selector_parent": "vendor parent0 26M; frequency not independently measured",
+    "gated": false,
+    "samples_equal": true,
+    "firmware_base": "0x9fa00000",
+    "firmware_size": "0x500000",
+    "share_base": "0x8d000000",
+    "share_size": "0x320000",
+    "share_from_mainline_allocation": true,
+    "scp_access": false,
+    "ready_known": false
+  },
+  "regression": {
+    "usb_ssh": true,
+    "wifi_ssh": true,
+    "online_cpus": 8,
+    "root_overlay": true,
+    "cache_ext4": true,
+    "lower_squashfs": true,
+    "ufs_disk_ro": [
+      1,
+      1,
+      1
+    ],
+    "kernel_fault_scan_clear": true,
+    "thermal_sampling": "not accepted; no thermal_zone0/temp"
+  },
+  "validation": {
+    "actual_function_asan_ubsan_passed": true,
+    "strict_checkpatch": {
+      "errors": 0,
+      "warnings": 0,
+      "checks": 0
+    },
+    "binding_document_validation_passed": true,
+    "enabled_and_default_board_merged_dtb_schema_passed": true,
+    "enabled_arm64_image_passed": true,
+    "default_arm64_image_modules_passed": true,
+    "default_observer_symbols_absent": true,
+    "default_node_disabled": true,
+    "experiment_dts_defconfig_restored": true,
+    "full_builder_regression_passed": true,
+    "default_fdt_merge_regression_passed": true,
+    "compiler_warnings": 0,
+    "existing_defconfig_reassignment_warnings": [
+      "arch/arm64/configs/op6893_boot_defconfig:175:warning: override: reassigning to symbol FW_LOADER",
+      "arch/arm64/configs/op6893_boot_defconfig:183:warning: override: reassigning to symbol VT"
+    ]
+  },
+  "not_performed": [
+    "SCP MMIO/TCM or firmware content access",
+    "awake or mailbox IPI",
+    "SCP/MD reset/start",
+    "clock rate/parent/gate changes",
+    "IRQ ownership or READY establishment",
+    "regdump mapping",
+    "restore backup update"
+  ],
+  "remaining": [
+    "bounded core0 reset/status readback",
+    "exact header after bootstrap access prerequisites",
+    "firmware loading/backup ownership",
+    "mainline clock provider and genuine READY/mailbox lifecycle"
+  ],
+  "final_device_state": "running mainline c55ce7327907",
+  "source_sha256": {
+    "drivers/misc/mediatek/ccci/ccci-scp-observe.c": "54d0ef49199509ad68056e7e46444bdbf619d8ec4a236777b572f138b57e04cf",
+    "drivers/misc/mediatek/ccci/Kconfig": "229915992597bac49ee6038487d29737eb8a54c227267431a84bf72e97ebeee4",
+    "drivers/misc/mediatek/ccci/Makefile": "905bf64de4eea58d70a86a4df922b28de73d7d6e7cd48b6f71f8bc0e464563f5",
+    "arch/arm64/boot/dts/mediatek/mt6893-op6893-boot.dts": "d716c30e17b7e6d5cca4cef69a1c17487557ac9f06b9ec70f7a2c7b213d2e113",
+    "Documentation/devicetree/bindings/misc/realme,op6893-scp-observe.yaml": "4d69154e187b7b5a6a708cfbe86c5446246c1b3d025c9e17b6e2b260ccf27370",
+    "Documentation/arch/arm64/op6893-bringup/tools/test_modem_scp_prerequisites.py": "b67d704a9e4d061c4cafc947c7accff83a7a81a91a1e24abbc73c81d378b2590"
+  },
+  "logs": {
+    "runtime": "/data/src/mainline/mt6893-direct/evidence/scp-observe-live/runtime.txt",
+    "wifi_ssh": "/data/src/mainline/mt6893-direct/evidence/scp-observe-live/wifi-ssh.txt",
+    "flash": "/data/src/mainline/mt6893-direct/evidence/scp-observe-live/flash.log",
+    "host_tests": "/data/src/mainline/mt6893-direct/scp-observe-host-tests.log",
+    "schema": "/data/src/mainline/mt6893-direct/scp-observe-schema.log",
+    "checkpatch": "/data/src/mainline/mt6893-direct/scp-observe-checkpatch.log",
+    "default_build": "/data/src/mainline/mt6893-direct/scp-observe-default-build.log",
+    "default_fdt": "/data/src/mainline/mt6893-direct/scp-observe-default-fdt.log"
+  }
+}

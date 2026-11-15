@@ -1,0 +1,224 @@
+{
+  "scope": "Local source control flow only; does not prove firmware provenance, reset completion or mailbox isolation",
+  "trees": {
+    "android": {
+      "root": "/data/src/kernel_oddo_mt6893",
+      "files": {
+        "scp_helper.c": {
+          "path": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "sha256": "e180b562c8484a072185dd160c3eb6745a77f87b37f238ce432df9c1f3c11be8"
+        },
+        "scp_helper.h": {
+          "path": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_helper.h",
+          "sha256": "de9c7b5fdbe1b2142977fbf804441404ccdc099cd4e94a67ae49d9e04e19f818"
+        },
+        "scp_awake.c": {
+          "path": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_awake.c",
+          "sha256": "2785079123e3fbf23f8ac0a379a5c96da958d496e8751efcea2ea0003516b121"
+        },
+        "scp_reg.h": {
+          "path": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_reg.h",
+          "sha256": "e6533f70c52937d68589855852bf141a64e82021cf4d4f11a7353bc71bb10826"
+        },
+        "mtk-mbox.c": {
+          "path": "/data/src/kernel_oddo_mt6893/drivers/soc/mediatek/mtk-mbox.c",
+          "sha256": "9880ce2830a5c65d98f6087500c08057bc7278295fea7430808acec226b18018"
+        }
+      },
+      "functions": {
+        "initial_release": {
+          "path": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "line": 748,
+          "body_sha256": "a489c277308bd717237f9ba940f3b70b3080410918ddd930177abac9fbc337f8"
+        },
+        "recovery_worker": {
+          "path": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "line": 1810,
+          "body_sha256": "d34c14142d3afd818b9627d6478ec688b44f3773b25e81e942f77e0570a37fd1"
+        },
+        "halt_wait": {
+          "path": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "line": 1759,
+          "body_sha256": "8dc36bcce8ccfc1729ca28a76d72a517f0bd785d495c3b5d30fa85cbe0bc7093"
+        },
+        "recovery_mappings": {
+          "path": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "line": 1980,
+          "body_sha256": "2bccc442dac11f214f08907c3802f17120574500b8497fdd09d3c28624e8a9d2"
+        },
+        "restore_memory": {
+          "path": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_awake.c",
+          "line": 271,
+          "body_sha256": "2a099bc6fc7d8da5a9189f6d3c7662572cb8829d016d81ce6384a000bd18dc1a"
+        },
+        "mailbox_probe": {
+          "path": "/data/src/kernel_oddo_mt6893/drivers/soc/mediatek/mtk-mbox.c",
+          "line": 722,
+          "body_sha256": "784f0ecdb0a6e038b1dd3adef4797f53d1fdc208dcda790633ee0e035068123e"
+        },
+        "mailbox_ack": {
+          "path": "/data/src/kernel_oddo_mt6893/drivers/soc/mediatek/mtk-mbox.c",
+          "line": 239,
+          "body_sha256": "739bde19679df1923183ddf0ef301dd4e77c1a43a2f618768913929542ba6343"
+        }
+      },
+      "checked_facts": {
+        "initial_nonsecure_path_releases_without_assert_or_restore": true,
+        "recovery_asserts_both_cores_before_memory_restore_and_core0_release": true,
+        "ordinary_restore_uses_inherited_loader_and_two_core_dram_backups": true,
+        "ordinary_header_copy_uses_compiled_size_not_snapshot_size": true,
+        "no_request_firmware_in_helper_or_awake": true,
+        "mailbox_probe_requests_irq_without_explicit_pending_clear": true,
+        "recovery_worker_has_no_explicit_mailbox_ack": true,
+        "halt_wait_returns_no_success_or_timeout_status": true
+      },
+      "header_compiled_bytes": 72
+    },
+    "ack": {
+      "root": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6",
+      "files": {
+        "scp_helper.c": {
+          "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "sha256": "2e6278eaef7708d1ad2ebf1ff7895341dbf140815dc9c7927cc40318f31310a2"
+        },
+        "scp_helper.h": {
+          "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_helper.h",
+          "sha256": "bb2b778698ecab1fd825f11b6f2b9cecde318171a69a92c072248fc85b9630d3"
+        },
+        "scp_awake.c": {
+          "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_awake.c",
+          "sha256": "426279da2106dc33909faf2fb8a5f97a34617f8e95b548c63acd155559efdb2f"
+        },
+        "scp_reg.h": {
+          "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_reg.h",
+          "sha256": "baa5c462a9d3ec98026c9392d089862c5edf0dc5268229f12c081c00ff098928"
+        },
+        "mtk-mbox.c": {
+          "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/soc/mediatek/mtk-mbox.c",
+          "sha256": "c843591f9a510dbc8c8fa8fb171a2bdc42de3177226a4e94836a29235b05f4e6"
+        }
+      },
+      "functions": {
+        "initial_release": {
+          "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "line": 977,
+          "body_sha256": "1787f3a90c1a22728901956d3e663c8a3506c4555687e2dfcfb920332a66620d"
+        },
+        "recovery_worker": {
+          "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "line": 2192,
+          "body_sha256": "a30c3b8dac440a9a4d52ef97026dfa3190bbb041874d610febdc4f0cbbf2a566"
+        },
+        "halt_wait": {
+          "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "line": 2143,
+          "body_sha256": "e46c254de685fbc19c2035617fb27723f7611439d4ec2410e22e78cfe1207203"
+        },
+        "recovery_mappings": {
+          "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "line": 2425,
+          "body_sha256": "f882f2ee713b88df0ef5dd6c57ccf080e9f539ccefa3c88e90d5c4c55ed07a02"
+        },
+        "restore_memory": {
+          "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_awake.c",
+          "line": 358,
+          "body_sha256": "a856fd23c06e411a2177b02157c22e6426e6916c6f9dbddaf88bf00b44a17439"
+        },
+        "mailbox_probe": {
+          "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/soc/mediatek/mtk-mbox.c",
+          "line": 745,
+          "body_sha256": "5e3e4c93aceb5295fa0870636d5aa0191f800ed0387262eeaab44bab58a4c51f"
+        },
+        "mailbox_ack": {
+          "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/soc/mediatek/mtk-mbox.c",
+          "line": 243,
+          "body_sha256": "739bde19679df1923183ddf0ef301dd4e77c1a43a2f618768913929542ba6343"
+        }
+      },
+      "checked_facts": {
+        "initial_nonsecure_path_releases_without_assert_or_restore": true,
+        "recovery_asserts_both_cores_before_memory_restore_and_core0_release": true,
+        "ordinary_restore_uses_inherited_loader_and_two_core_dram_backups": true,
+        "ordinary_header_copy_uses_compiled_size_not_snapshot_size": true,
+        "no_request_firmware_in_helper_or_awake": true,
+        "mailbox_probe_requests_irq_without_explicit_pending_clear": true,
+        "recovery_worker_has_no_explicit_mailbox_ack": true,
+        "halt_wait_returns_no_success_or_timeout_status": true
+      },
+      "header_compiled_bytes": 72
+    },
+    "qqcandy": {
+      "root": "/data/src/mainline/linux-qqcandy-6.18",
+      "files": {
+        "scp_helper.c": {
+          "path": "/data/src/mainline/linux-qqcandy-6.18/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "sha256": "5df46f1fd99c9de0cce90aaeaf51bdd40b5b246eafc8f7e7fde8c92e3e4c51ef"
+        },
+        "scp_helper.h": {
+          "path": "/data/src/mainline/linux-qqcandy-6.18/drivers/misc/mediatek/scp/rv/scp_helper.h",
+          "sha256": "f9da542c985c425635e116c467730613ee7dceeb5188931120709b4f8beafc27"
+        },
+        "scp_awake.c": {
+          "path": "/data/src/mainline/linux-qqcandy-6.18/drivers/misc/mediatek/scp/rv/scp_awake.c",
+          "sha256": "586583ad8d39a65bd5fb4d7bcf976a714c0e54f3966dd93c92353dc5a85264cf"
+        },
+        "scp_reg.h": {
+          "path": "/data/src/mainline/linux-qqcandy-6.18/drivers/misc/mediatek/scp/rv/scp_reg.h",
+          "sha256": "d2ee24f8c9d8c68e5e3b0104f20a81285c45d133f18f0b2240f7a269d5a2c4cf"
+        },
+        "mtk-mbox.c": {
+          "path": "/data/src/mainline/linux-qqcandy-6.18/drivers/soc/mediatek/mtk-mbox.c",
+          "sha256": "935005ab94bbfc59796df21b738b7fd20d0c97cf57f284209be64ca83279ef4d"
+        }
+      },
+      "functions": {
+        "initial_release": {
+          "path": "/data/src/mainline/linux-qqcandy-6.18/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "line": 785,
+          "body_sha256": "0693ebf6820fa328a45877c31f00d3ca0a3907d8f9b67f6e38f75e829fc3833b"
+        },
+        "recovery_worker": {
+          "path": "/data/src/mainline/linux-qqcandy-6.18/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "line": 1876,
+          "body_sha256": "ef8527b97a6fcaedef9431c8645099cc33934b0a0d7d935c8b006e5018d137fd"
+        },
+        "halt_wait": {
+          "path": "/data/src/mainline/linux-qqcandy-6.18/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "line": 1846,
+          "body_sha256": "8dc36bcce8ccfc1729ca28a76d72a517f0bd785d495c3b5d30fa85cbe0bc7093"
+        },
+        "recovery_mappings": {
+          "path": "/data/src/mainline/linux-qqcandy-6.18/drivers/misc/mediatek/scp/rv/scp_helper.c",
+          "line": 2062,
+          "body_sha256": "0d25261682ffd43f1331c4920afcf149a30e53855c966c1042f608591373dd7e"
+        },
+        "restore_memory": {
+          "path": "/data/src/mainline/linux-qqcandy-6.18/drivers/misc/mediatek/scp/rv/scp_awake.c",
+          "line": 271,
+          "body_sha256": "2a099bc6fc7d8da5a9189f6d3c7662572cb8829d016d81ce6384a000bd18dc1a"
+        },
+        "mailbox_probe": {
+          "path": "/data/src/mainline/linux-qqcandy-6.18/drivers/soc/mediatek/mtk-mbox.c",
+          "line": 720,
+          "body_sha256": "2565bf0ed7eaaa4f23b37c1be7e3caf2ef2125486448db68c50aaf897a1651c8"
+        },
+        "mailbox_ack": {
+          "path": "/data/src/mainline/linux-qqcandy-6.18/drivers/soc/mediatek/mtk-mbox.c",
+          "line": 237,
+          "body_sha256": "739bde19679df1923183ddf0ef301dd4e77c1a43a2f618768913929542ba6343"
+        }
+      },
+      "checked_facts": {
+        "initial_nonsecure_path_releases_without_assert_or_restore": true,
+        "recovery_asserts_both_cores_before_memory_restore_and_core0_release": true,
+        "ordinary_restore_uses_inherited_loader_and_two_core_dram_backups": true,
+        "ordinary_header_copy_uses_compiled_size_not_snapshot_size": true,
+        "no_request_firmware_in_helper_or_awake": true,
+        "mailbox_probe_requests_irq_without_explicit_pending_clear": true,
+        "recovery_worker_has_no_explicit_mailbox_ack": true,
+        "halt_wait_returns_no_success_or_timeout_status": true
+      },
+      "header_compiled_bytes": 60
+    }
+  }
+}

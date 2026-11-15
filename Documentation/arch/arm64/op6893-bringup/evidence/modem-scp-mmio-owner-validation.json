@@ -1,0 +1,117 @@
+{
+  "date": "2026-11-15",
+  "base_head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "image_identity": "fba1be648ead",
+  "release": "7.3.0-op6893-d1-fba1be648ead+",
+  "boot_sha256": "5c25d72cc9fadacc0b3ce0756f6e8e9393897c6596d591d5d7fdd562b9349160",
+  "validation": {
+    "actual_owner_two_branches_asan_ubsan": true,
+    "mmio_irq_queue_drain_rx_cfg_resource_regressions": true,
+    "kconfig_pending_exclusion": true,
+    "enabled_default_Image_gz_modules": true,
+    "enabled_default_board_merged_directed_schemas": true,
+    "six_page_cfg_irq_DTB_checks": true,
+    "source_dts_defconfig_restored": true,
+    "default_nodes_disabled_and_experimental_symbols_absent": true,
+    "strict_checkpatch": [
+      0,
+      0,
+      0
+    ],
+    "compiler_warnings": 0
+  },
+  "hardware_status": "verified mapping reservation only; device left running fba1be648ead",
+  "scope": "mapping only; no prepare, register operations, IRQ enable, generation, reset or SCP/MD start",
+  "resources": [
+    {
+      "name": "scp-cfg",
+      "base": "0x10724000",
+      "bytes": 4096
+    },
+    {
+      "name": "mbox0",
+      "base": "0x107fb000",
+      "bytes": 4096
+    },
+    {
+      "name": "mbox1",
+      "base": "0x107fc000",
+      "bytes": 4096
+    },
+    {
+      "name": "mbox2",
+      "base": "0x107fd000",
+      "bytes": 4096
+    },
+    {
+      "name": "mbox3",
+      "base": "0x107fe000",
+      "bytes": 4096
+    },
+    {
+      "name": "mbox4",
+      "base": "0x107ff000",
+      "bytes": 4096
+    }
+  ],
+  "limitations": [
+    "Host models do not validate actual Linux IRQ/devres concurrency or bus mapping behavior",
+    "Directed schema checks cover three relevant bindings, not all board bindings",
+    "Non-posted software mapping API and operation counters do not prove hardware transaction completion",
+    "No platform caller of prepare or real RX/queue/drain yet; no READY acceptance",
+    "No payload/pending register access, completion or ACK writes; mapping success does not validate transaction semantics"
+  ],
+  "evidence": "/data/src/mainline/mt6893-direct/evidence/scp-mmio-reserve",
+  "flash_partitions": [
+    "boot"
+  ],
+  "boot_partition_readback_matches": true,
+  "runtime": {
+    "mapped_pages": 6,
+    "mapped_bytes": 24576,
+    "all_six_iomem_claims_same_owner": true,
+    "nonposted_mapping_requested": true,
+    "register_reads": 0,
+    "register_writes": 0,
+    "cfg_register_reads": 0,
+    "cfg_register_writes": 0,
+    "prepared": false,
+    "generation": 0,
+    "mmio_initial_fault": true,
+    "mmio_initial_fault_meaning": "unprepared backend intentionally closed; no MMIO transaction attempted",
+    "completion_enabled": false,
+    "irq_requested": 5,
+    "gic_masked": 5,
+    "irq_cpu_counts_zero": true,
+    "unexpected": 0,
+    "work_runs": 0,
+    "arm_supported": false,
+    "ready_known": false,
+    "old_pending_observer_attribute": "absent (compiled out), ENOENT; not EOPNOTSUPP",
+    "explicit_pin_writes": 1,
+    "scp_user": 1,
+    "resource_mask": 2,
+    "pin_verified": true,
+    "resource_fault": false,
+    "ccf_enable_prepare_rate": [
+      3,
+      3,
+      26000000
+    ],
+    "core0_header_mux_stable": true,
+    "usb_repeat_queries": 3,
+    "wifi_repeat_queries": 3,
+    "usb_ssh": true,
+    "wifi_ssh": true,
+    "cpus_online": "0-7",
+    "ufs_ro": {
+      "sda": true,
+      "sdb": true,
+      "sdc": true
+    },
+    "cache": "ext4 ro,norecovery",
+    "lower": "squashfs ro",
+    "root": "overlay",
+    "fault_keyword_scan": "no matches"
+  }
+}

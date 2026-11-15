@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-14",
+  "source_commit": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "build_id": "fe077e30d191",
+  "release": "7.3.0-op6893-d1-fe077e30d191+",
+  "boot_sha256": "5cb26e093135fa59a828f51b1e53108f9b776db708cffef746dd614599d082c1",
+  "method": "fastboot flash boot, fastboot reboot; existing ACK backup unchanged",
+  "inspector": {
+    "status": "bound",
+    "result": "valid",
+    "version": 3,
+    "tags": 20,
+    "bytes": 2664,
+    "ccb_present": true,
+    "modem_started": false
+  },
+  "regression": {
+    "usb_ssh": "libusb ECM/TAP passed",
+    "independent_wifi_ssh": "passed",
+    "external_ping": {
+      "transmitted": 3,
+      "received": 3
+    },
+    "root": "overlay",
+    "rootfs_lower": "squashfs",
+    "cache": "ext4",
+    "last_error_scan_uptime_seconds": 401,
+    "oops_bug_panic_scan": "no matches"
+  },
+  "default_source_restored": {
+    "dts_restored": true,
+    "defconfig_restored": true
+  },
+  "new_power_code_in_runtime_image": false,
+  "limits": [
+    "M0 only; no modem/SCP release or detailed SMEM acceptance",
+    "single boot and short connectivity regression",
+    "host kernel modules unavailable; no native CDC acceptance"
+  ],
+  "external_evidence_directory": "/data/src/mainline/mt6893-direct/evidence/modem-m0-live",
+  "raw_tags_or_nvram_exported": false
+}

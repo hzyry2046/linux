@@ -1,0 +1,127 @@
+{
+  "fixture": "/data/src/mainline/mt6893-direct/evidence/ack-live.dtb",
+  "historical_not_live": true,
+  "mailbox_resources": {
+    "mbox0_base": {
+      "base": "0x107fb000",
+      "bytes": 256
+    },
+    "mbox0_set": {
+      "base": "0x107fb100",
+      "bytes": 4
+    },
+    "mbox0_clr": {
+      "base": "0x107fb10c",
+      "bytes": 4
+    },
+    "mbox0_init": {
+      "base": "0x107a5020",
+      "bytes": 4
+    },
+    "mbox1_base": {
+      "base": "0x107fc000",
+      "bytes": 256
+    },
+    "mbox1_set": {
+      "base": "0x107fc100",
+      "bytes": 4
+    },
+    "mbox1_clr": {
+      "base": "0x107fc10c",
+      "bytes": 4
+    },
+    "mbox1_init": {
+      "base": "0x107a5024",
+      "bytes": 4
+    },
+    "mbox2_base": {
+      "base": "0x107fd000",
+      "bytes": 256
+    },
+    "mbox2_set": {
+      "base": "0x107fd100",
+      "bytes": 4
+    },
+    "mbox2_clr": {
+      "base": "0x107fd10c",
+      "bytes": 4
+    },
+    "mbox2_init": {
+      "base": "0x107a5028",
+      "bytes": 4
+    },
+    "mbox3_base": {
+      "base": "0x107fe000",
+      "bytes": 256
+    },
+    "mbox3_set": {
+      "base": "0x107fe100",
+      "bytes": 4
+    },
+    "mbox3_clr": {
+      "base": "0x107fe10c",
+      "bytes": 4
+    },
+    "mbox3_init": {
+      "base": "0x107a502c",
+      "bytes": 4
+    },
+    "mbox4_base": {
+      "base": "0x107ff000",
+      "bytes": 256
+    },
+    "mbox4_set": {
+      "base": "0x107ff100",
+      "bytes": 4
+    },
+    "mbox4_clr": {
+      "base": "0x107ff10c",
+      "bytes": 4
+    },
+    "mbox4_init": {
+      "base": "0x107a5030",
+      "bytes": 4
+    }
+  },
+  "mailbox_interrupts": {
+    "mbox0": {
+      "gic_type": 0,
+      "spi_number": 436,
+      "flags": 4
+    },
+    "mbox1": {
+      "gic_type": 0,
+      "spi_number": 437,
+      "flags": 4
+    },
+    "mbox2": {
+      "gic_type": 0,
+      "spi_number": 438,
+      "flags": 4
+    },
+    "mbox3": {
+      "gic_type": 0,
+      "spi_number": 439,
+      "flags": 4
+    },
+    "mbox4": {
+      "gic_type": 0,
+      "spi_number": 440,
+      "flags": 4
+    }
+  },
+  "scp_sramSize": 1572864,
+  "optional_properties_present": {
+    "scp-cfgreg-ap-en": false,
+    "scp-ipc-wa": false
+  },
+  "source_sha256": {
+    "/data/src/kernel_oddo_mt6893/drivers/soc/mediatek/mtk-mbox.c": "9880ce2830a5c65d98f6087500c08057bc7278295fea7430808acec226b18018",
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_awake.c": "2785079123e3fbf23f8ac0a379a5c96da958d496e8751efcea2ea0003516b121",
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_ipi_table.h": "7f37d4b99c199bb1cfe692f35b92e9163578aaad756028707930f73bcead858e",
+    "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/scp/rv/scp_helper.c": "e180b562c8484a072185dd160c3eb6745a77f87b37f238ce432df9c1f3c11be8",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/soc/mediatek/mtk-mbox.c": "c843591f9a510dbc8c8fa8fb171a2bdc42de3177226a4e94836a29235b05f4e6",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_awake.c": "426279da2106dc33909faf2fb8a5f97a34617f8e95b548c63acd155559efdb2f",
+    "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/scp/rv/scp_ipi_table.h": "9d89a2bde7ca0d5e3297c94ee207cc8d8c94b39b9afb1343a27eef823cbe6583"
+  }
+}

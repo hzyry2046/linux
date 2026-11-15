@@ -1,0 +1,107 @@
+{
+  "date": "2026-11-14",
+  "source_commit": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "build_id": "7576d31c76a4",
+  "release": "7.3.0-op6893-d1-7576d31c76a4+",
+  "boot_sha256": "0bd9f01872799d516d3134f6f704c9d2515d42627af513cea9bd7c6735093c3d",
+  "method": "fastboot flash boot + reboot; second boot after sync and busybox reboot -f; no second flash",
+  "lk_metadata": {
+    "version": 3,
+    "tags": 20,
+    "bytes": 2664,
+    "ccb": true,
+    "modem_started": false
+  },
+  "resource_check": {
+    "successful_boots": 2,
+    "explicit_regulator_suppliers": 4,
+    "ordinary_ccif_clock_references": 4,
+    "ccif_prepare_counts": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "ccif_enable_counts": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rail_enable_users": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "rail_readback": {
+    "vmodem": {
+      "command_microvolts": 800000,
+      "state": "enabled",
+      "status": "on"
+    },
+    "vnr": {
+      "command_microvolts": 800000,
+      "state": "enabled",
+      "status": "on"
+    },
+    "vsram_md": {
+      "command_microvolts": 800000,
+      "state": "enabled",
+      "status": "on"
+    },
+    "vdigrf": {
+      "command_microvolts": 700000,
+      "state": "enabled",
+      "status": "on"
+    }
+  },
+  "reboot": {
+    "normal_syscall_requested": true,
+    "new_boot_id": true,
+    "same_release_returned": true,
+    "complete_shutdown_tail_retained": false,
+    "watchdog_fallback_independently_excluded": false,
+    "old_panic_pstore_release": "7.3.0-op6893-d1-48fd636e6955+"
+  },
+  "regression": {
+    "usb_ssh": "libusb ECM/TAP passed on both boots",
+    "independent_wifi_ssh": "passed on both boots",
+    "external_ping_per_boot": {
+      "transmitted": 3,
+      "received": 3
+    },
+    "cache": "ext4 readonly",
+    "root": "overlay",
+    "lower": "squashfs",
+    "final_uptime_seconds": 207.82,
+    "current_dmesg_error_scan": "clean",
+    "deferred_devices_after_reboot": []
+  },
+  "default_source_restored": {
+    "dts_restored": true,
+    "defconfig_restored": true
+  },
+  "r3": {
+    "code_in_image": true,
+    "md1_domain_instantiated": false,
+    "power_sequence_executed": false
+  },
+  "limits": [
+    "No DA live-voltage snapshot or voltage restoration",
+    "No CCIF MMIO, modem/SCP release, HS1/HS2, AT, SIM or cellular validation",
+    "Successful re-entry does not prove every shutdown register transaction completed",
+    "Host native CDC modules unavailable; libusb bridge used"
+  ],
+  "source_sha256": {
+    "drivers/regulator/mt6315-regulator.c": "0c0326c9999adeffefe2784d87a86724f50c4f06f39c367fdcaf6b504e2fc952",
+    "include/linux/regulator/mt6315-regulator.h": "73dc1bb4ae5e342a6ab215b17cbbea569bbbe25548a0e8fa13791eb2f8778e26",
+    "drivers/regulator/core.c": "ca092fec3b3a47ede7add92ed28362b8d75b4a8866e74bc3415e962ad14284b1",
+    "drivers/spmi/spmi.c": "b62dea65363eef8332d9ff8582fbf46d921d31dc93d25e7609f5de0b96697eef",
+    "drivers/misc/mediatek/ccci/ccci-resources.c": "b30a6a0bc4935d9622c12b5e3fd7887047ba657b3b2fee6c2680af600140be39",
+    "drivers/clk/mediatek/clk-mt6893-pmif.c": "a5ab3a9bc40759ff4787334aa0c7b98c64f906541df0b5a465efd359a50779ed",
+    "Documentation/arch/arm64/op6893-bringup/tools/test_modem_resources.py": "64c0b5ac39240c27baae94d8103df7b503307e9430916ae55a6618a44bd3c5e1"
+  },
+  "external_evidence_directory": "/data/src/mainline/mt6893-direct/evidence/modem-resources-live"
+}

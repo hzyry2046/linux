@@ -1,0 +1,110 @@
+{
+  "milestone": "R5.21 unique-owner dual-core and exact-header read-only observations",
+  "date": "2026-11-15",
+  "head": "6db0f4606d6e5cc6ac25c0eb5a15e86785b5e4fa",
+  "ai_assistance": "Codex implementation, local source comparison, tests, builds and runtime validation; human review required, no AI Signed-off-by",
+  "artifact": {
+    "build_id": "cebf84a7d29e",
+    "release": "7.3.0-op6893-d1-cebf84a7d29e+",
+    "boot_sha256": "8b9d75bb70a594cdf1425e78747b5c40d5772a6a722fad1015d6ca913ba7313e",
+    "boot_readback_match": true,
+    "production_sources_match_immutable_snapshot": true
+  },
+  "offline": {
+    "actual_constructor_readers_decoder_planner_asan_ubsan": true,
+    "five_owner_probe_variants": true,
+    "exact_dual_core_allowlist": [
+      "0x0 bit0",
+      "0x4 bit0",
+      "0x70 bits0..1"
+    ],
+    "header_bytes_supported": [
+      68,
+      72
+    ],
+    "unknown_versions_rejected": true,
+    "all_prerequisite_phases_and_mux_conditions": true,
+    "cross_header_core_change_rejected": true,
+    "every_header_word_mutation_rejected": true,
+    "reservation_and_geometry_failures": true,
+    "regression_suites": [
+      "core0",
+      "tcm",
+      "resource",
+      "mmio",
+      "receive",
+      "restore"
+    ],
+    "enabled_image_modules": true,
+    "default_image_modules": true,
+    "default_symbol_isolation": true,
+    "binding_enabled_and_default_dtb_validation": true,
+    "legacy_six_resource_schema": true,
+    "incomplete_observer_metadata_fixtures_rejected": 3,
+    "kconfig_exclusion": true,
+    "strict_checkpatch": {
+      "files": 5,
+      "errors": 0,
+      "warnings": 0,
+      "checks": 0
+    }
+  },
+  "runtime": {
+    "probe_and_prepin_core_tcm_reads": 0,
+    "prepin_cores_errno": "EAGAIN",
+    "prepin_header_errno": "EAGAIN",
+    "probe_resource_request_attempted": false,
+    "explicit_26m_pin_verified": true,
+    "core0_fields": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "core1_fields": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "header_bytes": 68,
+    "loader_bytes": 8192,
+    "firmware_bytes": 1572864,
+    "dram_bytes": 305120,
+    "regdump_bytes": 1048576,
+    "restore_geometry_valid": true,
+    "geometry_error": 0,
+    "source_valid_known": false,
+    "stopped_known": false,
+    "ready_known": false,
+    "final_core_reads": 252,
+    "final_header_reads": 252,
+    "all_write_counts": 0,
+    "cfg_mailbox_reads": 0,
+    "unique_owner_resources": 9,
+    "irqs_requested": 5,
+    "gic_masked": 5,
+    "irq_cpu_counts": 0,
+    "worker_events": 0,
+    "generation": 0,
+    "usb_rounds": 3,
+    "wifi_rounds": 3,
+    "online_cpus": 8,
+    "ufs_disks_readonly": true,
+    "cache": "ext4 ro,norecovery",
+    "lower": "squashfs ro",
+    "root": "overlay",
+    "clock_holds": "3/3 at 26MHz",
+    "boot_readback_match": true,
+    "fault_keyword_matches": 0
+  },
+  "limitations": [
+    "Bounded sequential dual-core samples do not prove CPU/DMA stop or reset completion.",
+    "Geometry does not prove image identity, validity, coherency, authentication or permission to restore.",
+    "No reset/TCM write, restore copying, pending/completion ACK, IRQ enable, receive start or SCP/MD start.",
+    "No firmware or TCM payload export."
+  ],
+  "device_left_running": "cebf84a7d29e",
+  "output_default_config_restored": true,
+  "evidence_directory": "/data/src/mainline/mt6893-direct/evidence/scp-owner-observe"
+}
