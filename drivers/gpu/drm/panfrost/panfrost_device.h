@@ -118,6 +118,13 @@ struct panfrost_compatible {
 
 	/* GPU configuration quirks */
 	u8 gpu_quirks;
+
+	/*
+	 * If non-zero and the devfreq cooling device cannot be registered,
+	 * OPPs above this rate are disabled so the GPU cannot run its top
+	 * OPPs unthrottled.
+	 */
+	unsigned long uncooled_max_freq;
 };
 
 /**

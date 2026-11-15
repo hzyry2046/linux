@@ -987,6 +987,8 @@ static const struct panfrost_compatible mediatek_mt6893_data = {
 	 */
 	.pm_features = BIT(GPU_PM_CLK_DIS) | BIT(GPU_PM_NO_RT_SUSPEND),
 	.gpu_quirks = BIT(GPU_QUIRK_FORCE_AARCH64_PGTABLE),
+	/* Top of the OPP table before the coupled-vsram OPPs. */
+	.uncooled_max_freq = 836000000,
 };
 
 static const struct panfrost_compatible mediatek_mt8370_data = {

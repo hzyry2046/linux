@@ -216,9 +216,34 @@ int panfrost_devfreq_init(struct panfrost_device *pfdev)
 
 	cooling = devfreq_cooling_em_register(devfreq, NULL);
 	if (IS_ERR(cooling))
-		DRM_DEV_INFO(dev, "Failed to register cooling device\n");
-	else
+		cooling = devfreq_cooling_em_register(devfreq, NULL);
+	if (IS_ERR(cooling)) {
+		long err = PTR_ERR(cooling);
+
+		DRM_DEV_INFO(dev, "Failed to register cooling device: %ld\n", err);
+
+		if (pfdev->comp->uncooled_max_freq) {
+			unsigned long freq = pfdev->comp->uncooled_max_freq + 1;
+
+			for (;;) {
+				struct dev_pm_opp *opp;
+
+				opp = dev_pm_opp_find_freq_ceil(dev, &freq);
+				if (IS_ERR(opp))
+					break;
+				dev_pm_opp_disable(dev, freq);
+				dev_pm_opp_put(opp);
+				freq++;
+			}
+			pfdevfreq->fast_rate = min(pfdevfreq->fast_rate,
+						   pfdev->comp->uncooled_max_freq);
+			dev_warn(dev,
+				 "No cooling device (%ld), capping GPU at %lu Hz\n",
+				 err, pfdev->comp->uncooled_max_freq);
+		}
+	} else {
 		pfdevfreq->cooling = cooling;
+	}
 
 	return 0;
 }
