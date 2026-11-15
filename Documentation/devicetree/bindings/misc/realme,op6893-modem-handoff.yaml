@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/realme,op6893-modem-handoff.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Realme op6893 LK modem metadata handoff inspection
+
+maintainers:
+  - hzyry2046 <hzyry2046@163.com>
+
+description: |
+  Board-specific passive inspection of the LK modem handoff. The tags region
+  holds the little-endian tag chain described by ccci,modem_info_v2 under
+  /chosen. The property is a 48-byte opaque LK structure, not big-endian DT
+  cells: u64 address, u32 size, s32 error, s32 version, s32 count, u32 load
+  flag, four s32 modem errors and four bytes of native tail padding.
+  The board FDT merger validates and imports this property from the current
+  LK FDT; it must not be hardcoded in a DTS. Versions 2 and 3 use 76-byte
+  tag descriptors with a 64-byte name and three little-endian u32 fields.
+  This node does not control modem power, reset, clocks, interrupts or DMA.
+  All referenced regions must be static no-map reserved memory. Only the
+  bounded tag chain is read; the other regions constrain decoded addresses.
+
+properties:
+  compatible:
+    const: realme,op6893-modem-handoff
+
+  memory-region:
+    items:
+      - description: LK tag buffer
+      - description: AP and modem noncached shared memory
+      - description: AP and modem cached shared memory
+
+  memory-region-names:
+    items:
+      - const: tags
+      - const: noncached
+      - const: cached
+
+required:
+  - compatible
+  - memory-region
+  - memory-region-names
+
+additionalProperties: false
+
+examples:
+  - |
+    modem-handoff {
+        compatible = "realme,op6893-modem-handoff";
+        memory-region = <&ccci_tag>, <&md_nc_smem>, <&md_c_smem>;
+        memory-region-names = "tags", "noncached", "cached";
+        status = "disabled";
+    };

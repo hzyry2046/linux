@@ -1,0 +1,236 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config OP6893_CCCI_LK_INSPECT
+	tristate "Inspect op6893 LK modem handoff without starting the modem"
+	depends on ARM64_OP6893_BRINGUP && OF && HAS_IOMEM
+	help
+	  Validate a bounded snapshot of LK's modem tags and the AP shared-memory
+	  layout. This does not power, reset or communicate with the modem or SCP.
+	  The board's modem-handoff node is disabled until explicitly enabled for
+	  a read-only experiment. No raw tag payloads are exposed.
+
+config OP6893_CCCI_RESOURCES
+	tristate "Check op6893 modem regulator and ordinary CCIF clock references"
+	depends on ARM64_OP6893_BRINGUP && OF && REGULATOR
+	depends on COMMON_CLK_MT6893_CCIF
+	help
+	  Acquire the four modem supply references and the four ordinary CCIF
+	  clock references without enabling them. This only checks framework
+	  dependencies; it does not access CCIF, start MD/SCP or report readiness.
+	  The resource node and SID3 provider are disabled in the board DT.
+	  Enabling providers also requires review of their probe and shutdown
+	  behavior; a successful reference lookup is not a hardware validation.
+
+config OP6893_CCCI_SCP_PROTOCOL
+	bool "Build op6893 SCP RV mailbox layout and CCCI protocol helpers"
+	depends on ARM64_OP6893_BRINGUP
+	help
+	  Build the bounded mailbox layout validator, APCCCI message codec and
+	  SCP region-header decoder with recovery mapping bounds checks.
+	  This is preparatory code for the SCP transport and CCISM bridge, not
+	  a mailbox or remoteproc driver. It registers no device, accesses no
+	  hardware and cannot start SCP/MD or report either processor ready.
+
+config OP6893_CCCI_SCP_AWAKE
+	bool "Build the op6893 SCP RV shared AP awake backend"
+	depends on OP6893_CCCI_SCP_PROTOCOL && REGMAP
+	help
+	  Build the bounded, sleepable AP awake handshake over a caller-supplied
+	  infracfg syscon regmap. A future shared provider must establish real SCP
+	  READY, serialize all consumers and coordinate clocks, STOP and reset.
+	  This registers no device and has no caller or automatic hardware access.
+
+config OP6893_CCCI_SCP_RESTORE_PLAN
+	bool "Build the op6893 SCP non-secure recovery layout checker"
+	depends on OP6893_CCCI_SCP_PROTOCOL
+	help
+	  Check an exact CPU header snapshot against independent firmware/share
+	  reservations and the same-board TCM resource. Bound the loader/header
+	  targets, two-core live/backup DRAM layout and disjoint source windows.
+	  This only produces geometry; it cannot prove image or backup validity,
+	  reset completion, old-message isolation or READY. No device, mappings,
+	  copying, reset or IRQ actions, or platform caller are added.
+
+config OP6893_CCCI_SCP_RESOURCE_HOLD
+	bool "Allow explicit op6893 boot-lifetime SCP 26 MHz resource pin"
+	depends on ARM64_OP6893_BRINGUP && OF
+	depends on COMMON_CLK_MT6893_SCP_BOOTSTRAP
+	help
+	  Add one built-in owner of the same-board ATF SCP resource request
+	  channel. Explicit sysfs reads query bounded resource bookkeeping;
+	  writing 26m to pin sends at most one additive 26 MHz request and
+	  verifies SCP resource membership. No SMC is sent at probe. A failure
+	  is sticky, with no retry, fallback ABI or release operation. A pin
+	  lasts until reboot, since release would clear inherited SCP votes.
+	  This does not start SCP/MD, access their registers or establish READY.
+
+config OP6893_CCCI_SCP_CFG_RESERVE
+	bool "Reserve op6893 SCP cfg in the boot-lifetime resource owner"
+	depends on OP6893_CCCI_SCP_RESOURCE_HOLD && HAS_IOMEM
+	help
+	  Reserve and map the complete same-board SCP cfg window in the existing
+	  boot-lifetime resource owner. Reject a different address or size and
+	  conflicting resource claims. The mapping performs no register reads or
+	  writes and exposes no completion operation. It prepares exclusive cfg
+	  ownership for a future serialized RX/IRQ/reset implementation.
+
+config OP6893_CCCI_SCP_OBSERVE
+	tristate "Observe op6893 AP-side SCP clock and memory prerequisites"
+	depends on ARM64_OP6893_BRINGUP && OF_RESERVED_MEM && MFD_SYSCON
+	help
+	  Expose the inherited SCP mux selector/gate through the existing TOPCK
+	  syscon and report this boot's firmware/share reservation bookkeeping.
+	  The board node is disabled by default. Without the additional explicit
+	  diagnostic options, no SCP MMIO, TCM, firmware,
+	  mailbox, awake, clock control, reset or READY access is performed.
+
+config OP6893_CCCI_SCP_BOOTSTRAP_HOLD
+	bool "Hold the constrained op6893 SCP bootstrap clock during observation"
+	depends on OP6893_CCCI_SCP_OBSERVE=y
+	depends on COMMON_CLK_MT6893_SCP_BOOTSTRAP
+	help
+	  Acquire and enable the TOPCK SCP output before exposing observations.
+	  The provider accepts only the inherited 26 MHz ungated condition and
+	  retains a critical reference after consumer failure or removal. This
+	  does not request SPM resources, start SCP or establish READY.
+
+config OP6893_CCCI_SCP_CORE0_OBSERVE
+	bool "Allow explicit op6893 SCP core0 reset/status readback"
+	depends on OP6893_CCCI_SCP_OBSERVE && HAS_IOMEM
+	help
+	  Map only the same-board core0 configuration resource. An explicit
+	  core0 sysfs read samples reset aliases and gated/halt bits twice,
+	  gated by before/after AP mux observations. No automatic MMIO reads,
+	  reset writes, TCM access, mailbox, awake or READY claim is made.
+
+config OP6893_CCCI_SCP_TCM_OBSERVE
+	bool "Allow explicit op6893 SCP TCM header observation"
+	depends on OP6893_CCCI_SCP_OBSERVE=y
+	depends on OP6893_CCCI_SCP_CORE0_OBSERVE && OP6893_CCCI_SCP_PROTOCOL
+	help
+	  Map only the header window at TCM+4 and accept exact 68/72-byte
+	  snapshots with before/after core0 and AP mux checks. Decode only
+	  bounded metadata and report sizes and reservation containment.
+	  No raw header, code or unknown fields are exported. This does not
+	  load firmware, map recovery buffers, release reset or establish READY.
+
+config OP6893_CCCI_SCP_RX
+	bool "Build bounded op6893 SCP mailbox receive transactions"
+	depends on OP6893_CCCI_SCP_PROTOCOL
+	help
+	  Build an ordered copy/ack/deliver backend over caller-supplied
+	  operations, with sticky failures and exact READY0 payload validation.
+	  A future provider must own clocks, IRQ containment and reset generation.
+	  This registers no device or IRQ, performs no automatic hardware access
+	  and cannot start SCP/MD or establish READY by itself.
+
+config OP6893_CCCI_SCP_PENDING_OBSERVE
+	bool "Allow explicit op6893 mailbox pending observation"
+	depends on OP6893_CCCI_SCP_OBSERVE=y && OF_IRQ
+	depends on OP6893_CCCI_SCP_CORE0_OBSERVE && OP6893_CCCI_SCP_PROTOCOL
+	help
+	  Map only five mailbox CLR/pending words and parse IRQ specifiers
+	  without mapping or requesting Linux IRQs. Explicitly sample pending
+	  twice under before/after core0/mux checks and compare with the full
+	  mailbox layout. No ACK, payload reads, IRQ enable or READY acceptance.
+
+config OP6893_CCCI_SCP_DRAIN
+	bool "Build op6893 SCP bounded receive drain and lifetime backend"
+	depends on OP6893_CCCI_SCP_RX
+	help
+	  Build a process-context backend that masks all mailbox sources, drains
+	  complete bounded sweeps and rejects stale queued generations. Failures
+	  invalidate all RX instances and retain masking. STOP is split around
+	  the caller's IRQ/worker synchronization. This has no device, IRQ or
+	  workqueue caller and does not perform reset or establish SCP READY.
+
+config OP6893_CCCI_SCP_QUEUE
+	bool "Build op6893 SCP bounded CPU receive queue adapter"
+	depends on OP6893_CCCI_SCP_RX
+	help
+	  Reserve complete-batch CPU queue capacity before the board completion
+	  and mailbox acknowledgment. Copy every RX pin into generation-tagged
+	  CPU storage after ACK. Queue exhaustion faults without consuming that
+	  batch. No device, IRQ, worker, MMIO caller or READY handler is added.
+
+config OP6893_CCCI_SCP_IRQ_RESERVE
+	bool "Reserve op6893 mailbox IRQs without enabling receive"
+	depends on OP6893_CCCI_SCP_CFG_RESERVE && OF_IRQ
+	depends on OP6893_CCCI_SCP_QUEUE
+	help
+	  Request five dedicated level-high mailbox IRQs with NO_AUTOEN in the
+	  existing cfg/resource owner. All remain disabled; no arm operation is
+	  provided. Unexpected handlers only contain and schedule fault cleanup.
+	  Teardown closes scheduling before IRQ/worker synchronization outside
+	  the owner mutex. No mailbox MMIO, completion, reset or READY is added.
+
+config OP6893_CCCI_SCP_MMIO
+	bool "Build op6893 non-posted SCP mailbox RX register backend"
+	depends on OP6893_CCCI_SCP_RX && HAS_IOMEM && ARM64_4K_PAGES
+	help
+	  Build a helper that reserves complete cfg/mailbox pages with non-posted
+	  mappings and supplies ordered RX copy/completion/ACK operations. A future
+	  unique owner must replace its old cfg/pending mappings, establish real
+	  reset generations and serialize prerequisites, IRQ/work and clients.
+	  Enabling it alone registers no device and performs no hardware access.
+	  The separate MMIO_RESERVE opt-in only connects resource mapping in the
+	  unique owner. The receive queue supplies destinations for its hardware
+	  ops; no RX caller, reset operation or READY acceptance is added.
+
+config OP6893_CCCI_SCP_MMIO_RESERVE
+	bool "Reserve non-posted SCP cfg/mailbox pages in the unique owner"
+	depends on OP6893_CCCI_SCP_MMIO && OP6893_CCCI_SCP_IRQ_RESERVE
+	depends on !OP6893_CCCI_SCP_PENDING_OBSERVE
+	help
+	  Replace the old cfg mapping with six complete non-posted pages in the
+	  existing resource owner. Reject resource conflicts and mapping errors.
+	  Exclude the old pending observer to avoid overlapping mappings with
+	  different attributes. Probe does not access registers or prepare RX;
+	  all five NO_AUTOEN IRQs remain masked. Sysfs only reports bookkeeping.
+
+config OP6893_CCCI_SCP_RECEIVE
+	bool "Build the op6893 SCP IRQ/work receive adapter"
+	depends on OP6893_CCCI_SCP_MMIO_RESERVE && OP6893_CCCI_SCP_DRAIN
+	help
+	  Build the Linux IRQ/work adapter for non-posted MMIO, all RX queues and
+	  bounded drains. It balances one IRQ disable depth, captures generation
+	  at queue time and closes scheduling before STOP synchronization. A future
+	  owner must establish real reset generations before starting receive.
+	  The separate RECEIVE_RESERVE opt-in connects only the dormant constructor
+	  in place of the legacy IRQ reservation. No start/arm, reset or READY
+	  interface is provided.
+
+config OP6893_CCCI_SCP_RECEIVE_RESERVE
+	bool "Reserve the dormant op6893 SCP receive adapter in the unique owner"
+	depends on OP6893_CCCI_SCP_RECEIVE
+	help
+	  Replace the legacy IRQ reservation with the receive adapter in the
+	  existing resource owner. Request five NO_AUTOEN IRQs without preparing
+	  RX, reading or writing registers, or calling the resource check. The
+	  prerequisite wrapper rejects every generation until a future reset
+	  owner establishes real old-message isolation. No start/arm interface,
+	  reset write, IRQ enable or READY acceptance is provided.
+
+config OP6893_CCCI_SCP_CORE_TCM_RESERVE
+	bool "Reserve op6893 SCP core0/core1/TCM in the unique owner"
+	depends on OP6893_CCCI_SCP_RECEIVE_RESERVE
+	depends on !OP6893_CCCI_SCP_CORE0_OBSERVE
+	help
+	  Reserve the complete same-board core0/core1 configuration pages and
+	  TCM with non-posted mappings in the boot-lifetime resource owner.
+	  Exclude the legacy core0 observer and its dependent TCM/pending readers
+	  to prevent overlapping aliases. Geometry and exclusive claims are
+	  checked before publishing the set. No register or TCM I/O, reset,
+	  restore, IRQ enable or SCP/MD start operation is provided. The AP-side
+	  clock/reservation observer may remain enabled without its SCP readers.
+
+config OP6893_CCCI_SCP_OWNER_OBSERVE
+	bool "Allow explicit core/header observations in the unique SCP owner"
+	depends on OP6893_CCCI_SCP_CORE_TCM_RESERVE
+	depends on OP6893_CCCI_SCP_RESTORE_PLAN && OF_RESERVED_MEM && MFD_SYSCON
+	help
+	  Observe both cores' reset aliases and gated/halt bits, and an exact
+	  68/72-byte TCM header through the existing unique mappings. Explicit
+	  sysfs reads require a valid 26 MHz pin and before/after clock and mux
+	  checks under the owner mutex. Report only bounded metadata and CPU
+	  recovery geometry. No register/TCM read or resource query is made at
+	  probe. No reset, copying, IRQ enable, start or READY claim is added.

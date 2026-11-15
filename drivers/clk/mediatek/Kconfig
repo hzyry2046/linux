@@ -37,6 +37,26 @@ config COMMON_CLK_MT6893_PMIF
 	  from LK. This is a board-specific diagnostic subset, not full SoC
 	  clock or power-management support.
 
+config COMMON_CLK_MT6893_SCP_BOOTSTRAP
+	bool "Experimental MT6893 op6893 SCP bootstrap clock hold"
+	depends on COMMON_CLK_MT6893_PMIF
+	help
+	  Add the SCP output only when its inherited source is 26 MHz and
+	  ungated. Retain a critical reference and confirm the gate-clear write
+	  through the existing TOPCK provider. Never change the source or gate
+	  it off. This does not implement SPM resource votes, DVFS or SCP reset.
+	  Leave disabled outside a controlled bootstrap experiment.
+
+config COMMON_CLK_MT6893_CCIF
+	bool "Experimental MT6893 op6893 CCIF clock gates"
+	depends on COMMON_CLK_MT6893_PMIF
+	help
+	  Add the four AP/MD and CCIF1 AP/MD gates to the existing infrastructure
+	  provider. Keep their inherited state until a consumer explicitly votes;
+	  the parent only observes the inherited AXI rate and does not manage it.
+	  CCIF2/4/5, MD power/reset and SCP are not supported by this option.
+	  Leave disabled until a controlled modem resource experiment is ready.
+
 config COMMON_CLK_MT2701
 	bool "Clock driver for MediaTek MT2701"
 	depends on (ARCH_MEDIATEK && ARM) || COMPILE_TEST

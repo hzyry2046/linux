@@ -1,0 +1,79 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/realme,op6893-modem-resources.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Realme op6893 modem framework resource reference check
+
+maintainers:
+  - hzyry2046 <hzyry2046@163.com>
+
+description: |
+  Board-specific diagnostic node for resolving modem supplies and the four
+  ordinary AP/MD and CCIF1 AP/MD clock gates. It does not describe a complete
+  modem and has no power-domain, reset, MMIO, IRQ, DMA or SCP interface.
+  The checker does not request supply or clock enable and does not prove that
+  the modem can start. Provider initialization, deferred regulator constraints,
+  supply resolution and shutdown behavior must be reviewed separately before
+  enabling the corresponding provider nodes.
+  This node is distinct from the LK metadata handoff inspector.
+
+properties:
+  compatible:
+    const: realme,op6893-modem-resources
+
+  md-vmodem-supply:
+    description: VMODEM from MT6315 SID3 VBUCK1
+
+  md-vnr-supply:
+    description: VNR from MT6315 SID3 VBUCK3
+
+  md-vsram-supply:
+    description: VSRAM_MD from MT6315 SID3 VBUCK4
+
+  md-vdigrf-supply:
+    description: VRFDIG from the MT6359P VPU buck
+
+  clocks:
+    items:
+      - description: CCIF AP gate
+      - description: CCIF MD gate
+      - description: CCIF1 AP gate
+      - description: CCIF1 MD gate
+
+  clock-names:
+    items:
+      - const: ccif-ap
+      - const: ccif-md
+      - const: ccif1-ap
+      - const: ccif1-md
+
+required:
+  - compatible
+  - md-vmodem-supply
+  - md-vnr-supply
+  - md-vsram-supply
+  - md-vdigrf-supply
+  - clocks
+  - clock-names
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/clock/mt6893-clk.h>
+
+    modem-resources {
+        compatible = "realme,op6893-modem-resources";
+        md-vmodem-supply = <&mt6315_3_vbuck1>;
+        md-vnr-supply = <&mt6315_3_vbuck3>;
+        md-vsram-supply = <&mt6315_3_vbuck4>;
+        md-vdigrf-supply = <&mt6359_vpu>;
+        clocks = <&infracfg CLK_IFRAO_CCIF_AP>,
+                 <&infracfg CLK_IFRAO_CCIF_MD>,
+                 <&infracfg CLK_IFRAO_CCIF1_AP>,
+                 <&infracfg CLK_IFRAO_CCIF1_MD>;
+        clock-names = "ccif-ap", "ccif-md", "ccif1-ap", "ccif1-md";
+        status = "disabled";
+    };

@@ -2,6 +2,7 @@
 /* Import memory ownership, without importing Android devices or phandles. */
 #include <linux/kernel.h>
 #include <linux/libfdt.h>
+#include <linux/soc/mediatek/ccci-lk.h>
 #include <linux/unaligned.h>
 
 #include "op6893-fdt.h"
@@ -45,6 +46,82 @@ static int __init copy_devinfo(void *dst, const void *lk)
 	if (target < 0)
 		return target;
 	return fdt_setprop(dst, target, "atag,devinfo", data, len);
+}
+
+static int __init copy_ccci_header(void *dst, const void *board, const void *lk)
+{
+	static const char * const paths[] = { "/chosen", "/chosen@0", "/mddriver" };
+	struct ccci_lk_header header;
+	struct ccci_lk_region region;
+	const void *data = NULL, *candidate, *reg;
+	const fdt32_t *phandles;
+	int node, len, parent, target, ret;
+	unsigned int i;
+	bool reserved = false;
+
+	target = fdt_path_offset(dst, "/chosen");
+	if (target < 0)
+		return target;
+	/* Never retain a header baked into the board DTB from an older boot. */
+	ret = fdt_delprop(dst, target, CCCI_LK_PROPERTY);
+	if (ret && ret != -FDT_ERR_NOTFOUND)
+		return ret;
+	for (i = 0; i < ARRAY_SIZE(paths); i++) {
+		node = fdt_path_offset(lk, paths[i]);
+		if (node < 0)
+			continue;
+		candidate = fdt_getprop(lk, node, CCCI_LK_PROPERTY, &len);
+		if (!candidate) {
+			if (len != -FDT_ERR_NOTFOUND)
+				return 0;
+			continue;
+		}
+		/* Optional handoff failures must not prevent the AP from booting. */
+		if (ccci_lk_decode_header(candidate, len, &header) ||
+		    (data && memcmp(data, candidate, CCCI_LK_HEADER_SIZE)))
+			return 0;
+		data = candidate;
+	}
+	if (!data)
+		return 0;
+
+	/* Read the immutable board allowlist, never an imported LK phandle. */
+	node = fdt_path_offset(board, "/modem-handoff");
+	if (node < 0 || fdt_node_check_compatible(board, node,
+						  "realme,op6893-modem-handoff"))
+		return 0;
+	phandles = fdt_getprop(board, node, "memory-region", &len);
+	if (!phandles || len != 3 * sizeof(*phandles))
+		return 0;
+	node = fdt_node_offset_by_phandle(board, fdt32_to_cpu(phandles[0]));
+	parent = fdt_path_offset(board, "/reserved-memory");
+	if (node < 0 || parent < 0 || fdt_parent_offset(board, node) != parent ||
+	    !fdt_getprop(board, node, "no-map", &len) || len)
+		return 0;
+	reg = fdt_getprop(board, node, "reg", &len);
+	if (!reg || len != 16)
+		return 0;
+	region.base = get_unaligned_be64(reg);
+	region.size = get_unaligned_be64(reg + 8);
+	if (!ccci_lk_contains(&region, header.base, header.size))
+		return 0;
+
+	/* LK must independently have reserved this boot's entire tag buffer. */
+	parent = fdt_path_offset(lk, "/reserved-memory");
+	fdt_for_each_subnode(node, lk, parent) {
+		reg = fdt_getprop(lk, node, "reg", &len);
+		if (!reg || len != 16)
+			continue;
+		region.base = get_unaligned_be64(reg);
+		region.size = get_unaligned_be64(reg + 8);
+		if (ccci_lk_contains(&region, header.base, header.size)) {
+			reserved = true;
+			break;
+		}
+	}
+	if (!reserved)
+		return 0;
+	return fdt_setprop(dst, target, CCCI_LK_PROPERTY, data, CCCI_LK_HEADER_SIZE);
 }
 
 int __init op6893_merge_fdt(void *dst, int size, const void *board,
@@ -163,6 +240,9 @@ int __init op6893_merge_fdt(void *dst, int size, const void *board,
 
 	/* External initrd and vendor bootargs are intentionally not imported. */
 	ret = copy_devinfo(dst, lk);
+	if (ret)
+		return ret;
+	ret = copy_ccci_header(dst, board, lk);
 	if (ret)
 		return ret;
 	return fdt_pack(dst);

@@ -12,9 +12,13 @@ maintainers:
 description: |
   The top clock generator supplies oscillator dividers and the PMIF source
   selector, as well as the AXI source selector. The infrastructure controller
-  gates the PMIC AP, timer and thermal clocks
+  gates the PMIC AP, timer, thermal, CCIF AP/MD and CCIF1 AP/MD clocks
   and shares its registers with peripheral reset control. This initial
-  description covers the PMIF, AXI and thermal clock subset. Clock indices are defined in
+  description covers the PMIF, AXI, thermal and four ordinary CCIF gates.
+  CCIF2/4/5 and DPMAIF clocks are not described by this subset.
+  An experimental SCP output supports only an inherited, ungated 26 MHz
+  source. It does not provide control of the full SCP source selector.
+  Clock indices are defined in
   dt-bindings/clock/mt6893-clk.h and retain the vendor numbering.
 
 properties:

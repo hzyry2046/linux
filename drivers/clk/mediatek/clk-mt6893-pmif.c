@@ -96,6 +96,100 @@ static struct clk_hw *mt6893_axi_register(struct device *dev)
 
 static DEFINE_SPINLOCK(mt6893_pmif_lock);
 
+#ifdef CONFIG_COMMON_CLK_MT6893_SCP_BOOTSTRAP
+struct mt6893_scp_bootstrap {
+	struct clk_hw hw;
+	struct regmap *map;
+};
+
+/* A constrained SCP output, not an implementation of the eight-parent mux. */
+static int mt6893_scp_bootstrap_check(struct mt6893_scp_bootstrap *scp)
+{
+	unsigned int value;
+	int ret;
+
+	ret = regmap_read(scp->map, 0x10, &value);
+	if (ret)
+		return ret;
+	return value & (GENMASK(18, 16) | BIT(23)) ? -EBUSY : 0;
+}
+
+static int mt6893_scp_bootstrap_enable(struct clk_hw *hw)
+{
+	struct mt6893_scp_bootstrap *scp =
+		container_of(hw, struct mt6893_scp_bootstrap, hw);
+	unsigned long flags;
+	int ret;
+
+	spin_lock_irqsave(&mt6893_pmif_lock, flags);
+	ret = mt6893_scp_bootstrap_check(scp);
+	if (!ret)
+		ret = mt6893_scp_bootstrap_check(scp);
+	/* Only reaffirm an inherited on gate; never switch a parent or update. */
+	if (!ret)
+		ret = regmap_write(scp->map, 0x18, BIT(23));
+	if (!ret)
+		ret = mt6893_scp_bootstrap_check(scp);
+	spin_unlock_irqrestore(&mt6893_pmif_lock, flags);
+	return ret;
+}
+
+static void mt6893_scp_bootstrap_disable(struct clk_hw *hw)
+{
+	/* No gate-off path until a shared SCP STOP/reset owner exists. */
+}
+
+static unsigned long mt6893_scp_bootstrap_rate(struct clk_hw *hw,
+					       unsigned long parent_rate)
+{
+	struct mt6893_scp_bootstrap *scp =
+		container_of(hw, struct mt6893_scp_bootstrap, hw);
+
+	if (parent_rate != 26000000 || mt6893_scp_bootstrap_check(scp))
+		return 0;
+	return mt6893_scp_bootstrap_check(scp) ? 0 : parent_rate;
+}
+
+static const struct clk_ops mt6893_scp_bootstrap_ops = {
+	.enable = mt6893_scp_bootstrap_enable,
+	.disable = mt6893_scp_bootstrap_disable,
+	.recalc_rate = mt6893_scp_bootstrap_rate,
+};
+
+static struct clk_hw *mt6893_scp_bootstrap_register(struct device *dev)
+{
+	const struct clk_parent_data parent = { .fw_name = "clk26m" };
+	struct clk_init_data init = {
+		.name = "mt6893_scp_bootstrap",
+		.ops = &mt6893_scp_bootstrap_ops,
+		.parent_data = &parent,
+		.num_parents = 1,
+		.flags = CLK_IS_CRITICAL | CLK_GET_RATE_NOCACHE,
+	};
+	struct mt6893_scp_bootstrap *scp;
+	struct clk *ref;
+	int ret;
+
+	ref = devm_clk_get(dev, "clk26m");
+	if (IS_ERR(ref))
+		return ERR_CAST(ref);
+	if (clk_get_rate(ref) != 26000000)
+		return ERR_PTR(-EINVAL);
+	scp = devm_kzalloc(dev, sizeof(*scp), GFP_KERNEL);
+	if (!scp)
+		return ERR_PTR(-ENOMEM);
+	scp->map = syscon_node_to_regmap(dev->of_node);
+	if (IS_ERR(scp->map))
+		return ERR_CAST(scp->map);
+	ret = mt6893_scp_bootstrap_check(scp);
+	if (ret)
+		return ERR_PTR(ret);
+	scp->hw.init = &init;
+	ret = devm_clk_hw_register(dev, &scp->hw);
+	return ret ? ERR_PTR(ret) : &scp->hw;
+}
+#endif
+
 static const struct mtk_fixed_factor top_factors[] = {
 	FACTOR_FLAGS(CLK_TOP_OSC_D4, "mt6893_osc_d4", "mt6893_ulposc", 1, 4, 0),
 	FACTOR_FLAGS(CLK_TOP_OSC_D8, "mt6893_osc_d8", "mt6893_ulposc", 1, 8, 0),
@@ -140,6 +234,35 @@ static const struct mtk_gate infra_gates[] = {
 		       &mtk_clk_gate_ops_setclr, CLK_IS_CRITICAL),
 };
 
+#ifdef CONFIG_COMMON_CLK_MT6893_CCIF
+static const struct mtk_gate_regs ccif_gate_regs = {
+	.set_ofs = 0x88,
+	.clr_ofs = 0x8c,
+	.sta_ofs = 0x94,
+};
+
+/*
+ * Only gates implemented with real set/clear operations in the ACK tree.
+ * IGNORE_UNUSED preserves LK's state; registration must not enable MD paths.
+ * The parent reports the inherited AXI rate, without managing its source.
+ * CCIF2/4/5 used dummy operations in ACK and remain unsupported here.
+ */
+static const struct mtk_gate ccif_gates[] = {
+	GATE_MTK_FLAGS(CLK_IFRAO_CCIF1_AP, "mt6893_ccif1_ap",
+		       "mt6893_axi_observed", &ccif_gate_regs, 12,
+		       &mtk_clk_gate_ops_setclr, CLK_IGNORE_UNUSED),
+	GATE_MTK_FLAGS(CLK_IFRAO_CCIF1_MD, "mt6893_ccif1_md",
+		       "mt6893_axi_observed", &ccif_gate_regs, 13,
+		       &mtk_clk_gate_ops_setclr, CLK_IGNORE_UNUSED),
+	GATE_MTK_FLAGS(CLK_IFRAO_CCIF_AP, "mt6893_ccif_ap",
+		       "mt6893_axi_observed", &ccif_gate_regs, 23,
+		       &mtk_clk_gate_ops_setclr, CLK_IGNORE_UNUSED),
+	GATE_MTK_FLAGS(CLK_IFRAO_CCIF_MD, "mt6893_ccif_md",
+		       "mt6893_axi_observed", &ccif_gate_regs, 26,
+		       &mtk_clk_gate_ops_setclr, CLK_IGNORE_UNUSED),
+};
+#endif
+
 static int mt6893_thermal_ready(struct regmap *map, struct clk *axi)
 {
 	unsigned int status;
@@ -162,6 +285,7 @@ static int mt6893_pmif_clk_probe(struct platform_device *pdev)
 	struct regmap *map;
 	struct clk *parent;
 	struct clk_hw *axi = NULL;
+	unsigned int num_clks;
 	bool top;
 	int ret;
 
@@ -198,8 +322,10 @@ static int mt6893_pmif_clk_probe(struct platform_device *pdev)
 	}
 
 	/* Vendor IDs are sparse: the generic count-based probe is unsuitable. */
-	data = mtk_alloc_clk_data(top ? CLK_TOP_PWRAP_ULPOSC_SEL + 1 :
-				      CLK_IFRAO_THERM + 1);
+	num_clks = top ? CLK_TOP_PWRAP_ULPOSC_SEL + 1 : CLK_IFRAO_THERM + 1;
+	if (!top && IS_ENABLED(CONFIG_COMMON_CLK_MT6893_CCIF))
+		num_clks = CLK_IFRAO_CCIF_MD + 1;
+	data = mtk_alloc_clk_data(num_clks);
 	if (!data)
 		return -ENOMEM;
 
@@ -214,11 +340,29 @@ static int mt6893_pmif_clk_probe(struct platform_device *pdev)
 					    np, &mt6893_pmif_lock, data);
 		if (ret)
 			goto unregister_factors;
+#ifdef CONFIG_COMMON_CLK_MT6893_SCP_BOOTSTRAP
+		/* An optional SCP experiment must not break the PMIC transport. */
+		{
+			struct clk_hw *scp = mt6893_scp_bootstrap_register(dev);
+
+			if (IS_ERR(scp))
+				dev_warn(dev, "SCP bootstrap clock unavailable: %ld\n",
+					 PTR_ERR(scp));
+			else
+				data->hws[CLK_TOP_SCP] = scp;
+		}
+#endif
 	} else {
 		ret = mtk_clk_register_gates(dev, np, infra_gates,
 					    ARRAY_SIZE(infra_gates), data);
 		if (ret)
 			goto free_data;
+#ifdef CONFIG_COMMON_CLK_MT6893_CCIF
+		ret = mtk_clk_register_gates(dev, np, ccif_gates,
+					     ARRAY_SIZE(ccif_gates), data);
+		if (ret)
+			goto unregister_infra;
+#endif
 	}
 
 	ret = of_clk_add_hw_provider(np, of_clk_hw_onecell_get, data);
@@ -231,10 +375,15 @@ static int mt6893_pmif_clk_probe(struct platform_device *pdev)
 	return 0;
 
 unregister_clocks:
-	if (top)
+	if (top) {
 		mtk_clk_unregister_muxes(top_muxes, ARRAY_SIZE(top_muxes), data);
-	else
+	} else {
+#ifdef CONFIG_COMMON_CLK_MT6893_CCIF
+		mtk_clk_unregister_gates(ccif_gates, ARRAY_SIZE(ccif_gates), data);
+unregister_infra:
+#endif
 		mtk_clk_unregister_gates(infra_gates, ARRAY_SIZE(infra_gates), data);
+	}
 unregister_factors:
 	if (top)
 		mtk_clk_unregister_factors(top_factors, ARRAY_SIZE(top_factors), data);

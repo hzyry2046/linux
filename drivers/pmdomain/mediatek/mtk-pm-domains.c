@@ -22,6 +22,7 @@
 #include "mt6795-pm-domains.h"
 #include "mt6858-pm-domains.h"
 #include "mt6893-pm-domains.h"
+#include "mt6893-md-power.h"
 #include "mt8167-pm-domains.h"
 #include "mt8173-pm-domains.h"
 #include "mt8183-pm-domains.h"
@@ -72,6 +73,7 @@ struct scpsys_domain {
 	int num_subsys_clks;
 	struct clk_bulk_data *subsys_clks;
 	struct regulator *supply;
+	struct mt6893_md_power md_power;
 };
 
 struct scpsys {
@@ -699,6 +701,14 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 	struct scpsys *scpsys = pd->scpsys;
 	int ret;
 
+	if (MTK_SCPD_CAPS(pd, MTK_SCPD_MT6893_MD_PWRSEQ)) {
+		ret = mt6893_md_power_set(&pd->md_power, true);
+		if (ret)
+			dev_err(scpsys->dev, "MD1 power on failed at %s: %d\n",
+				pd->md_power.step, ret);
+		return ret;
+	}
+
 	ret = scpsys_regulator_enable(pd->supply);
 	if (ret)
 		return ret;
@@ -785,6 +795,14 @@ static int scpsys_power_off_internal(struct scpsys_domain *pd)
 {
 	struct scpsys *scpsys = pd->scpsys;
 	int ret;
+
+	if (MTK_SCPD_CAPS(pd, MTK_SCPD_MT6893_MD_PWRSEQ)) {
+		ret = mt6893_md_power_set(&pd->md_power, false);
+		if (ret)
+			dev_err(scpsys->dev, "MD1 power off failed at %s: %d\n",
+				pd->md_power.step, ret);
+		return ret;
+	}
 
 	ret = scpsys_bus_protect_enable(pd, 0);
 	if (ret < 0)
@@ -899,6 +917,22 @@ generic_pm_domain *scpsys_add_one_domain(struct scpsys *scpsys, struct device_no
 	pd->data = domain_data;
 	pd->hwv_data = hwv_domain_data;
 	pd->scpsys = scpsys;
+
+	if (MTK_SCPD_CAPS(pd, MTK_SCPD_MT6893_MD_PWRSEQ)) {
+		struct regmap *infra;
+
+		/* The modem platform consumer owns the rails and CCIF clocks. */
+		if (of_property_present(node, "clocks") ||
+		    of_property_present(node, "domain-supply"))
+			return ERR_PTR(-EINVAL);
+		infra = syscon_regmap_lookup_by_phandle(node, "mediatek,infracfg");
+		if (IS_ERR(infra))
+			return ERR_CAST(infra);
+		ret = mt6893_md_power_init(&pd->md_power, scpsys->base, infra);
+		if (ret)
+			return dev_err_ptr_probe(scpsys->dev, ret,
+						"MD1 is not safely off; refusing adoption\n");
+	}
 
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_DOMAIN_SUPPLY)) {
 		pd->supply = devm_of_regulator_get_optional(scpsys->dev, node, "domain");

@@ -1,0 +1,155 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/misc/realme,op6893-scp-resource-hold.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Realme op6893 experimental SCP bootstrap resource owner
+
+maintainers:
+  - hzyry2046 <hzyry2046@163.com>
+
+description: |
+  Temporary board diagnostic for the MT6893 ATF SCP resource channel and
+  its low-power resource-manager bookkeeping. Explicit queries report only
+  SCP membership. A separately requested 26 MHz pin is additive and lasts
+  for the boot. The owner does not release inherited SCP resources, change
+  parent clocks, reset SCP or establish READY. An
+  additional opt-in reserves the complete SCP cfg window in this owner,
+  without reading or writing it. No completion operation is exposed.
+  An additional IRQ opt-in requests all five dedicated mailbox interrupts
+  without enabling them; no receive/arm operation is exposed.
+  A further opt-in replaces the cfg mapping with non-posted mappings of
+  complete cfg/mailbox pages, excluding the overlapping pending observer.
+  It only reserves resources and exposes bookkeeping, without register I/O.
+  No SMC is made during probe. Disabled by default; not a complete SCP
+  processor or power-domain description.
+
+  Another opt-in reserves complete core0/core1 configuration pages and TCM
+  in this owner with non-posted Device mappings. It excludes legacy SCP
+  observers and performs no register/TCM I/O or reset/restore operation.
+
+  A separate read-only option observes the two cores and exact TCM header
+  under the same owner lock, with explicit pin and before/after clock/mux
+  checks. Only bounded metadata and CPU recovery geometry are reported.
+  Probe still performs no register/TCM reads or SMC queries.
+
+properties:
+  compatible:
+    const: realme,op6893-scp-resource-hold
+
+  reg:
+    minItems: 6
+    items:
+      - description: Complete SCP cfg page at 0x10724000, size 0x1000
+      - description: Complete mailbox 0 page at 0x107fb000, size 0x1000
+      - description: Complete mailbox 1 page at 0x107fc000, size 0x1000
+      - description: Complete mailbox 2 page at 0x107fd000, size 0x1000
+      - description: Complete mailbox 3 page at 0x107fe000, size 0x1000
+      - description: Complete mailbox 4 page at 0x107ff000, size 0x1000
+      - description: Complete core0 configuration page at 0x10730000, size 0x1000
+      - description: Complete core1 configuration page at 0x10740000, size 0x1000
+      - description: Complete TCM at 0x10500000, size 0x180000
+
+  reg-names:
+    minItems: 6
+    items:
+      - const: scp-cfg
+      - const: mbox0
+      - const: mbox1
+      - const: mbox2
+      - const: mbox3
+      - const: mbox4
+      - const: core0
+      - const: core1
+      - const: tcm
+
+  interrupts:
+    minItems: 5
+    maxItems: 5
+
+  interrupt-names:
+    items:
+      - const: mbox0
+      - const: mbox1
+      - const: mbox2
+      - const: mbox3
+      - const: mbox4
+
+  clocks:
+    maxItems: 1
+    description: Constrained 26 MHz SCP output from the existing TOPCK provider
+
+  clock-names:
+    const: scp
+
+  mediatek,topckgen:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Existing TOPCK syscon for read-only SCP mux checks
+
+  memory-region:
+    items:
+      - description: This boot's no-map SCP firmware reservation
+      - description: This boot's no-map SCP shared-memory reservation
+
+  memory-region-names:
+    items:
+      - const: firmware
+      - const: share
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - interrupts
+  - interrupt-names
+  - clocks
+  - clock-names
+
+dependentRequired:
+  mediatek,topckgen: [memory-region, memory-region-names]
+  memory-region: ["mediatek,topckgen", memory-region-names]
+  memory-region-names: ["mediatek,topckgen", memory-region]
+
+allOf:
+  - oneOf:
+      - properties:
+          reg:
+            maxItems: 6
+          reg-names:
+            maxItems: 6
+      - properties:
+          reg:
+            minItems: 9
+          reg-names:
+            minItems: 9
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    scp-resource-hold@10724000 {
+        compatible = "realme,op6893-scp-resource-hold";
+        reg = <0x10724000 0x1000>,
+              <0x107fb000 0x1000>,
+              <0x107fc000 0x1000>,
+              <0x107fd000 0x1000>,
+              <0x107fe000 0x1000>,
+              <0x107ff000 0x1000>,
+              <0x10730000 0x1000>,
+              <0x10740000 0x1000>,
+              <0x10500000 0x180000>;
+        reg-names = "scp-cfg", "mbox0", "mbox1", "mbox2", "mbox3", "mbox4",
+                    "core0", "core1", "tcm";
+        interrupt-parent = <&gic>;
+        interrupts = <GIC_SPI 436 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 437 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 438 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 439 IRQ_TYPE_LEVEL_HIGH>,
+                     <GIC_SPI 440 IRQ_TYPE_LEVEL_HIGH>;
+        interrupt-names = "mbox0", "mbox1", "mbox2", "mbox3", "mbox4";
+        clocks = <&topckgen 119>;
+        clock-names = "scp";
+        status = "disabled";
+    };

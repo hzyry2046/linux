@@ -15,6 +15,113 @@
 	model = "Realme GT Neo op6893 (direct LK bring-up)";
 	compatible = "realme,op6893", "mediatek,mt6893";
 
+	/* Metadata only. Keep disabled until a read-only inspection is scheduled. */
+	modem-handoff {
+		compatible = "realme,op6893-modem-handoff";
+		memory-region = <&ccci_tag>, <&md_nc_smem>, <&md_c_smem>;
+		memory-region-names = "tags", "noncached", "cached";
+		status = "disabled";
+	};
+
+	/* Explicit bounded observations; no SCP start or READY assertion. */
+	scp-resource-hold@10724000 {
+		compatible = "realme,op6893-scp-resource-hold";
+		reg = <0 0x10724000 0 0x1000>,
+		      <0 0x107fb000 0 0x1000>,
+		      <0 0x107fc000 0 0x1000>,
+		      <0 0x107fd000 0 0x1000>,
+		      <0 0x107fe000 0 0x1000>,
+		      <0 0x107ff000 0 0x1000>,
+		      <0 0x10730000 0 0x1000>,
+		      <0 0x10740000 0 0x1000>,
+		      <0 0x10500000 0 0x180000>;
+		reg-names = "scp-cfg", "mbox0", "mbox1", "mbox2", "mbox3", "mbox4",
+			    "core0", "core1", "tcm";
+		interrupts = <GIC_SPI 436 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 437 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 438 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 439 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 440 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "mbox0", "mbox1", "mbox2", "mbox3", "mbox4";
+		clocks = <&topckgen CLK_TOP_SCP>;
+		clock-names = "scp";
+		mediatek,topckgen = <&topckgen>;
+		memory-region = <&scp_firmware_mem>, <&scp_share_mem>;
+		memory-region-names = "firmware", "share";
+		status = "disabled";
+	};
+
+	scp-observe@10730000 {
+		compatible = "realme,op6893-scp-observe";
+		clocks = <&topckgen CLK_TOP_SCP>;
+		clock-names = "scp";
+		reg = <0 0x10730000 0 0x1000>,
+		      <0 0x10500000 0 0x180000>,
+		      <0 0x107fb10c 0 4>,
+		      <0 0x107fc10c 0 4>,
+		      <0 0x107fd10c 0 4>,
+		      <0 0x107fe10c 0 4>,
+		      <0 0x107ff10c 0 4>;
+		reg-names = "core0", "tcm", "mbox0-clr", "mbox1-clr",
+			    "mbox2-clr", "mbox3-clr", "mbox4-clr";
+		interrupts = <GIC_SPI 436 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 437 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 438 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 439 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 440 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "mbox0", "mbox1", "mbox2", "mbox3", "mbox4";
+		mediatek,send-table = <0 0 9
+			3 1 2
+			4 1 1
+			5 1 2
+			6 1 1
+			26 1 9
+			33 1 10
+			11 2 34
+			14 3 1
+			15 3 2
+			16 3 1
+			17 3 6
+			18 3 2
+			24 4 34>;
+		mediatek,recv-table = <1 0 2 0
+			2 0 26 0
+			7 1 2 0
+			8 1 10 0
+			9 1 1 0
+			10 1 2 0
+			27 1 2 0
+			28 1 5 0
+			5 1 1 1
+			34 1 10 0
+			12 2 30 0
+			20 3 10 0
+			21 3 6 0
+			22 3 1 0
+			23 3 2 0
+			15 3 1 1
+			25 4 30 0>;
+		mediatek,topckgen = <&topckgen>;
+		memory-region = <&scp_firmware_mem>, <&scp_share_mem>;
+		memory-region-names = "firmware", "share";
+		status = "disabled";
+	};
+
+	/* Framework references only; no power-domain or reset attachment. */
+	modem-resources {
+		compatible = "realme,op6893-modem-resources";
+		md-vmodem-supply = <&mt6315_3_vbuck1>;
+		md-vnr-supply = <&mt6315_3_vbuck3>;
+		md-vsram-supply = <&mt6315_3_vbuck4>;
+		md-vdigrf-supply = <&mt6359_vpu>;
+		clocks = <&ufs_infracfg CLK_IFRAO_CCIF_AP>,
+			 <&ufs_infracfg CLK_IFRAO_CCIF_MD>,
+			 <&ufs_infracfg CLK_IFRAO_CCIF1_AP>,
+			 <&ufs_infracfg CLK_IFRAO_CCIF1_MD>;
+		clock-names = "ccif-ap", "ccif-md", "ccif1-ap", "ccif1-md";
+		status = "disabled";
+	};
+
 	/* No default pin state; a rail cycle requires an explicit trigger. */
 	conn-preflight {
 		compatible = "realme,op6893-conn-preflight";
@@ -310,6 +417,30 @@
 		#size-cells = <0>;
 
 		/*
+		 * MD rails: describe wiring only. Keep the whole SPMI device
+		 * disabled until voltage ownership and shutdown are validated.
+		 */
+		mt6315_3: pmic@3 {
+			compatible = "mediatek,mt6315-regulator";
+			reg = <0x3 SPMI_USID>;
+			status = "disabled";
+
+			regulators {
+				mt6315_3_vbuck1: vbuck1 {
+					regulator-name = "vmodem";
+				};
+
+				mt6315_3_vbuck3: vbuck3 {
+					regulator-name = "vnr";
+				};
+
+				mt6315_3_vbuck4: vbuck4 {
+					regulator-name = "vsram_md";
+				};
+			};
+		};
+
+		/*
 		 * MT6315 SID 7: vbuck1 is VGPU, vbuck3 is PROC2 (big CPU).
 		 * Named only, no constraints: registration changes nothing.
 		 */
@@ -365,6 +496,12 @@
 
 				mt6359_vs2: buck_vs2 {
 					regulator-name = "vs2";
+				};
+
+				/* ACK uses VPU as VRFDIG; no MD consumer yet. */
+				mt6359_vpu: buck_vpu {
+					regulator-name = "vdigrf";
+					status = "disabled";
 				};
 
 				mt6359_vcn13: ldo_vcn13 {
@@ -581,6 +718,35 @@
 		#address-cells = <2>;
 		#size-cells = <2>;
 		ranges;
+
+		/* Names match LK so merging updates these nodes rather than duplicating them. */
+		scp_firmware_mem: mblock-21-SCP-reserved {
+			reg = <0 0x9fa00000 0 0x500000>;
+			no-map;
+		};
+
+		/* Allocate locally; never pin the address observed in ACK. */
+		scp_share_mem: reserve-memory-scp_share {
+			size = <0 0x320000>;
+			alignment = <0 0x1000000>;
+			alloc-ranges = <0 0x50000000 0 0x40000000>;
+			no-map;
+		};
+
+		ccci_tag: mblock-22-ccci_tag_mem {
+			reg = <0 0xbff70000 0 0x10000>;
+			no-map;
+		};
+
+		md_nc_smem: mblock-27-ap_md_nc_smem {
+			reg = <0 0x8e000000 0 0x1800000>;
+			no-map;
+		};
+
+		md_c_smem: mblock-28-ap_md_c_smem {
+			reg = <0 0x88000000 0 0x4960000>;
+			no-map;
+		};
 
 			op6893-crumb {
 			reg = <0x0 0x48180000 0x0 0x1000>;
