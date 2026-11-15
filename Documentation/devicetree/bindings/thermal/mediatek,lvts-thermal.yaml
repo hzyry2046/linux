@@ -18,6 +18,8 @@ description: |
 properties:
   compatible:
     enum:
+      - mediatek,mt6893-lvts-ap
+      - mediatek,mt6893-lvts-mcu
       - mediatek,mt7987-lvts-ap
       - mediatek,mt7988-lvts-ap
       - mediatek,mt8186-lvts
@@ -100,19 +102,37 @@ allOf:
           not:
             contains:
               enum:
+                - mediatek,mt6893-lvts-ap
+                - mediatek,mt6893-lvts-mcu
                 - mediatek,mt8196-lvts-ap
                 - mediatek,mt8196-lvts-mcu
     then:
       required:
         - resets
 
+  # MT6893 calibration is passed by the bootloader in /chosen
+  # "atag,devinfo"; the efuse window does not hold it.
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - mediatek,mt6893-lvts-ap
+              - mediatek,mt6893-lvts-mcu
+    then:
+      properties:
+        nvmem-cells: false
+        nvmem-cell-names: false
+    else:
+      required:
+        - nvmem-cells
+        - nvmem-cell-names
+
 required:
   - compatible
   - reg
   - interrupts
   - clocks
-  - nvmem-cells
-  - nvmem-cell-names
 
 additionalProperties: false
 

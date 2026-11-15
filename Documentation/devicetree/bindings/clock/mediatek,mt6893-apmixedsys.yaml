@@ -11,7 +11,8 @@ maintainers:
 
 description:
   The analog mixed controller contains the PLLs. This initial description
-  exposes MAINPLL using the vendor clock index in dt-bindings/clock/mt6893-clk.h.
+  exposes MAINPLL and MFGPLL using the vendor clock indices in
+  dt-bindings/clock/mt6893-clk.h.
 
 properties:
   compatible:
