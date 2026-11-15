@@ -51,8 +51,19 @@ OPP 表候选档位（segment 1）：350/390/451/512/593/675/755/836/886 MHz，
 - Segment：efuse 0x11C107B0 `& 0x3`（注释写 [2:0]，代码掩码 0x3）。
   == 2 用 segment 2（MT6893_SEGMENT），否则 segment 1（MT6891_SEGMENT）。
   segment 2 低频电压更高（350 MHz 为 0.60 V，segment 1 为 0.55 V；
-  675 MHz 及以上两表相同）。**本机属于哪个 segment 尚未确认**，确认前
-  应按 segment 2（更保守）取电压。
+  675 MHz 及以上两表相同）。
+
+## 本机 Android 实测（4.19.325 自编内核，证据 mt6893-direct/evidence/android-gpu/）
+
+- `gpufreq_var_dump`：`segment_id = 2`，本机为 MT6893 segment 2。
+- 运行时 OPP 表已被 EEMG（PTP-OD）按芯片校准，电压低于静态表，例如
+  886 MHz 0.70 V（静态 0.80 V）、675 MHz 0.60625 V、350 MHz 0.55 V
+  （静态 0.60 V）。vsram 全档 0.75 V。
+- GPU 活动时实测：350 MHz，vgpu 0.55 V，vsram 0.75 V。
+- EEMG_DET_GPU 16 点电压：0.70/0.675/0.6625/0.65/0.64375/0.63125/
+  0.61875/0.60625/0.60/0.59375/0.5875/0.58125/0.575/0.56875/0.55625/0.55 V。
+- mainline 初期建议使用**静态 segment 2 表**（未经 EEM 校准的上界，偏安全），
+  EEM 校准值仅作参考，不直接硬编码。
 
 ## 下一步
 
