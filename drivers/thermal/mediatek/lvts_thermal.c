@@ -88,6 +88,8 @@
 #define LVTS_SENSOR_MAX				4
 #define LVTS_GOLDEN_TEMP_MAX		62
 #define LVTS_GOLDEN_TEMP_DEFAULT	50
+#define LVTS_COEFF_A_MT6893			-252500
+#define LVTS_COEFF_B_MT6893			252500
 #define LVTS_COEFF_A_MT8195			-250460
 #define LVTS_COEFF_B_MT8195			250460
 #define LVTS_COEFF_A_MT7987			-204650
@@ -160,6 +162,15 @@ struct lvts_data {
 	int gt_calib_bit_offset;
 	unsigned int def_calibration;
 	u16 msr_offset;
+	/*
+	 * MT6893: calibration comes from /chosen "atag,devinfo" (LK),
+	 * not from an nvmem efuse, and each controller needs a manual
+	 * RCK measurement to compute EDATA. ctrl_base is the index of
+	 * this domain's first controller in the global (devinfo) order:
+	 * MCU controllers are 0..2, AP controllers are 3..6.
+	 */
+	bool calib_from_devinfo;
+	u8 ctrl_base;
 };
 
 struct lvts_sensor {
@@ -176,6 +187,7 @@ struct lvts_ctrl {
 	struct lvts_sensor sensors[LVTS_SENSOR_MAX];
 	const struct lvts_data *lvts_data;
 	u32 calibration[LVTS_SENSOR_MAX];
+	u32 factory_count_rc;
 	u8 valid_sensor_mask;
 	int mode;
 	void __iomem *base;
@@ -191,6 +203,8 @@ struct lvts_domain {
 	void __iomem *base;
 	size_t calib_len;
 	u8 *calib;
+	/* Per global-controller factory count_rc, devinfo only */
+	u32 count_rc[7];
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *dom_dentry;
 #endif
@@ -374,6 +388,14 @@ static int lvts_get_temp(struct thermal_zone_device *tz, int *temp)
 	 * shutdown.
 	 */
 	if (rc)
+		return -EAGAIN;
+
+	/*
+	 * MT6893: the vendor treats a zero raw value as an invalid
+	 * sample (it substitutes a magic temperature). Report such
+	 * samples as unavailable instead.
+	 */
+	if (lvts_data->calib_from_devinfo && !(value & 0xffff))
 		return -EAGAIN;
 
 	*temp = lvts_raw_to_temp(value, lvts_data);
@@ -873,6 +895,71 @@ static int lvts_calibration_init(struct device *dev, struct lvts_ctrl *lvts_ctrl
  * buffer so it can be read sequentially when initializing the
  * calibration data.
  */
+/*
+ * MT6893: the LVTS calibration is not in efuse MMIO; LK passes it in
+ * /chosen "atag,devinfo" (little-endian u32 count followed by count
+ * words). The 22 LVTS words are devinfo words 116..119 and 190..207.
+ * Rebuild the efuse-equivalent byte stream so the common golden-temp
+ * and per-sensor count_r decode work unchanged, and extract the
+ * per-controller factory count_rc needed by the manual RCK.
+ */
+static int lvts_calibration_read_devinfo(struct device *dev,
+					 struct lvts_domain *lvts_td,
+					 const struct lvts_data *lvts_data)
+{
+	struct device_node *chosen;
+	const __le32 *blob;
+	u32 words[22], count;
+	int len, i;
+
+	chosen = of_find_node_by_path("/chosen");
+	if (!chosen)
+		return dev_err_probe(dev, -ENODATA, "no /chosen node\n");
+	blob = of_get_property(chosen, "atag,devinfo", &len);
+	of_node_put(chosen);
+
+	if (!blob || len < 4)
+		return dev_err_probe(dev, -ENODATA, "no atag,devinfo\n");
+
+	count = le32_to_cpu(blob[0]);
+	if (count < 208 || count > 400 || len != 4 + count * 4)
+		return dev_err_probe(dev, -EINVAL,
+				     "malformed atag,devinfo count=%u len=%d\n",
+				     count, len);
+
+	for (i = 0; i < ARRAY_SIZE(words); i++)
+		words[i] = le32_to_cpu(blob[1 + (i < 4 ? 116 + i : 186 + i)]);
+
+	/* Same sanity checks as the LK decode: golden and all counts set. */
+	if ((words[0] >> 24) == 0 || (words[0] >> 24) > 62)
+		return dev_err_probe(dev, -EINVAL,
+				     "bad LVTS golden temp %#x\n", words[0]);
+
+	for (i = 0; i < 17; i++) {
+		if (!(words[i + 1] & GENMASK(23, 0)))
+			return dev_err_probe(dev, -EINVAL,
+					     "missing count_r for sensor %d\n", i);
+	}
+
+	lvts_td->count_rc[0] = words[21] & GENMASK(23, 0);
+	for (i = 1; i < ARRAY_SIZE(lvts_td->count_rc); i++)
+		lvts_td->count_rc[i] = ((words[i * 3 - 2] >> 24) << 16) |
+				       ((words[i * 3 - 1] >> 24) << 8) |
+				       (words[i * 3] >> 24);
+	for (i = 0; i < ARRAY_SIZE(lvts_td->count_rc); i++)
+		if (!lvts_td->count_rc[i])
+			return dev_err_probe(dev, -EINVAL,
+					     "missing count_rc for controller %d\n", i);
+
+	lvts_td->calib = devm_kmalloc(dev, sizeof(words), GFP_KERNEL);
+	if (!lvts_td->calib)
+		return -ENOMEM;
+	memcpy(lvts_td->calib, words, sizeof(words));
+	lvts_td->calib_len = sizeof(words);
+
+	return 0;
+}
+
 static int lvts_calibration_read(struct device *dev, struct lvts_domain *lvts_td,
 					const struct lvts_data *lvts_data)
 {
@@ -880,6 +967,9 @@ static int lvts_calibration_read(struct device *dev, struct lvts_domain *lvts_td
 	struct nvmem_cell *cell;
 	struct property *prop;
 	const char *cell_name;
+
+	if (lvts_data->calib_from_devinfo)
+		return lvts_calibration_read_devinfo(dev, lvts_td, lvts_data);
 
 	of_property_for_each_string(np, "nvmem-cell-names", prop, cell_name) {
 		size_t len;
@@ -965,6 +1055,8 @@ static int lvts_ctrl_init(struct device *dev, struct lvts_domain *lvts_td,
 
 		lvts_ctrl[i].base = lvts_td->base + lvts_data->lvts_ctrl[i].offset;
 		lvts_ctrl[i].lvts_data = lvts_data;
+		lvts_ctrl[i].factory_count_rc =
+			lvts_td->count_rc[lvts_data->ctrl_base + i];
 
 		ret = lvts_sensor_init(dev, &lvts_ctrl[i],
 				       &lvts_data->lvts_ctrl[i]);
@@ -1112,12 +1204,24 @@ static int lvts_ctrl_set_enable(struct lvts_ctrl *lvts_ctrl, int enable)
 	return 0;
 }
 
+static int lvts_mt6893_command(struct lvts_ctrl *lvts_ctrl, u32 command);
+static int lvts_mt6893_write_config(struct lvts_ctrl *lvts_ctrl,
+				    const u32 *cmds, int nr_cmds);
+
 static int lvts_ctrl_connect(struct device *dev, struct lvts_ctrl *lvts_ctrl)
 {
 	const struct lvts_data *lvts_data = lvts_ctrl->lvts_data;
 	u32 id;
+	int ret;
 
-	lvts_write_config(lvts_ctrl, lvts_data->conn_cmd, lvts_data->num_conn_cmd);
+	if (lvts_data->calib_from_devinfo) {
+		ret = lvts_mt6893_write_config(lvts_ctrl, lvts_data->conn_cmd,
+					       lvts_data->num_conn_cmd);
+		if (ret)
+			return ret;
+	} else {
+		lvts_write_config(lvts_ctrl, lvts_data->conn_cmd, lvts_data->num_conn_cmd);
+	}
 
 	/*
 	 * LVTS_ID : Get ID and status of the thermal controller
@@ -1138,9 +1242,120 @@ static int lvts_ctrl_initialize(struct device *dev, struct lvts_ctrl *lvts_ctrl)
 {
 	const struct lvts_data *lvts_data = lvts_ctrl->lvts_data;
 
+	if (lvts_data->calib_from_devinfo)
+		return lvts_mt6893_write_config(lvts_ctrl, lvts_data->init_cmd,
+						lvts_data->num_init_cmd);
+
 	lvts_write_config(lvts_ctrl, lvts_data->init_cmd, lvts_data->num_init_cmd);
 
 	return 0;
+}
+
+/*
+ * MT6893 uses the 0x81/0x85 serial command format (0xC1 commands are
+ * not decoded by these devices). Each command must wait for the
+ * DEVICE_ACCESS (bit 24) handshake to clear, like the vendor driver.
+ */
+static int lvts_mt6893_command(struct lvts_ctrl *lvts_ctrl, u32 command)
+{
+	u32 value;
+
+	if (readl(LVTS_CONFIG(lvts_ctrl->base)) & BIT(24))
+		return -EBUSY;
+	writel(command, LVTS_CONFIG(lvts_ctrl->base));
+	/* Vendor requires at least 3 us before polling the serial interface. */
+	udelay(3);
+	return readl_poll_timeout(LVTS_CONFIG(lvts_ctrl->base), value,
+				!(value & BIT(24)), 2, 200);
+}
+
+static int lvts_mt6893_write_config(struct lvts_ctrl *lvts_ctrl,
+				    const u32 *cmds, int nr_cmds)
+{
+	int i, ret;
+
+	for (i = 0; i < nr_cmds; i++) {
+		ret = lvts_mt6893_command(lvts_ctrl, cmds[i]);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+/*
+ * MT6893 manual RCK (AUTO_RCK=0 in the vendor driver): measure the RC
+ * count of each sensor and program EDATA = (count_rc_used * count_r)
+ * >> 14, using the factory count_rc when the measured one is missing
+ * or differs by more than ~6% (vendor's strict >1061/1000 threshold).
+ */
+static int lvts_ctrl_calibrate_mt6893(struct device *dev,
+				      struct lvts_ctrl *lvts_ctrl)
+{
+	static const u32 single[] = {
+		0x81030678, 0x810307a6, 0x810308f5, 0x810308fc, 0x810308f5,
+	};
+	void __iomem *lvts_edata[] = {
+		LVTS_EDATA00(lvts_ctrl->base), LVTS_EDATA01(lvts_ctrl->base),
+		LVTS_EDATA02(lvts_ctrl->base), LVTS_EDATA03(lvts_ctrl->base)
+	};
+	void __iomem *base = lvts_ctrl->base;
+	u32 status, raw, used, edata;
+	u64 ratio;
+	int i, ret;
+
+	/* Enter manual-RCK mode. */
+	ret = lvts_mt6893_command(lvts_ctrl, 0x81030e00);
+	if (ret)
+		return ret;
+
+	lvts_for_each_valid_sensor(i, lvts_ctrl) {
+		/* Select sensor i with RCK, then run the single-count sequence. */
+		ret = lvts_mt6893_command(lvts_ctrl, 0x81030d00 | i);
+		if (ret)
+			return ret;
+		ret = lvts_mt6893_write_config(lvts_ctrl, single,
+					       ARRAY_SIZE(single));
+		if (ret)
+			return ret;
+
+		/* Wait 8 us for device settle + 2 us buffer. */
+		udelay(10);
+		/* Kick off RCK counting. */
+		ret = lvts_mt6893_command(lvts_ctrl, 0x81030302);
+		if (ret)
+			return ret;
+		udelay(30);
+		ret = readl_poll_timeout(LVTS_CONFIG(base), status,
+				       !(status & BIT(25)), 2, 200);
+		if (ret)
+			return ret;
+
+		/* Read the RCK count: serial read command, then RDATA0. */
+		ret = lvts_mt6893_command(lvts_ctrl, 0x81020000);
+		if (ret)
+			return ret;
+		udelay(5);
+		raw = readl(base + 0xb0) & GENMASK(23, 0);
+
+		/* Disable TS_EN after each sensor count. */
+		ret = lvts_mt6893_command(lvts_ctrl, 0x810308f1);
+		if (ret)
+			return ret;
+
+		ratio = raw ? div_u64((u64)max(raw, lvts_ctrl->factory_count_rc) * 1000,
+				      min(raw, lvts_ctrl->factory_count_rc)) : 0;
+		used = (!raw || ratio > 1061) ? lvts_ctrl->factory_count_rc : raw;
+		edata = (u32)(((u64)used * lvts_ctrl->calibration[i]) >> 14);
+		writel(edata, lvts_edata[i]);
+
+		dev_info(dev, "ctrl sensor %d: rck raw=%u used=%u factory=%u count_r=%u edata=%u\n",
+			 i, raw, used, lvts_ctrl->factory_count_rc,
+			 lvts_ctrl->calibration[i], edata);
+	}
+
+	/* Recover normal-access mode (sensor select without RCK). */
+	return lvts_mt6893_command(lvts_ctrl, 0x81030d10);
 }
 
 static int lvts_ctrl_calibrate(struct device *dev, struct lvts_ctrl *lvts_ctrl)
@@ -1160,6 +1375,9 @@ static int lvts_ctrl_calibrate(struct device *dev, struct lvts_ctrl *lvts_ctrl)
 	 *
 	 * 20-0 : Efuse value for normalization data
 	 */
+	if (lvts_ctrl->lvts_data->calib_from_devinfo)
+		return lvts_ctrl_calibrate_mt6893(dev, lvts_ctrl);
+
 	for (i = 0; i < LVTS_SENSOR_MAX; i++)
 		writel(lvts_ctrl->calibration[i], lvts_edata[i]);
 
@@ -1287,7 +1505,7 @@ static int lvts_ctrl_start(struct device *dev, struct lvts_ctrl *lvts_ctrl)
 	struct lvts_sensor *lvts_sensors = lvts_ctrl->sensors;
 	struct thermal_zone_device *tz;
 	u32 sensor_map = 0;
-	int i;
+	int i, ret;
 	/*
 	 * Bitmaps to enable each sensor on immediate and filtered modes, as
 	 * described in MSRCTL1 and MONCTL0 registers below, respectively.
@@ -1359,6 +1577,15 @@ static int lvts_ctrl_start(struct device *dev, struct lvts_ctrl *lvts_ctrl)
 		 */
 		writel(sensor_map, LVTS_MSRCTL1(lvts_ctrl->base));
 	} else {
+		if (lvts_ctrl->lvts_data->calib_from_devinfo) {
+			/*
+			 * Vendor sets "Device Single mode" via the serial
+			 * interface before enabling the sensing points.
+			 */
+			ret = lvts_mt6893_command(lvts_ctrl, 0x810306b8);
+			if (ret)
+				return ret;
+		}
 		/*
 		 * Bits:
 		 *      9: Single point access flow
@@ -1840,6 +2067,60 @@ static const struct lvts_ctrl_data mt8192_lvts_ap_data_ctrl[] = {
 	}
 };
 
+/*
+ * MT6893 AP domain: same sensor map and calibration offsets as MT8192,
+ * but the vendor reads only the filtered MSR registers on this SoC, so
+ * every controller runs in filtered mode (MT8192 AP uses immediate).
+ */
+static const struct lvts_ctrl_data mt6893_lvts_ap_data_ctrl[] = {
+	{
+		.lvts_sensor = {
+			{ .dt_id = MT8192_AP_VPU0,
+			  .cal_offsets = { 0x24, 0x25, 0x26 } },
+			{ .dt_id = MT8192_AP_VPU1,
+			  .cal_offsets = { 0x28, 0x29, 0x2a } }
+		},
+		VALID_SENSOR_MAP(1, 1, 0, 0),
+		.offset = 0x0,
+		.mode = LVTS_MSR_FILTERED_MODE,
+	},
+	{
+		.lvts_sensor = {
+			{ .dt_id = MT8192_AP_GPU0,
+			  .cal_offsets = { 0x2c, 0x2d, 0x2e } },
+			{ .dt_id = MT8192_AP_GPU1,
+			  .cal_offsets = { 0x30, 0x31, 0x32 } }
+		},
+		VALID_SENSOR_MAP(1, 1, 0, 0),
+		.offset = 0x100,
+		.mode = LVTS_MSR_FILTERED_MODE,
+	},
+	{
+		.lvts_sensor = {
+			{ .dt_id = MT8192_AP_INFRA,
+			  .cal_offsets = { 0x34, 0x35, 0x36 } },
+			{ .dt_id = MT8192_AP_CAM,
+			  .cal_offsets = { 0x38, 0x39, 0x3a } },
+		},
+		VALID_SENSOR_MAP(1, 1, 0, 0),
+		.offset = 0x200,
+		.mode = LVTS_MSR_FILTERED_MODE,
+	},
+	{
+		.lvts_sensor = {
+			{ .dt_id = MT8192_AP_MD0,
+			  .cal_offsets = { 0x3c, 0x3d, 0x3e } },
+			{ .dt_id = MT8192_AP_MD1,
+			  .cal_offsets = { 0x40, 0x41, 0x42 } },
+			{ .dt_id = MT8192_AP_MD2,
+			  .cal_offsets = { 0x44, 0x45, 0x46 } }
+		},
+		VALID_SENSOR_MAP(1, 1, 1, 0),
+		.offset = 0x300,
+		.mode = LVTS_MSR_FILTERED_MODE,
+	}
+};
+
 static const struct lvts_ctrl_data mt8195_lvts_mcu_data_ctrl[] = {
 	{
 		.lvts_sensor = {
@@ -2130,6 +2411,54 @@ static const struct lvts_data mt8192_lvts_ap_data = {
 	.ops = &lvts_platform_ops_mt7988,
 };
 
+/*
+ * MT6893 shares the MT8192 LVTS layout and sensor map, but uses the
+ * 0x81/0x85 serial command format (the 0xC1 commands are not decoded
+ * by these devices), takes its calibration from /chosen
+ * "atag,devinfo" rather than an efuse, and needs a manual RCK pass
+ * per sensor to compute EDATA.
+ */
+static const u32 mt6893_conn_cmds[] = { 0x8103ffff, 0x8502fc55 };
+
+static const u32 mt6893_init_cmds[] = {
+	0x81030300, 0x81030420, 0x81030500, 0x81030ac4, 0x81030c7c,
+	0x8103098d, 0x810308f5, 0x810308fc, 0x810308f5, 0x810307a6,
+};
+
+static const struct lvts_data mt6893_lvts_mcu_data = {
+	.lvts_ctrl	= mt8192_lvts_mcu_data_ctrl,
+	.conn_cmd	= mt6893_conn_cmds,
+	.init_cmd	= mt6893_init_cmds,
+	.num_lvts_ctrl	= ARRAY_SIZE(mt8192_lvts_mcu_data_ctrl),
+	.num_conn_cmd	= ARRAY_SIZE(mt6893_conn_cmds),
+	.num_init_cmd	= ARRAY_SIZE(mt6893_init_cmds),
+	.temp_factor	= LVTS_COEFF_A_MT6893,
+	.temp_offset	= LVTS_COEFF_B_MT6893,
+	.gt_calib_bit_offset = 24,
+	.def_calibration = 35000,
+	.num_cal_offsets = LVTS_NUM_CAL_OFFSETS_MT7988,
+	.calib_from_devinfo = true,
+	.ctrl_base	= 0,
+	.ops = &lvts_platform_ops_mt7988,
+};
+
+static const struct lvts_data mt6893_lvts_ap_data = {
+	.lvts_ctrl	= mt6893_lvts_ap_data_ctrl,
+	.conn_cmd	= mt6893_conn_cmds,
+	.init_cmd	= mt6893_init_cmds,
+	.num_lvts_ctrl	= ARRAY_SIZE(mt6893_lvts_ap_data_ctrl),
+	.num_conn_cmd	= ARRAY_SIZE(mt6893_conn_cmds),
+	.num_init_cmd	= ARRAY_SIZE(mt6893_init_cmds),
+	.temp_factor	= LVTS_COEFF_A_MT6893,
+	.temp_offset	= LVTS_COEFF_B_MT6893,
+	.gt_calib_bit_offset = 24,
+	.def_calibration = 35000,
+	.num_cal_offsets = LVTS_NUM_CAL_OFFSETS_MT7988,
+	.calib_from_devinfo = true,
+	.ctrl_base	= 3,
+	.ops = &lvts_platform_ops_mt7988,
+};
+
 static const struct lvts_data mt8195_lvts_mcu_data = {
 	.lvts_ctrl	= mt8195_lvts_mcu_data_ctrl,
 	.conn_cmd	= default_conn_cmds,
@@ -2190,6 +2519,8 @@ static const struct of_device_id lvts_of_match[] = {
 	{ .compatible = "mediatek,mt8186-lvts", .data = &mt8186_lvts_data },
 	{ .compatible = "mediatek,mt8188-lvts-mcu", .data = &mt8188_lvts_mcu_data },
 	{ .compatible = "mediatek,mt8188-lvts-ap", .data = &mt8188_lvts_ap_data },
+	{ .compatible = "mediatek,mt6893-lvts-mcu", .data = &mt6893_lvts_mcu_data },
+	{ .compatible = "mediatek,mt6893-lvts-ap", .data = &mt6893_lvts_ap_data },
 	{ .compatible = "mediatek,mt8192-lvts-mcu", .data = &mt8192_lvts_mcu_data },
 	{ .compatible = "mediatek,mt8192-lvts-ap", .data = &mt8192_lvts_ap_data },
 	{ .compatible = "mediatek,mt8195-lvts-mcu", .data = &mt8195_lvts_mcu_data },

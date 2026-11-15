@@ -5,6 +5,8 @@
 #include <dt-bindings/pinctrl/mt65xx.h>
 #include <dt-bindings/iio/adc/mediatek,mt6359-auxadc.h>
 #include <dt-bindings/spmi/spmi.h>
+#include <dt-bindings/thermal/thermal.h>
+#include <dt-bindings/thermal/mediatek,lvts-thermal.h>
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/reset/ti-syscon.h>
@@ -404,6 +406,7 @@
 		clocks = <&topckgen CLK_TOP_MFG_SEL>;
 		mali-supply = <&mt6315_7_vbuck1>;
 		operating-points-v2 = <&gpu_opp_table>;
+		#cooling-cells = <2>;
 		power-domains = <&spm MT6893_POWER_DOMAIN_MFG1>,
 				<&spm MT6893_POWER_DOMAIN_MFG2>,
 				<&spm MT6893_POWER_DOMAIN_MFG3>,
@@ -612,6 +615,28 @@
 				<0x150 21 0x154 21 0 0
 				 (ASSERT_SET | DEASSERT_SET | STATUS_NONE)>;
 		};
+	};
+
+	/*
+	 * LVTS thermal sensor blocks (same layout as MT8192). The
+	 * controllers are already running since LK; no resets property
+	 * so the driver never resets the block. SVS/EEM owns 0x1100bc00.
+	 * Calibration comes from /chosen "atag,devinfo", not efuse.
+	 */
+	lvts_ap: thermal-sensor@1100b000 {
+		compatible = "mediatek,mt6893-lvts-ap";
+		reg = <0 0x1100b000 0 0xc00>;
+		interrupts = <GIC_SPI 169 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&ufs_infracfg CLK_IFRAO_THERM>;
+		#thermal-sensor-cells = <1>;
+	};
+
+	lvts_mcu: thermal-sensor@11278000 {
+		compatible = "mediatek,mt6893-lvts-mcu";
+		reg = <0 0x11278000 0 0x1000>;
+		interrupts = <GIC_SPI 170 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&ufs_infracfg CLK_IFRAO_THERM>;
+		#thermal-sensor-cells = <1>;
 	};
 
 	ufs: ufs@11270000 {
@@ -990,4 +1015,127 @@
 			};
 		};
 	};
+};
+
+/ {
+	thermal_zones: thermal-zones {
+	/*
+	 * GPU temperature is the two AP-domain sensors feeding the MFG
+	 * block (MT8192_AP_GPU0/GPU1). Both trip the same cooling device.
+	 */
+	gpu0-thermal {
+		polling-delay = <1000>;
+		polling-delay-passive = <250>;
+		thermal-sensors = <&lvts_ap MT8192_AP_GPU0>;
+
+		trips {
+			gpu0_alert: trip-alert {
+				temperature = <85000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+
+			gpu0_crit: trip-crit {
+				temperature = <100000>;
+				hysteresis = <2000>;
+				type = "critical";
+			};
+		};
+
+		cooling-maps {
+			map0 {
+				trip = <&gpu0_alert>;
+				cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+			};
+		};
+	};
+
+	gpu1-thermal {
+		polling-delay = <1000>;
+		polling-delay-passive = <250>;
+		thermal-sensors = <&lvts_ap MT8192_AP_GPU1>;
+
+		trips {
+			gpu1_alert: trip-alert {
+				temperature = <85000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+
+			gpu1_crit: trip-crit {
+				temperature = <100000>;
+				hysteresis = <2000>;
+				type = "critical";
+			};
+		};
+
+		cooling-maps {
+			map0 {
+				trip = <&gpu1_alert>;
+				cooling-device = <&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+			};
+		};
+	};
+
+	/* Read-only observation zones: no cooling device exists yet. */
+	cpu-little-thermal {
+		polling-delay = <1000>;
+		polling-delay-passive = <250>;
+		thermal-sensors = <&lvts_mcu MT8192_MCU_LITTLE_CPU0>;
+
+		trips {
+			cpu_little_alert: trip-alert {
+				temperature = <85000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+
+			cpu_little_crit: trip-crit {
+				temperature = <100000>;
+				hysteresis = <2000>;
+				type = "critical";
+			};
+		};
+	};
+
+	cpu-big-thermal {
+		polling-delay = <1000>;
+		polling-delay-passive = <250>;
+		thermal-sensors = <&lvts_mcu MT8192_MCU_BIG_CPU0>;
+
+		trips {
+			cpu_big_alert: trip-alert {
+				temperature = <85000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+
+			cpu_big_crit: trip-crit {
+				temperature = <100000>;
+				hysteresis = <2000>;
+				type = "critical";
+			};
+		};
+	};
+
+	soc-thermal {
+		polling-delay = <1000>;
+		polling-delay-passive = <250>;
+		thermal-sensors = <&lvts_ap MT8192_AP_INFRA>;
+
+		trips {
+			soc_alert: trip-alert {
+				temperature = <85000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+
+			soc_crit: trip-crit {
+				temperature = <100000>;
+				hysteresis = <2000>;
+				type = "critical";
+			};
+		};
+	};
+};
 };
