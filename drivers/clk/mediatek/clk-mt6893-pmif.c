@@ -191,6 +191,8 @@ static struct clk_hw *mt6893_scp_bootstrap_register(struct device *dev)
 #endif
 
 static const struct mtk_fixed_factor top_factors[] = {
+	FACTOR_FLAGS(CLK_TOP_MAINPLL_D5_D2, "mt6893_mainpll_d5_d2",
+		     "mt6893_mainpll", 1, 10, 0),
 	FACTOR_FLAGS(CLK_TOP_OSC_D4, "mt6893_osc_d4", "mt6893_ulposc", 1, 4, 0),
 	FACTOR_FLAGS(CLK_TOP_OSC_D8, "mt6893_osc_d8", "mt6893_ulposc", 1, 8, 0),
 	FACTOR_FLAGS(CLK_TOP_OSC_D16, "mt6893_osc_d16", "mt6893_ulposc", 1, 16, 0),
@@ -207,13 +209,60 @@ static const char * const pwrap_parents[] = {
 	"mt6893_osc_d16",
 };
 
+static const char * const mfg_parents[] = {
+	"clk26m",
+	"mt6893_mfgpll",
+	"mt6893_univpll_d6",
+	"mt6893_mainpll_d5_d2",
+};
+
 /* Keep the supply transport alive even if a consumer fails to probe. */
 static const struct mtk_mux top_muxes[] = {
 	MUX_GATE_CLR_SET_UPD_FLAGS(CLK_TOP_PWRAP_ULPOSC_SEL,
 				  "mt6893_pwrap_ulposc_sel", pwrap_parents,
 				  0x90, 0x94, 0x98, 8, 3, 15, 0x8, 2,
 				  CLK_IS_CRITICAL | CLK_SET_RATE_NO_REPARENT),
+	/*
+	 * mfg_sel is left as LK set it (mfgpll, ungated); register the mux
+	 * without the gate ops so we never own or toggle its pdn bit.
+	 */
+	GATE_CLR_SET_UPD_FLAGS(CLK_TOP_MFG_SEL, "mt6893_mfg_sel", mfg_parents,
+			       0x60, 0x64, 0x68, 8, 2, 0, 0x4, 21,
+			       CLK_SET_RATE_PARENT | CLK_SET_RATE_NO_REPARENT,
+			       mtk_mux_clr_set_upd_ops),
 };
+
+/*
+ * Park mfg_sel on the stable mainpll_d5_d2 while MFGPLL is reprogrammed, like
+ * clk_mt8192_reg_mfg_mux_notifier(). Failure leaves MFGPLL reprogramming
+ * unparked; warn loudly but keep the PMIC transport clock tree up.
+ */
+static void mt6893_mfg_mux_nb_register(struct device *dev,
+				       struct clk_hw_onecell_data *data)
+{
+	struct mtk_mux_nb *mfg_mux_nb;
+	unsigned int i;
+	int ret = -ENOMEM;
+
+	mfg_mux_nb = devm_kzalloc(dev, sizeof(*mfg_mux_nb), GFP_KERNEL);
+	if (mfg_mux_nb) {
+		for (i = 0; i < ARRAY_SIZE(top_muxes); i++)
+			if (top_muxes[i].id == CLK_TOP_MFG_SEL)
+				break;
+		if (i == ARRAY_SIZE(top_muxes)) {
+			ret = -EINVAL;
+		} else {
+			mfg_mux_nb->ops = top_muxes[i].ops;
+			mfg_mux_nb->bypass_index = 3; /* mt6893_mainpll_d5_d2 */
+			ret = devm_mtk_clk_mux_notifier_register(dev,
+					data->hws[CLK_TOP_MFG_SEL]->clk,
+					mfg_mux_nb);
+		}
+	}
+	if (ret)
+		dev_warn(dev, "mfg_sel parking notifier failed: %d; MFGPLL changes unparked\n",
+			 ret);
+}
 
 static const struct mtk_gate_regs infra_gate_regs = {
 	.set_ofs = 0x80,
@@ -340,6 +389,7 @@ static int mt6893_pmif_clk_probe(struct platform_device *pdev)
 					    np, &mt6893_pmif_lock, data);
 		if (ret)
 			goto unregister_factors;
+		mt6893_mfg_mux_nb_register(dev, data);
 #ifdef CONFIG_COMMON_CLK_MT6893_SCP_BOOTSTRAP
 		/* An optional SCP experiment must not break the PMIC transport. */
 		{

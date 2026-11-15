@@ -348,12 +348,23 @@
 		};
 	};
 
-	/* MFG clock as LK left it: mfg_sel = mfgpll, posdiv /8. */
-	mfg_ck: mfg-clk {
-		compatible = "fixed-clock";
-		#clock-cells = <0>;
-		clock-frequency = <350000000>;
-		clock-output-names = "mfg_ck_inherited";
+	/*
+	 * Bring-up table capped at the LK-inherited 350 MHz: the GPU supply
+	 * is not controlled yet, so no opp-microvolt is listed and nothing
+	 * above the vendor's lowest OPP (350 MHz @ 0.55 V) is offered.
+	 */
+	gpu_opp_table: opp-table-gpu {
+		compatible = "operating-points-v2";
+
+		opp-250000000 {
+			opp-hz = /bits/ 64 <250000000>;
+		};
+		opp-300000000 {
+			opp-hz = /bits/ 64 <300000000>;
+		};
+		opp-350000000 {
+			opp-hz = /bits/ 64 <350000000>;
+		};
 	};
 
 	/*
@@ -367,7 +378,8 @@
 			     <GIC_SPI 363 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 362 IRQ_TYPE_LEVEL_HIGH>;
 		interrupt-names = "job", "mmu", "gpu";
-		clocks = <&mfg_ck>;
+		clocks = <&topckgen CLK_TOP_MFG_SEL>;
+		operating-points-v2 = <&gpu_opp_table>;
 		power-domains = <&spm MT6893_POWER_DOMAIN_MFG1>,
 				<&spm MT6893_POWER_DOMAIN_MFG2>,
 				<&spm MT6893_POWER_DOMAIN_MFG3>,
