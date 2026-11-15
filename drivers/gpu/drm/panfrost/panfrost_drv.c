@@ -968,14 +968,17 @@ static const struct panfrost_compatible mediatek_mt8192_data = {
 
 /*
  * MT6893: MFG1 is the GPU top domain, MFG2-6 the five shader stacks.
- * The MFG0/MFG1 supplies are owned by the power domains.
+ * The MFG0 domain also references vbuck1 as its domain-supply while
+ * panfrost sets its voltage via the OPP table; MFG1's vsram stays with
+ * the domain.
  */
 static const char * const mediatek_mt6893_pm_domains[] = {
 	"core0", "core1", "core2", "core3", "core4", "core5",
 };
 
 static const struct panfrost_compatible mediatek_mt6893_data = {
-	.num_supplies = 0,
+	.num_supplies = ARRAY_SIZE(default_supplies) - 1,
+	.supply_names = default_supplies,
 	.num_pm_domains = ARRAY_SIZE(mediatek_mt6893_pm_domains),
 	.pm_domain_names = mediatek_mt6893_pm_domains,
 	/*
