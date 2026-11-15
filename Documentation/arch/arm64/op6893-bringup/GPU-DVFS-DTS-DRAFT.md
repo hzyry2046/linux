@@ -40,6 +40,20 @@ DVFS 应在该节点上增量添加，不要在 mt6893.dtsi 里另建节点（la
 OPP 表候选档位（segment 1）：350/390/451/512/593/675/755/836/886 MHz，
 对应 0.55/0.5625/0.58125/0.60/0.625/0.65/0.70/0.75/0.80 V。
 
+## 电压相关资料（4.19 本地源码）
+
+- 4.19 DTS gpufreq 节点：`_vgpu-supply = <&mt6315_7_vbuck1>`，
+  `_vsram_gpu-supply = <&mt_pmic_vsram_others_ldo_reg>`，与板级 MFG0/MFG1
+  domain-supply 一致。
+- mainline mt6315 buck：线性 0–0xbf，6.25 mV/步（0–1.19375 V），满足需求。
+- vsram 规则：vgpu <= 0.75 V 时 vsram 固定 0.75 V；更高时 vsram = vgpu。
+  约束 -100 mV <= vsram - vgpu <= 300 mV。
+- Segment：efuse 0x11C107B0 `& 0x3`（注释写 [2:0]，代码掩码 0x3）。
+  == 2 用 segment 2（MT6893_SEGMENT），否则 segment 1（MT6891_SEGMENT）。
+  segment 2 低频电压更高（350 MHz 为 0.60 V，segment 1 为 0.55 V；
+  675 MHz 及以上两表相同）。**本机属于哪个 segment 尚未确认**，确认前
+  应按 segment 2（更保守）取电压。
+
 ## 下一步
 
 1. 查 4.19 的 MFGPLL 设置流程（mtk_gpufreq_plat.c 中 PLL/posdiv 切换）
