@@ -91,7 +91,7 @@ USB/Wi-Fi SSH 和外置 rootfs 正常；MD/SCP 尚未启动。详见 [R3](MODEM-
 | 电池电流、容量、SOC、完整电源状态 | 未启用 | 电池电压不等于 fuel gauge；本机 ADC 配置排除阻抗/电流测量 |
 | 显示（完整驱动）/ 亮度 | 未启用 | 早期控制台见上方 simplefb 行。完整驱动需要 MMSYS/SMI/IOMMU/CMDQ/DSC；6.6 port 的 mediatek_v2 已点亮该面板，可作参考；不依赖 GPU |
 | 触摸屏 | 未启用 | 需核对芯片、总线、供电和复位；GPIO20 是触摸复位线索，不应当作音量加 |
-| GPU 加速 | 未启用 | GPU 驱动、时钟、电源域、供电、固件及热控待建立 |
+| GPU 加速（panfrost + Mesa kmsro） | 部分，实测 | 开机自动加载 panfrost 和 gpu-sched；probe 成功（13.4 s），minor 1；kmscube 肉眼测试无毛刺；kmsflat 压测 3800 帧全部通过 CPU cache sync（attempt123–124） | 禁用了 runtime suspend（GPU_PM_NO_RT_SUSPEND），GPU 一直上电；根因未查；未做 DVFS、长期压测、温度监控；模块从 /cache/mainline/modules 加载，每次换内核需重推 .ko | [123](evidence/attempt-123.md)、[124](evidence/attempt-124.md) |
 | 音频 / 耳机检测 | 未启用 | codec、AFE、时钟/供电和路由待实现；accdet 尚未接入 |
 | 摄像头 / ISP | 未启用 | 传感器型号、总线、供电、时钟、ISP 管线待调查 |
 | RTC / 持久时间 | 未启用 | RTC_CLASS 关闭；不能用启动日志时间作为准确实时时钟 |
@@ -102,12 +102,15 @@ USB/Wi-Fi SSH 和外置 rootfs 正常；MD/SCP 尚未启动。详见 [R3](MODEM-
 
 ## 当前用户空间与操作约束
 
-- Debian13 arm64 SquashFS 位于 cache 的 `mainline/debian.squashfs`，外层 ext4
-  以 `ro,norecovery` 挂载；根目录使用 tmpfs OverlayFS，运行时修改易失。
-  主线下不写 UFS，所以更新镜像要在 Android 下进行：先推到临时文件，校验哈希后
-  再改名，旧镜像保留（当前回滚镜像为 `debian-9825862f46b0.squashfs`）。
-- 开机由 `op6893-ssh-start` 依次启动 USB SSH、Wi-Fi（`op6893-wifi-up`）以及
-  dbus 和 bluetoothd（后者在后台运行）。
+- Debian13 arm64 SquashFS 位于 cache 的 `mainline/debian.squashfs`（固定文件名，initramfs
+  只认这个路径），外层 ext4 以 `ro,norecovery` 挂载；根目录使用 tmpfs OverlayFS，运行时修改易失。
+  主线下不写 UFS，所以更新镜像要在 Android 下进行：先推到临时文件，校验哈希后再改名，
+  旧镜像保留（当前回滚镜像为 `debian-11c0a118e84c.squashfs`）。
+- GPU 模块（`gpu-sched.ko` / `panfrost.ko`）放在 `/cache/mainline/modules/`，由 `op6893-ssh-start`
+  在后台 insmod。每次换内核后需要重推与新内核 vermagic 匹配的 `.ko` 文件，否则加载失败
+  （错误写入 `/run/modules.log`，但不影响 SSH）。
+- 开机由 `op6893-ssh-start` 依次启动 USB SSH、GPU 模块加载、Wi-Fi（`op6893-wifi-up`），
+  以及 dbus、bluetoothd 和 buffyboard（后三者在后台运行）。
 - BusyBox PID1 / watchdog 和 USB SSH 是调试基础；并非完整手机发行版体验。
 - 保留 `clk_ignore_unused regulator_ignore_unused fw_devlink=off`；这些仍是
   bring-up 约束，不应在资源接管完成前简单删除。
