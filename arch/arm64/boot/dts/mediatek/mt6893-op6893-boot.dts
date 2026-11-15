@@ -352,8 +352,8 @@
 
 	/*
 	 * Static segment-2 table from 4.19 mtk_gpufreq_internal_plat.h.
-	 * Capped at 836 MHz so vgpu never exceeds the fixed vsram 0.75 V
-	 * (vsram_others is a shared rail and carries no OPP constraints).
+	 * Above 836 MHz vgpu rises to 0.80 V and vsram_others follows it
+	 * through the MediaTek regulator coupler.
 	 */
 	gpu_opp_table: opp-table-gpu {
 		compatible = "operating-points-v2";
@@ -389,6 +389,22 @@
 		opp-836000000 {
 			opp-hz = /bits/ 64 <836000000>;
 			opp-microvolt = <750000>;
+		};
+		opp-848000000 {
+			opp-hz = /bits/ 64 <848000000>;
+			opp-microvolt = <762500>;
+		};
+		opp-861000000 {
+			opp-hz = /bits/ 64 <861000000>;
+			opp-microvolt = <775000>;
+		};
+		opp-873000000 {
+			opp-hz = /bits/ 64 <873000000>;
+			opp-microvolt = <787500>;
+		};
+		opp-886000000 {
+			opp-hz = /bits/ 64 <886000000>;
+			opp-microvolt = <800000>;
 		};
 	};
 
@@ -492,9 +508,11 @@
 				mt6315_7_vbuck1: vbuck1 {
 					regulator-name = "vgpu";
 					regulator-min-microvolt = <600000>;
-					regulator-max-microvolt = <750000>;
+					regulator-max-microvolt = <800000>;
 					regulator-ramp-delay = <6250>;
 					regulator-enable-ramp-delay = <256>;
+					regulator-coupled-with = <&mt6359_vsram_others>;
+					regulator-coupled-max-spread = <10000>;
 				};
 
 				mt6315_7_vbuck3: vbuck3 {
@@ -572,8 +590,17 @@
 				mt6359_vcn33_2: ldo_vcn33_2 {
 					regulator-name = "vcn33_2";
 				};
+				/*
+				 * GPU SRAM rail in the vendor tree: shared
+				 * regulator, tracks vgpu through the MediaTek
+				 * regulator coupler (vsram = max(0.75 V, vgpu)).
+				 */
 				mt6359_vsram_others: ldo_vsram_others {
 					regulator-name = "vsram_others";
+					regulator-min-microvolt = <750000>;
+					regulator-max-microvolt = <800000>;
+					regulator-coupled-with = <&mt6315_7_vbuck1>;
+					regulator-coupled-max-spread = <10000>;
 				};
 			};
 
