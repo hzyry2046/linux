@@ -1,6 +1,10 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 # op6893 MD 平台 owner、LK 接管与冷启动
 
+最新实测：2026-11-16，`8ec93b17bbb5` 已完成继承ON接管、一次冷上电、
+普通CCIF准备/stop及MD1关电；独立OFF读回、IRQ屏蔽和USB/Wi-Fi通过。
+详细结果见[CCIF完整实测](MODEM-CCIF.md)。以下为平台层初次离线实现记录。
+
 2026-11-16，AI 辅助实现。新增代码已通过离线测试及启用 ARM64 构建，
 **尚未刷入或执行 MD 上下电**。当前设备仍为 `e8509e81dbc3`，本轮只经
 Wi-Fi SSH 读取六个 AP 侧寄存器，没有执行 SMC、重启或更新 ACK 备份。
@@ -94,5 +98,5 @@ binding 和 DT 校验通过。[结构化结果](evidence/modem-platform-validati
 3. 衔接 SCP 常驻、CCISM 及 FS/RPC/NVRAM 工作副本服务，齐备后再发 `(6,0)`
    验证 HS1/HS2。电源循环成功本身不代表基带 READY。
 
-尚未验证真正的 MD1 开关、ATF CHECK_DONE/flight 返回契约、genpd 与本机
-LK 的完整接管时序、冷循环电压是否足够或任何 CCIF/基带通信。
+后续8ec93b17bbb5已通过本次LK的CHECK_DONE/flight、接管关电和一次冷循环。
+仍未验证热重启、DVFS/负载下电压或任何CCIF/基带通信。

@@ -479,21 +479,21 @@ UFS RO/rootfs 回归通过。接续优先审计 READY0 所在 mailbox 的 RX/IRQ
 
 - [x] 对照A/V/Q及历史4.19子区输出，解释缓存0x80000差值；实现完整LK链验证后的NC默认补全/cached aggregate解析及独立AP/MD边界，见[布局实现](MODEM-SMEM.md)。
 - [x] runtime/CCISM/NVRAM-cache必需大小、别名/重复/截断/溢出与失败清零测试、实际vendor ABI核对、启用Image.gz/modules及strict checkpatch通过。
-- [x] 统一MD owner保存布局/供电基线，显式附着genpd，增加继承LK ON的CHECK_DONE/接管断电及冷循环；完成离线验证，见[平台层](MODEM-PLATFORM.md)。未实测上下电。
+- [x] 统一MD owner保存布局/供电基线，显式附着genpd，增加继承LK ON的CHECK_DONE/接管断电及冷循环；离线及8ec93b17bbb5接管/冷循环实测通过，见[平台层](MODEM-PLATFORM.md)。
 - [ ] 接普通CCIF控制环；CCIF2保持单独桥归属，与SCP真实状态机整合。和MD接管/冷循环合并上机，不拆纯资源测试。
-- [ ] 准备FS/NVRAM工作副本及服务门控，再释放MD验证HS1/HS2。新子区tag解析与MD电源切换仍待下一功能组实测，本轮未刷机。
+- [ ] 准备FS/NVRAM工作副本及服务门控，再释放MD验证HS1/HS2。新子区解析与接管/冷循环已实测，CPU仍未放行。
 
 
-### R7.1 普通 CCIF / 6297 环离线集成（2026-11-16）
+### R7.1 普通 CCIF / 6297 环集成与实测（2026-11-16）
 
 - [x] 默认关闭CCIF扩展归同一MD owner：AP/MD精确窗口、两路IRQ始终masked、ID19/20联合WC映射，probe零I/O，见[CCIF](MODEM-CCIF.md)。
 - [x] 本机A/V6297正常/异常各16槽，含零槽；实际CPU RX/TX回绕、元数据校验、成功发布指针及读写屏障。
 - [x] 一次prepare整合环格式化/读回、CCIF0复位、双SRAM与ID13 debug footer；stop先验masked，故障保留电源/时钟。
 - [x] 实际后端与抽取生命周期sanitizer、A/V表比对、平台/域/SMEM回归、启用ARM64 Image.gz/modules/modpost、默认DTB/schema和strict checkpatch通过。
-- [ ] 合并LK布局→继承ON接管→冷上电→CCIF准备→关电实测；目前没有新硬件验收，不启IRQ或MD CPU。
+- [x] 8ec93b17bbb5合并LK布局→继承ON接管→冷上电→CCIF准备→停止关电通过；修复首轮共享SRAM误判，GIC两路masked/计数0，USB/Wi-Fi/8核/RO存储/boot回读正常。
 - [ ] 接IRQ/worker、控制通道/异常与runtime握手；整合SCP/CCIF2/CCISM和FS/RPC/NVRAM服务后才放行MD及HS1/HS2。
 
 
 R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、冷上电和
 32环格式化/校验。SRAM写入完成后因双视图共享footer而误判EIO；共享模型
-复现旧C失败并已修正。需修正版复测完整prepare/stop/off，不绕过fault重试。
+复现旧C失败并修正；8ec93b17bbb5完整prepare/stop/off复测通过，未绕过fault重试。

@@ -1,10 +1,10 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 # op6893 普通 CCIF 与 6297 控制环
 
-2026-11-16，AI 辅助实现。`420ed6e96546` 已验证本次 LK 子区解析、继承ON
-接管关电、冷上电和32环格式化/校验。CCIF写入完成后因两侧SRAM视图共享
-footer而误判EIO，已复现并修正校验；修正版完整流程待复测。尚无现场CCIF
-通信或基带READY，MD CPU未放行。
+2026-11-16，AI 辅助实现。修正版 `8ec93b17bbb5` 已实测完整 LK 子区解析→
+继承ON接管关电→冷上电→32环和CCIF SRAM初始化/校验→stop→MD1关电。
+最终两路IRQ在GIC中屏蔽、计数0，时钟/domain引用均释放；USB/Wi-Fi正常，
+MD CPU未放行。仅验收初始化及一次冷电源循环，尚无现场CCIF通信或基带READY。
 
 ## 所有权及启用条件
 
@@ -82,8 +82,8 @@ CCB/SRAM runtime handshake、doorbell/BUSY/ACK 和 FS/RPC 服务仍待接入。
 原 MD平台/域/SMEM 回归通过，默认配置与禁用状态保留。结构化记录见
 [evidence/modem-ccif-validation.json](evidence/modem-ccif-validation.json)。
 
-下一次实测合并 LK 子区校验→继承ON接管→冷上电→CCIF准备→关电，不为窗口
-预留或单次寄存器读取单独刷机。成功后接 IRQ/worker 和控制通道，再与 SCP
+完整合并实测已通过，不再为窗口预留或单次寄存器读取单独刷机。接续 IRQ/
+worker 和控制通道，再与 SCP
 常驻、CCIF2/CCISM、FS/RPC/NVRAM工作副本服务整合；条件齐备才执行 MD CPU
 boot `(6,0)`，验证 HS1/HS2。此版本不发出该命令。
 
@@ -103,6 +103,35 @@ USB/Wi-Fi SSH和8核正常。该证据表明MD视图也能看到AP footer；旧�
 修正为两侧都核对相同footer后通过，仍拒绝非footer的非零内容及坏footer。
 
 这是默认关闭、root显式硬件准备入口的功能性错误，不涉及权限边界跨越；
-按本树threat-model作为普通bug处理。首次失败锁定保留电源/时钟，不绕过内核
-fault执行重试/关电。修正版需要重新启动后重测prepare→stop→off。
+按本树threat-model作为普通bug处理。首次失败锁定保留电源/时钟，没有绕过内核
+fault执行重试/关电；重启刷入修正版后完成复测。
 原始结果位于 `/data/src/mainline/mt6893-direct/evidence/modem-ccif-image/`。
+
+
+## 修正版完整实测
+
+`8ec93b17bbb5`（boot SHA256
+`085f1797d4b75d5e76e0a5a2ddde321b542eb49fdbd6681acb92acf4e007ee1f`）
+通过同一组合流程。CCIF状态依次reserved→prepared-irqs-masked→
+stopped-irqs-masked，error/unexpected均0；MD最终stopped、clocks0/domain0。
+
+独立AP侧读回：
+
+| 寄存器 | 最终值 |
+|---|---|
+| 0x1000616c PWR_STATUS | 0x10580e02 |
+| 0x10006300 MD1_PWR_CON | 0x00000008 |
+| 0x10006398 MD_BUCK_ISO | 0x00000003 |
+| 0x10001228 保护1 ACK | 0xe70c108e |
+| 0x10001b90 保护2 ACK | 0x20200401 |
+| 0x10001bc4 保护3 ACK | 0x000500c0 |
+| 0x0c00011c GICD_ISENABLER7 | 0x00100000 |
+
+GIC bits2/3（hwirq226/227）均0，Linux IRQ304/305计数0；MD1精确OFF读回通过。
+关电后不再读取CCIF窗口。Wi-Fi及USB SSH确认同一release和最终状态，8核在线，
+cache ext4 ro/norecovery、rootfs lower squashfs ro；未见BUG/WARNING/Oops/
+Call trace。boot分区完整回读哈希匹配；没有更改ACK备份或分区表。
+SCP runtime保持active0/ready0/generation0，本轮未重新启动SCP或基带。
+设备保留该主线，MD1已关闭。未验收热重启、DVFS、CCIF中断/门铃/现场包、
+CCISM或HS1/HS2，下一步接普通HIF的IRQ/worker及控制通道状态机。
+完整命令结果在 `/data/src/mainline/mt6893-direct/evidence/modem-ccif-fix/`。

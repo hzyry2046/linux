@@ -17,7 +17,7 @@
     "strict_checkpatch_c_headers": "0 errors, 0 warnings, 0 checks",
     "configuration_restored": true
   },
-  "new_code_hardware_tested": "partial on 420ed6e96546; corrected shared-SRAM verification pending hardware retest",
+  "new_code_hardware_tested": true,
   "new_image_packed_or_flashed": true,
   "device_access_this_stage": {
     "transport": "Wi-Fi SSH",
@@ -32,12 +32,15 @@
   "default_nodes": "MD1 and modem-platform disabled",
   "smem_initialization": "only ID19/20 ring spans; 384-byte bank tails remain untouched",
   "remaining": [
-    "Integrated LK handoff, takeover, cold ON, CCIF prepare, OFF hardware test",
     "Live IRQ/worker, control channels and runtime handshake",
     "SCP/CCIF2/CCISM bridge and FS/RPC/NVRAM working-copy service gates",
     "MD CPU release and HS1/HS2"
   ],
-  "external_evidence": "/data/src/mainline/mt6893-direct/evidence/modem-ccif",
+  "external_evidence": [
+    "/data/src/mainline/mt6893-direct/evidence/modem-ccif",
+    "/data/src/mainline/mt6893-direct/evidence/modem-ccif-image",
+    "/data/src/mainline/mt6893-direct/evidence/modem-ccif-fix"
+  ],
   "sources": [
     {
       "root": "/data/src/kernel_oddo_mt6893",
@@ -61,7 +64,12 @@
     }
   ],
   "binding_commit": "1b383d302",
-  "live_validation": {
+  "regression_reproducer": {
+    "old_c_with_shared_sram": "SIGABRT in hardware success assertion",
+    "corrected_c_with_shared_sram": "ASan/UBSan pass, including 521 failure positions",
+    "threat_model_classification": "functional bug in root-only opt-in hardware initialization; no security boundary crossing demonstrated"
+  },
+  "live_first_attempt": {
     "image": "420ed6e96546",
     "lk_smem_users": 23,
     "lk_cached_gap_bytes": 524288,
@@ -84,9 +92,47 @@
     "kernel_warnings_or_oops": false,
     "final_state": "powered; sticky CCIF fault preserves clock/domain references; CPU not released"
   },
-  "regression_reproducer": {
-    "old_c_with_shared_sram": "SIGABRT in hardware success assertion",
-    "corrected_c_with_shared_sram": "ASan/UBSan pass, including 521 failure positions",
-    "threat_model_classification": "functional bug in root-only opt-in hardware initialization; no security boundary crossing demonstrated"
+  "hardware_scope": "one LK takeover and cold MD power cycle with CCIF initialization/stop; no live transport or MD CPU release",
+  "live_validation": {
+    "image": "8ec93b17bbb5",
+    "boot_sha256": "085f1797d4b75d5e76e0a5a2ddde321b542eb49fdbd6681acb92acf4e007ee1f",
+    "boot_full_readback_matches": true,
+    "lk_smem_users": 23,
+    "inherited_on_takeover": true,
+    "cold_power_on": true,
+    "all_32_rings_format_and_verify": true,
+    "sram_both_views_and_status_verify": true,
+    "ccif_stop": true,
+    "cold_power_off_and_independent_readback": true,
+    "final_power_state": "stopped",
+    "final_ccif_state": "stopped-irqs-masked",
+    "clocks": 0,
+    "domain": 0,
+    "unexpected_irqs": 0,
+    "irq_counts": [
+      0,
+      0
+    ],
+    "gicd_isenabler7": "0x00100000",
+    "gic_hwirq226_227_enabled": [
+      false,
+      false
+    ],
+    "final_ap_registers": {
+      "0x1000616c": "0x10580e02",
+      "0x10006300": "0x00000008",
+      "0x10006398": "0x00000003",
+      "0x10001228": "0xe70c108e",
+      "0x10001b90": "0x20200401",
+      "0x10001bc4": "0x000500c0"
+    },
+    "usb_and_wifi_ssh": true,
+    "cpus": "0-7",
+    "cache": "ext4 ro/norecovery",
+    "rootfs_lower": "squashfs ro",
+    "kernel_bug_warning_oops": false,
+    "scp_active": 0,
+    "scp_generation": 0,
+    "md_cpu_release": false
   }
 }
