@@ -332,13 +332,14 @@ config OP6893_CCCI_CCISM
 	  Disabled by default; completion is distinct from radio readiness.
 
 config OP6893_CCCI_SERVICES
-	bool "Build bounded op6893 FS/RPC service protocols and request router"
+	bool "Build experimental op6893 FS/RPC services and backend endpoint"
 	depends on OP6893_CCCI_HANDSHAKE
 	help
 	  Add exact FS fragment reassembly, RPC framing and ownership, and a
 	  bounded generation/request-token router over explicit backend callbacks.
 	  Include ordinary FS/RPC TX with transport-owned sequence and assert.
-	  No daemon, character endpoint, filesystem mount, hardware RPC provider
-	  or service-ready gate is installed. No CPU release or automatic start.
+	  Add an ordered worker and exclusive privileged experimental backend
+	  endpoint. No filesystem mount, hardware RPC provider or service-ready
+	  gate is installed. No CPU release or automatic start.
 	  Disabled by default; prototype user tools operate only on caller-supplied
 	  private working copies and do not establish bootstrap service readiness.

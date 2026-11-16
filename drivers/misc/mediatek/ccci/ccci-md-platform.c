@@ -19,6 +19,7 @@
 #include "ccci-md-platform.h"
 #include "ccci-ccif.h"
 #include "ccci-ccism-bridge.h"
+#include "ccci-service-endpoint.h"
 #include "ccci-md-power.h"
 #include "ccci-smem.h"
 
@@ -41,6 +42,7 @@ struct ccci_md_platform {
 	struct device *domain;
 	struct ccci_ccif *ccif;
 	struct ccci_ccism_bridge *bridge;
+	struct ccci_service_endpoint *services;
 };
 
 /* Independent hardware check also catches a genpd power-off veto/failure. */
@@ -258,7 +260,9 @@ static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 	} else if (sysfs_streq(buf, "takeover")) {
 		ret = ccci_md_power_takeover(&md->power);
 	} else if (sysfs_streq(buf, "off")) {
-		ret = ccci_ccism_bridge_offline(md->bridge);
+		ret = ccci_service_endpoint_offline(md->services);
+		if (!ret)
+			ret = ccci_ccism_bridge_offline(md->bridge);
 		if (!ret && md->ccif && md->power.state == CCCI_MD_POWERED)
 			ret = ccci_ccif_stop(md->ccif);
 		if (!ret)
@@ -300,7 +304,9 @@ static ssize_t ccif_store(struct device *dev, struct device_attribute *attr,
 	if (md->power.state != CCCI_MD_POWERED || !md->power.clocks || !md->power.domain) {
 		ret = -EHOSTDOWN;
 	} else {
-		ret = ccci_ccism_bridge_offline(md->bridge);
+		ret = ccci_service_endpoint_offline(md->services);
+		if (!ret)
+			ret = ccci_ccism_bridge_offline(md->bridge);
 		if (!ret)
 			ret = md_domain_check(md, true);
 		if (!ret)
@@ -335,9 +341,21 @@ static ssize_t ccism_show(struct device *dev, struct device_attribute *attr, cha
 }
 static DEVICE_ATTR_RO(ccism);
 
+static ssize_t services_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	ssize_t ret;
+
+	mutex_lock(&md->lock);
+	ret = ccci_service_endpoint_status(md->services, buf);
+	mutex_unlock(&md->lock);
+	return ret;
+}
+static DEVICE_ATTR_RO(services);
+
 static struct attribute *md_attrs[] = {
 	&dev_attr_md_power.attr, &dev_attr_ccif.attr, &dev_attr_handshake.attr,
-	&dev_attr_ccism.attr, NULL,
+	&dev_attr_ccism.attr, &dev_attr_services.attr, NULL,
 };
 
 static const struct attribute_group md_group = { .attrs = md_attrs };
@@ -455,6 +473,15 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 	ret = md_attach_domain(dev, md);
 	if (ret)
 		return dev_err_probe(dev, ret, "MD1 domain attachment failed\n");
+	if (IS_ENABLED(CONFIG_OP6893_CCCI_SERVICES)) {
+		md->services = ccci_service_endpoint_create(dev, md->ccif);
+		if (IS_ERR(md->services)) {
+			ret = PTR_ERR(md->services);
+			dev_pm_domain_detach(md->domain, false);
+			device_unregister(md->lookup);
+			return dev_err_probe(dev, ret, "service endpoint unavailable\n");
+		}
+	}
 	platform_set_drvdata(pdev, md);
 	ret = devm_device_add_group(dev, &md_group);
 	if (ret) {
@@ -476,7 +503,9 @@ void ccci_md_platform_shutdown(struct platform_device *pdev)
 	if (!md)
 		return;
 	mutex_lock(&md->lock);
-	ret = ccci_ccism_bridge_offline(md->bridge);
+	ret = ccci_service_endpoint_offline(md->services);
+	if (!ret)
+		ret = ccci_ccism_bridge_offline(md->bridge);
 	if (!ret && md->ccif && md->power.state == CCCI_MD_POWERED)
 		ret = ccci_ccif_stop(md->ccif);
 	if (!ret && md->power.state != CCCI_MD_INHERITED)
