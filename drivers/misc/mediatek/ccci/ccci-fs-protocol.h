@@ -14,6 +14,8 @@
 #define CCCI_FS_MESSAGE_MAX	0x40c8
 #define CCCI_FS_BODY_MAX		(CCCI_FS_MESSAGE_MAX - CCCI_FS_HEADER_SIZE)
 #define CCCI_FS_MORE		0x80000000U
+/* The MD strips this prefix on TX but requires it on every reply. */
+#define CCCI_FS_RESPONSE	0xffff0000U
 
 struct ccci_fs_arg {
 	const void *data;

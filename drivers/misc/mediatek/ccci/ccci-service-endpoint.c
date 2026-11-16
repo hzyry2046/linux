@@ -307,7 +307,8 @@ static int endpoint_validate(const struct endpoint_request *request,
 	    (get_unaligned_le32(packet + 8) & 0xffff) != CCCI_FS_TX ||
 	    get_unaligned_le32(packet + 12) != slot ||
 	    (get_unaligned_le32(packet) & CCCI_FS_MORE) ||
-	    get_unaligned_le32(packet + 16) != get_unaligned_le32(request->packet + 16))
+	    get_unaligned_le32(packet + 16) !=
+		    (get_unaligned_le32(request->packet + 16) | CCCI_FS_RESPONSE))
 		return -EPROTO;
 	return ccci_fs_decode(packet + 16, length - 16, &fs);
 }
@@ -610,7 +611,8 @@ ssize_t ccci_service_endpoint_status(struct ccci_service_endpoint *endpoint, cha
 	spin_unlock_irqrestore(&endpoint->queue_lock, flags);
 	mutex_unlock(&endpoint->lock);
 	return sysfs_emit(buf,
-			  "connected=%u generation=%llu armed=%u accepting=%u stopped=%u error=%d queued=%u pending=%u experimental=1 service_ready=0\n",
+			  "connected=%u generation=%llu armed=%u accepting=%u stopped=%u error=%d queued=%u pending=%u tx=%u tx_error=%d experimental=1 service_ready=0\n",
 			  connected, status.generation, status.armed, status.accepting,
-			  status.stopped, status.error, status.queued, pending);
+			  status.stopped, status.error, status.queued, pending,
+			  status.tx_packets, status.tx_error);
 }

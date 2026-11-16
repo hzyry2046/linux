@@ -354,7 +354,24 @@ static void reservation_lifecycle(void){
  assert(!ccci_service_session_destroy(endpoint->session));kref_put(&endpoint->refs,endpoint_free);endpoint=NULL;
  puts("PASS: reservation freezes generation/backend, pre-HS1 disconnect aborts, stop requires MD stopped, active remove retains storage");
 }
-int main(void){kernel_rpc_ownership();reservation_lifecycle();access_and_lifetime();roundtrip_and_validation();rpc_and_failed_enqueue();ordering_faults();active_remove_refusal();return 0;}
+static void bare_request_requires_prefixed_reply(void){
+ create(true);
+ size_t packet_len=fs_packet(request,14,0);
+ /* Observed MD request form: the operation arrives without the 0xffff prefix. */
+ put_unaligned_le32(0x1005,request+16);
+ struct ccci_ccif_event event={.type=CCCI_CCIF_EVENT_RING,.queue=4,.data=request,.size=packet_len};
+ assert(!ccci_service_endpoint_receive(endpoint,41,&event));run();
+ size_t n=read_one();
+ put_unaligned_le32(15,record+40);
+ unsigned queued=endpoint->session->count;
+ assert(endpoint_write(&file,(void *)record,n,&offset)==-EPROTO);
+ assert(!endpoint->requests[0].replied&&endpoint->session->count==queued);
+ put_unaligned_le32(0xffff1005,record+48);
+ assert(endpoint_write(&file,(void *)record,n,&offset)==(ssize_t)n);
+ destroy();
+ puts("PASS: bare MD request operation accepts only the 0xffff-prefixed reply");
+}
+int main(void){kernel_rpc_ownership();reservation_lifecycle();access_and_lifetime();roundtrip_and_validation();bare_request_requires_prefixed_reply();rpc_and_failed_enqueue();ordering_faults();active_remove_refusal();return 0;}
 '''
 
 
