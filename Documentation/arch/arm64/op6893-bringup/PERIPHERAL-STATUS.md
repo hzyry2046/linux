@@ -1,5 +1,10 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16离线接续：新增6297 LK共享内存子区解析（runtime/CCISM/NVRAM
+cache），保留bank跨度并计算间隙，解释历史cached 0x80000差值。定向
+sanitizer、vendor ABI及启用内核构建通过；未新增实机验收，设备状态沿用
+下条记录。下一次与MD平台/CCIF功能组一起测试，见[SMEM](MODEM-SMEM.md)。
+
 2026-11-16最新接续：`e8509e81dbc3` 实测 SCP 常驻约49秒，Linux RX消费
 READY1/logger/其他共3事件，无积压或异常中断；AP awake三次配对成功，
 MD-invalid一次传输完成，但没有APCCCI应用层状态回复。显式STOP后双核

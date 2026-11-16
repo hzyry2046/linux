@@ -1,12 +1,10 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 # op6893 基带：内核对比与搭建计划
 
-更新：2026-11-16。首次释放实验已观测PC变化和匹配TCM大小的READY1；SET读回
-判据已更正，见[R5.23](MODEM-SCP-INITIAL-KICK.md)。AI 辅助源码分析与实现。M0 的真实 LK metadata 解析已在
-主线实机验收，R1/R2 已实现默认关闭的供电/普通 CCIF 描述和引用检查，R3
-已实现 MD1 电源序列并完成主机验证。尚未启动主线基带，SCP transport 与控制栈待移植。
-已完成 [R5.1 mailbox 布局与协议基础](MODEM-SCP.md) 的主机验证和 ARM64 编译，
-不包含 SCP 硬件驱动或 READY 状态机。
+更新：2026-11-16。SCP 常驻RX/READY1、awake及一次MD-invalid传输已实测，
+见[R5.25](MODEM-SCP-RUNTIME.md)。本轮新增同板LK子区解析和bank跨度/gap计算，
+完成离线测试/构建；MD尚未启动，下一步统一平台owner、上电与CCIF/CCISM，
+不为纯计算或资源观测单独刷机。AI辅助源码分析与实现。历史阶段记录保留。
 SID3 shutdown 对照及启动电压契约见 [供电生命周期](MODEM-RAILS.md)。
 图形接续事项保存在 [GRAPHICS-TODO.md](GRAPHICS-TODO.md)，先推进基带框架。
 
@@ -192,8 +190,8 @@ TODO：
 - [x] M0：主线新启动的 CCCI header、真实 tag/layout 成功路径实机验收；
   `fe077e30d191` 检查通过，USB/Wi-Fi SSH 与存储回归通过，见 [R3](MODEM-R3.md)。
   错误分类保留主机合成测试，没有在实机注入损坏交接。
-- [ ] M0：解释缓存 SMEM `0x4960000` 与 V 计算 `0x48e0000` 的 `0x80000`
-  差值；逐 region 对照 offset、size、padding，不能以 HS2 曾通过就忽略。
+- [x] M0离线：历史4.19记录确认NVRAM末尾0x880000至CCB起点0x900000为0x80000间隙；新增有界LK子区解析，保留完整bank跨度，见[共享内存布局](MODEM-SMEM.md)。
+- [ ] M0子区实机：与MD平台/CCIF功能组一起核对本次LK真实layout，不单独刷机。
 - [ ] M1：形成 MD 电源、SID3、CCIF/CCIF2、SCP 的完整资源和所有权补丁组。
 - [x] M1 离线审计：AP MTCMOS/ATF 分工、SID3 DA/RG 与第四路 VRFDIG、
   六加二时钟、SCP RV 映射和 CCISM 流程；见 [资源契约](MODEM-RESOURCES.md)。
@@ -474,3 +472,11 @@ UFS RO/rootfs 回归通过。接续优先审计 READY0 所在 mailbox 的 RX/IRQ
 - [x] 实际生命周期/consumer/TX/编码定向ASan/UBSan通过；包含错误代际、超时、握手失败、旧消息拒绝与GPR恢复。
 - [x] e8509e81dbc3 实机常驻约49秒，READY1、awake三次配对、一次MD-invalid传输完成；无APCCCI应用层回复。STOP双核SET/GIC五路masked、USB/Wi-Fi及GPU/LVTS正常；未启动MD。
 - [ ] 按反馈推进MD资源、电源/复位和CCIF/CCISM，恢复器不阻塞首次通信。
+
+
+### R7 6297 SMEM 子区与bank跨度（2026-11-16）
+
+- [x] 对照A/V/Q及历史4.19子区输出，解释缓存0x80000差值；实现完整LK链验证后的NC默认补全/cached aggregate解析及独立AP/MD边界，见[布局实现](MODEM-SMEM.md)。
+- [x] runtime/CCISM/NVRAM-cache必需大小、别名/重复/截断/溢出与失败清零测试、实际vendor ABI核对、启用Image.gz/modules及strict checkpatch通过。
+- [ ] 统一MD owner保存布局/供电基线、接genpd和普通CCIF控制环；CCIF2保持单独桥归属，与SCP真实状态机整合。
+- [ ] 准备FS/NVRAM工作副本及服务门控，再释放MD验证HS1/HS2。本轮不连接/刷机，真实子区tag尚待下一功能组实测。

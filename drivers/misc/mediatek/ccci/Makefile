@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 obj-$(CONFIG_OP6893_CCCI_LK_INSPECT) += op6893-ccci-lk.o
 op6893-ccci-lk-y := ccci-lk.o ccci-lk-inspect.o
+op6893-ccci-lk-$(CONFIG_OP6893_CCCI_SMEM) += ccci-smem.o
 obj-$(CONFIG_OP6893_CCCI_RESOURCES) += ccci-resources.o
 obj-$(CONFIG_OP6893_CCCI_SCP_PROTOCOL) += ccci-scp-protocol.o
 obj-$(CONFIG_OP6893_CCCI_SCP_PROTOCOL) += ccci-scp-memory.o

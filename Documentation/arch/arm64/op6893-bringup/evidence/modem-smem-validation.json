@@ -1,0 +1,73 @@
+{
+  "date": "2026-11-16",
+  "scope": "Offline same-board 6297 SMEM geometry; no device access or new hardware validation",
+  "config": "CONFIG_OP6893_CCCI_SMEM (default n)",
+  "actual_c_asan_ubsan": "passed",
+  "vendor_native_abi_checks": [
+    "4.19 A passed",
+    "working 6.6 V passed"
+  ],
+  "enabled_arm64_Image_gz_modules": "passed",
+  "build_log": "/data/src/mainline/mt6893-direct/evidence/modem-smem/build-validation.log",
+  "strict_c_checkpatch": "0 errors, 0 warnings, 0 checks",
+  "historical_geometry_fixture": {
+    "nc_bank_size": "0x1800000",
+    "runtime_offset": "0x11e800",
+    "ccism_scp_offset": "0x120000",
+    "ccism_mcu_offset": "0x139000",
+    "ccism_exp_offset": "0x1ed400",
+    "cached_bank_size": "0x4960000",
+    "cached_nonoverlapping_size_sum": "0x48e0000",
+    "cached_gap": "0x80000",
+    "nvram_offset": "0x180000",
+    "nvram_size": "0x700000",
+    "ccb_offset": "0x900000",
+    "ccb_size": "0x4000000"
+  },
+  "hardware_tested": false,
+  "smem_mapped_or_cleared": false,
+  "md_started": false,
+  "source_dts_defconfig_changed": false,
+  "sources": [
+    {
+      "root": "/data/src/kernel_oddo_mt6893",
+      "path": "drivers/misc/mediatek/eccci/ccci_modem.c",
+      "sha256": "850e6d9fad97525c163f5a28d8464c1867f79cf16e995a5684b7ff1ea58e4c1b"
+    },
+    {
+      "root": "/data/src/kernel_oddo_mt6893",
+      "path": "drivers/misc/mediatek/eccci/mt6885/ccci_config.h",
+      "sha256": "c38e31c1507a391d2851d498601c88f7e1401369016a8f149c1a01f3cd1962ab"
+    },
+    {
+      "root": "/data/src/kernel_oddo_mt6893",
+      "path": "drivers/misc/mediatek/ccci_util/ccci_util_lib_fo.c",
+      "sha256": "420e21279c890b4d797ba7797fc2816a7ff4b8844d4cc70c12e8de0a7ece57c6"
+    },
+    {
+      "root": "/data/src/kernel_oddo_mt6893",
+      "path": "drivers/misc/mediatek/include/mt-plat/mtk_ccci_common.h",
+      "sha256": "c4479642f2c907d150e58a4be3d88150f3a73c9317d178d8584d588d41f0fb39"
+    },
+    {
+      "root": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6",
+      "path": "drivers/misc/mediatek/ccci_util/ccci_util_md_mem.c",
+      "sha256": "2d39cbdd6e7b263b01a04598cfa47ec927fae519fe1f6e9729af3c2fc269e518"
+    },
+    {
+      "root": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6",
+      "path": "drivers/misc/mediatek/ccci_util/ccci_util_lib_fo.c",
+      "sha256": "160cb35f2f5264b196894254838aeaebfab1536928773373576a4bb5a9db1916"
+    },
+    {
+      "root": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6",
+      "path": "drivers/misc/mediatek/include/mt-plat/mtk_ccci_common.h",
+      "sha256": "2801a562da43c1ea46670986f2efa09b7570bd74ad9ab8515cd0ec52aae048f5"
+    },
+    {
+      "root": "/data/src/mainline/linux-qqcandy-6.18",
+      "path": "drivers/misc/mediatek/eccci/ccci_modem.c",
+      "sha256": "f22a0f39a790add5adc39291a2e165be30cd750856f4a40eae7f4f3b764f6674"
+    }
+  ]
+}

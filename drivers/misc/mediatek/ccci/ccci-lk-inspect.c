@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 
 #include "ccci-lk.h"
+#include "ccci-smem.h"
 
 static int ccci_lk_get_region(struct device_node *node, const char *name,
 			      struct ccci_lk_region *region)
@@ -49,6 +50,7 @@ static int ccci_lk_inspect_probe(struct platform_device *pdev)
 	struct ccci_lk_region tags, noncached, cached;
 	struct ccci_lk_header header;
 	struct ccci_lk_layout layout;
+	struct ccci_smem_layout *smem = NULL;
 	struct device *dev = &pdev->dev;
 	struct ccci_lk_tag *workspace = NULL;
 	struct device_node *chosen;
@@ -112,12 +114,28 @@ static int ccci_lk_inspect_probe(struct platform_device *pdev)
 			    workspace, &layout);
 	if (ret)
 		goto out;
+	if (IS_ENABLED(CONFIG_OP6893_CCCI_SMEM)) {
+		stage = "subregions";
+		smem = kzalloc_obj(*smem);
+		if (!smem) {
+			ret = -ENOMEM;
+			goto out;
+		}
+		ret = ccci_smem_parse(&header, snapshot, header.size, &noncached, &cached,
+				      workspace, smem);
+		if (ret)
+			goto out;
+		dev_info(dev, "SMEM geometry valid: users=%u nc_bytes=%llu cache_bytes=%llu cache_gaps=%u; not mapped or cleared\n",
+			 smem->count, smem->noncached.size, smem->cached.size,
+			 smem->cache_gap_bytes);
+	}
 	dev_info(dev, "LK metadata valid: version=%u tags=%u bytes=%u ccb=%u; modem not started\n",
 		 header.version, header.count, header.size, layout.ccb_present);
 out:
 	/* Do not retain or expose unknown/private payloads, even on parse failure. */
 	kfree_sensitive(snapshot);
 	kfree_sensitive(workspace);
+	kfree_sensitive(smem);
 	if (ret)
 		dev_err(dev, "LK metadata inspection failed: stage=%s error=%d\n", stage, ret);
 	return ret;

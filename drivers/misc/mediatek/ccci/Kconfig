@@ -8,6 +8,16 @@ config OP6893_CCCI_LK_INSPECT
 	  The board's modem-handoff node is disabled until explicitly enabled for
 	  a read-only experiment. No raw tag payloads are exposed.
 
+config OP6893_CCCI_SMEM
+	bool "Validate op6893 6297 shared-memory subregions from LK"
+	depends on OP6893_CCCI_LK_INSPECT
+	help
+	  Validate the same-board noncached layout and cached aggregates, including
+	  runtime data, CCISM and NVRAM cache. Preserve LK offsets and bank spans
+	  instead of summing region sizes across gaps. Reject aliases, truncation
+	  and unsupported IDs. No shared-memory mapping, clearing or modem start.
+	  Disabled by default; extends the explicit LK handoff inspection only.
+
 config OP6893_CCCI_RESOURCES
 	tristate "Check op6893 modem regulator and ordinary CCIF clock references"
 	depends on ARM64_OP6893_BRINGUP && OF && REGULATOR
