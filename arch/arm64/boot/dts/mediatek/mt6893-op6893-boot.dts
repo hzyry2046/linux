@@ -28,8 +28,9 @@
 	/* Mutually exclusive with modem-handoff; explicit cold power cycle only. */
 	modem-platform@10209000 {
 		compatible = "realme,op6893-modem-platform";
-		reg = <0 0x10209000 0 0x1000>, <0 0x1020a000 0 0x1000>;
-		reg-names = "ccif-ap", "ccif-md";
+		reg = <0 0x10209000 0 0x1000>, <0 0x1020a000 0 0x1000>,
+		      <0 0x1023c000 0 0x1000>, <0 0x1023d000 0 0x1000>;
+		reg-names = "ccif-ap", "ccif-md", "ccif2-ap", "ccif2-md";
 		interrupts = <GIC_SPI 194 IRQ_TYPE_LEVEL_HIGH>,
 			     <GIC_SPI 195 IRQ_TYPE_LEVEL_HIGH>;
 		interrupt-names = "data", "exception";
@@ -42,8 +43,12 @@
 		clocks = <&ufs_infracfg CLK_IFRAO_CCIF_AP>,
 			 <&ufs_infracfg CLK_IFRAO_CCIF_MD>,
 			 <&ufs_infracfg CLK_IFRAO_CCIF1_AP>,
-			 <&ufs_infracfg CLK_IFRAO_CCIF1_MD>;
-		clock-names = "ccif-ap", "ccif-md", "ccif1-ap", "ccif1-md";
+			 <&ufs_infracfg CLK_IFRAO_CCIF1_MD>,
+			 <&ufs_infracfg CLK_IFRAO_CCIF2_AP>,
+			 <&ufs_infracfg CLK_IFRAO_CCIF2_MD>;
+		clock-names = "ccif-ap", "ccif-md", "ccif1-ap", "ccif1-md",
+			      "ccif2-ap", "ccif2-md";
+		mediatek,scp = <&ccci_scp>;
 		mediatek,spm = <&scpsys>;
 		mediatek,infracfg = <&ufs_infracfg>;
 		status = "disabled";
@@ -55,7 +60,7 @@
 	};
 
 	/* Explicit bounded observations; no SCP start or READY assertion. */
-	scp-resource-hold@10724000 {
+	ccci_scp: scp-resource-hold@10724000 {
 		compatible = "realme,op6893-scp-resource-hold";
 		reg = <0 0x10724000 0 0x1000>,
 		      <0 0x107fb000 0 0x1000>,
