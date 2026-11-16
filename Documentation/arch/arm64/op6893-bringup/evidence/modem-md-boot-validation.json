@@ -125,8 +125,16 @@
     "flashed": false
   },
   "runner_deployment": {
-    "blocker": "current Debian rootfs has no python3; modem_service_backend.py is Python",
-    "verified": "debian/packages.tsv and debian/dist/1ed1b45c80c2/debian.squashfs listing",
-    "expected_without_runner": "md_boot prepare fails at dispatch reserve (-ENOTCONN) before CPU release"
+    "status": "prepared offline, not installed on device",
+    "base_rootfs": "debian-5499c9f794dd (current device image)",
+    "python3": "3.13.5-1, installed with --no-install-recommends",
+    "scripts": "/usr/local/lib/op6893-modem/{modem_service_backend,modem_fs_backend,modem_fs_wire,modem_rpc_backend}.py",
+    "wrapper": "/usr/local/sbin/op6893-modem-fs-runner",
+    "new_rootfs": "debian-5f8741f4101a",
+    "new_rootfs_sha256": "e8887c17ca596999697220c5dce17b37dfd8d0b807d997c3ac1ee894c76587aa",
+    "new_rootfs_bytes": 121364480,
+    "debian_sha256_file_updated": true,
+    "verified": "python3 imports argparse/json/dataclasses/struct/tempfile in chroot; runner --help works; squashfs lists python3 and scripts",
+    "without_runner": "md_boot prepare fails at dispatch reserve (-ENOTCONN) before CPU release"
   }
 }

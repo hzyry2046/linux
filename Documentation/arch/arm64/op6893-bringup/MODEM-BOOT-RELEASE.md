@@ -92,17 +92,35 @@ RX 关闭、controller 故障、generation 变化或 SPM 单 bit 都不被接受
 其 kernel config 含全部新选项，board DTB 中平台节点为 okay 且带
 `mediatek,no-external-32k`。尚未刷入。
 
-目标端 runner 前提：当前 Debian rootfs 没有 python3（`debian/packages.tsv`
-与 squashfs 清单均无），而 `modem_service_backend.py` 及其依赖是 Python。
-首次放行前必须先在目标 rootfs 部署 Python 3 与这些脚本（或等价的静态
-后端）；否则 `md_boot prepare` 会在 dispatch reserve 处以未连接失败，这是
-预期安全行为，但无法进入 HS1。
+目标端 runner：已在当前 `debian/tree`（`debian-5499c9f794dd` 基座）安装
+`python3 3.13.5`，并把四个 runner 脚本放到
+`/usr/local/lib/op6893-modem/`，提供
+`/usr/local/sbin/op6893-modem-fs-runner` 包装。重建的 rootfs 为
+`debian-5f8741f4101a`，squashfs SHA256
+`e8887c17ca596999697220c5dce17b37dfd8d0b807d997c3ac1ee894c76587aa`
+（121,364,480 字节），`initramfs/debian.sha256` 已更新。该镜像尚未安装到
+设备；安装后仍需由操作者准备私有工作副本。
+
+工作副本只接受显式空目录或调用者自己的数据，禁止导入真实 NVRAM：
+
+```sh
+install -d -m 0700 /tmp/op6893-fs
+printf 'PRIVATE DISPOSABLE MODEM FS WORKING COPY\n' > /tmp/op6893-fs/.op6893-fs-working-copy
+chmod 0600 /tmp/op6893-fs/.op6893-fs-working-copy
+```
+
+runner 用法：
+
+```sh
+/usr/local/sbin/op6893-modem-fs-runner \
+  --endpoint /dev/ccci-service-10209000.modem-platform \
+  --root /tmp/op6893-fs --generation <gen>
+```
 
 1. 用启用 `OP6893_CCCI_MD_BOOT` 的镜像启动；DT 打开 `modem-platform`，
    关闭互斥的 `modem-handoff`。
-2. 准备标记过的私有工作副本，启动显式 runner：
-   `modem_service_backend.py --endpoint /dev/ccci-service-10209000.modem-platform --root <私有副本> --generation <gen>`；
-   需要用户 RPC 时另加 `--rpc-policy`。
+2. 用上面的命令准备私有工作副本并启动 runner；需要用户 RPC 时另加
+   `--rpc-policy <私有策略>`。
 3. `echo on > .../md_power`（冷上电，仍不放行 CPU）。
 4. `echo prepare <gen> > .../md_boot`；期望 `md_boot` 为 `prepared`，
    `nvram_cache` 为 `prepared/cleared`，`dispatch` 为 prepared。
