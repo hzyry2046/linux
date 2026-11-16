@@ -219,6 +219,10 @@ RV `scp_region_info_init()/scp_recovery_init()` 读取 TCM region header，后�
 
 ## CCISM 握手不能用 ready 桩替代
 
+注意：该CCISM交换在MD HS2/READY后发生，不能整体作为首次放行MD的前置
+等待项。释放前准备真实SCP READY、资源/服务和consumer；随后执行下述交换。
+后续实现与4.19/6.6时序差异见[CCISM](MODEM-CCISM.md)。
+
 V `ccci_fsm_scp_c.c` 的实质流程是：
 
 1. SCP READY notifier 注册 IPI，并建立 BOOTING 状态；AP 的 MD READY 事件

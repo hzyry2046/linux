@@ -1,0 +1,75 @@
+{
+  "date": "2026-11-16",
+  "implementation_base": "dce3dfc59051ae10f325d3ef0bfbfe61d2e513f6",
+  "ai_assistance": "Codex: source comparison, implementation, tests and documentation; no DCO certification",
+  "feature": "Post-HS2 CCISM protocol core and a real leased APCCCI client of the existing SCP runtime",
+  "ordering_correction": "Prepare SCP hardware READY/resources/services before MD CPU release; execute CCISM INIT/ACK/SHM_INIT/RBREADY/DONE after HS2, not before CPU release",
+  "sources": [
+    {
+      "path": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/eccci/fsm/ccci_fsm_scp.c",
+      "sha256": "fb066de7e3728a44abbeafb6f8d93d4899ac6fb223a2e2b17af6a00bdd09b0ea"
+    },
+    {
+      "path": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/eccci/port/port_proxy.c",
+      "sha256": "41d8a03ea647fe369ce94285887fd9e9eac135adffd083a5412d86ec53d88447"
+    },
+    {
+      "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/eccci/fsm/ccci_fsm_scp_c.c",
+      "sha256": "f8f17bd1d2a924e1e1d6c926fa01449c6a8de4ce8abc429ef56fac2b91bd29ec"
+    },
+    {
+      "path": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6/drivers/misc/mediatek/eccci/port/port_sysmsg.c",
+      "sha256": "c75752ec026377e0559052b02bb63cde743e04f16d4c7252970e3f354f60dced"
+    }
+  ],
+  "validation": {
+    "actual_ccism_protocol_c_asan_ubsan": true,
+    "actual_scp_client_and_runtime_consumer_c_asan_ubsan": true,
+    "prior_rx_runtime_codec_controller_full_sanitizer_suite_included": true,
+    "forward_side_effect_failure_positions": 6,
+    "invalid_ccism_plan_variants": 8,
+    "stop_requires_md_stopped_and_current_generation_scp_stop": true,
+    "all_three_forward_deadlines_and_stop_timeout": true,
+    "source_order_repeated_messages_reboot_generation_and_time_overflow": true,
+    "lease_ready_single_attempt_revoke_detach_and_manual_stop_veto": true,
+    "client_hardware_failure_variants": 5,
+    "manual_stop_busy_distinguished_from_hardware_awake_busy": true,
+    "actual_mmio_md_invalid_md_ready_shm_init_and_malformed_request_tests": true,
+    "arm64_enabled_image_gz_modules_modpost": true,
+    "original_config_restored_image_gz_modules_modpost": true,
+    "strict_checkpatch_c_headers": "0 errors, 0 warnings, 0 checks",
+    "new_compile_warnings": 0,
+    "of_device_link_constructor": "ARM64 compilation and source review only; not exercised by host model or real device",
+    "full_patch_checkpatch": "0 errors, 1 FILE_PATH_CHANGES warning for new files, 0 checks; existing generic misc/MediaTek maintainers unchanged"
+  },
+  "activation": {
+    "default_dt_and_defconfig_unchanged": true,
+    "default_off_ccism": true,
+    "scp_client_api_built_with_existing_runtime": true,
+    "client_create_caller": false,
+    "ccism_arm_caller": false,
+    "md_cpu_release_caller": false,
+    "ccif2_hardware_owner": false,
+    "ccism_smem_mapping": false,
+    "md_system_port_tx": false,
+    "ccism_linux_queue_worker_timer": false
+  },
+  "hardware": {
+    "device_access": false,
+    "boot_image_packed": false,
+    "flashed": false,
+    "md_cpu_released": false,
+    "real_ccism_tested": false
+  },
+  "model_limitations": "Synthetic peers and deterministic hardware/lock/IRQ/work models do not prove SMP, device-link teardown timing, MMIO access, firmware responses, handshake latency or radio support.",
+  "remaining": [
+    "Unique CCIF2 registers/clocks/SMC13 and exact ID16 WC owner",
+    "Ordinary system q0 TX/sequence/doorbell and typed CCISM RX routing",
+    "Bounded scalar event queue/worker/timer connecting real SCP client to CCISM core",
+    "MD/CCIF/SCP fault and STOP lifecycle in the parent owner",
+    "Real capability profile and FS/RPC/NVRAM private working-copy services",
+    "Combined first MD release, HS1/HS2, post-HS2 CCISM and exception/stop hardware test"
+  ],
+  "local_evidence_directory": "/data/src/mainline/mt6893-direct/evidence",
+  "local_evidence_prefix": "modem-ccism-"
+}

@@ -99,3 +99,8 @@ python3 Documentation/arch/arm64/op6893-bringup/tools/test_modem_resources.py \
 3. 实机资源检查前先解决 SID3 shutdown 策略和启用范围，再准备一次只获取
    引用的镜像；不能直接用这个框架尝试基带启动。用户态/固件的新资料由用户
    后续提供，本轮无需等待，也未重复二进制逆向。
+
+
+2026-11-16顺序更正：早期“真实SCP/CCISM完成前不放行MD”的表述将两阶段
+混在了一起。前置是SCP hardware READY、桥资源和服务就绪；CCISM消息交换
+依赖MD HS2之后的system端口，必须后置，见[CCISM契约](MODEM-CCISM.md)。

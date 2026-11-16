@@ -70,3 +70,9 @@ channel3/mailbox1/offset0/irq0/two words，编码 MD1 OP_MD_STATE=1/data0，
 [evidence/modem-scp-runtime-validation.json](evidence/modem-scp-runtime-validation.json)。
 
 下一步以实际常驻/握手/状态结果为依据连接 MD/CCIF/CCISM；不提前宣称基带可用。
+
+
+2026-11-16后续离线扩展：增加真实SCP client及有界MD_STATE/SHM_INIT传输，
+单代单lease、同owner awake、状态/错误标量通知和手动STOP保护。旧MD-invalid
+命令保留兼容wrapper，未作新的真机验收。后续CCISM consumer必须排队处理
+通知，不能在SCP owner锁下重入发送，详见[CCISM与client](MODEM-CCISM.md)。

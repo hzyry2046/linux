@@ -4,8 +4,9 @@
 更新：2026-11-16。SCP常驻/READY1/awake与一次MD-invalid已实测；
 MD继承ON接管、冷上电及普通CCIF prepare/stop/off已在8ec93b17bbb5实测。
 普通CCIF接收、runtime协商/回复与有状态HS1/HS2 consumer已离线实现验证，
-见[R7.3](MODEM-RUNTIME-HANDSHAKE.md)。无MD CPU release caller，未收到
-真实HS1/HS2。下一组CCIF2/CCISM、FS/RPC/NVRAM服务门控与实际能力表，
+见[R7.3](MODEM-RUNTIME-HANDSHAKE.md)。随后增加SCP client与后置CCISM core，
+见[R7.4](MODEM-CCISM.md)。无MD CPU release caller或真实HS1/HS2；下一组
+CCIF2硬件owner、system端口与FS/RPC/NVRAM服务门控及实际能力表，
 随后合并通信测试，不为纯资源或dormant代码单独刷机。AI辅助源码分析与实现。
 SID3 shutdown 对照及启动电压契约见 [供电生命周期](MODEM-RAILS.md)。
 图形接续事项保存在 [GRAPHICS-TODO.md](GRAPHICS-TODO.md)，先推进基带框架。
@@ -518,3 +519,14 @@ R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、
 - [ ] CCIF2/CCISM归唯一桥owner，连接常驻SCP真实状态/共享内存初始化和MD通知生命周期。
 - [ ] FS/RPC/NVRAM私有工作副本、端口收发和服务门控；从已实现服务生成真实能力表，不把有reserved memory等同于支持。
 - [ ] 合并首次MD CPU放行、HS1→runtime回复→HS2及异常/停止实测，再分别推进AT/注册/DPMAIF；不能把HS2_SEEN当radio READY。
+
+
+### R7.4 后置CCISM core与SCP client（2026-11-16）
+
+- [x] 修正循环依赖：SCP硬件READY/桥资源/服务在MD放行前准备，INIT→ACK→SHM_INIT→RBREADY→DONE则在HS2后执行，见[CCISM](MODEM-CCISM.md)。
+- [x] 默认关闭CCISM core：独立AP/MD plan、三阶段超时、source/order/generation、错误保留和MD stopped→SCP STOP→ACK/关桥契约；尚无硬件caller/timer。
+- [x] 真实SCP client：device lookup/link、单代单lease、同owner awake与APCCCI send、标量状态/首故障通知、手动STOP veto和detach同步。
+- [x] 实际core/client/runtime/MMIO的ASan/UBSan及启用ARM64构建；本轮完全离线，未增加真机CCISM或蜂窝支持验收。
+- [ ] 唯一CCIF2寄存器/时钟owner、SMC13与ID16精确WC映射；正常system q0发送/序号/门铃及接收路由。
+- [ ] 将SCP标量通知接有界consumer队列、worker/timer和此core；关闭顺序覆盖MD、普通CCIF和SCP fault/STOP，禁止跨owner回调重入。
+- [ ] FS/RPC/NVRAM私有工作副本和能力表就绪后，合并首次MD CPU释放与HS1/HS2、后置CCISM、异常/停止实测。HS2或CCISM完成均不代表radio READY。

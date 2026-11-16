@@ -1,5 +1,11 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16 CCISM离线接续：实现后置INIT/ACK/SHM_INIT/RBREADY/DONE core及
+同代SCP client，含共享awake、真实APCCCI传输、状态/首故障通知、STOP保护。
+实际C sanitizer及ARM64构建通过；CCIF2硬件owner、system端口和Linux事件
+队列/定时器仍待接入，无启动caller或真机验收，本轮未操作设备。修正“必须在
+MD放行前完成CCISM”的循环依赖，HS2后才执行该协议；见[说明](MODEM-CCISM.md)。
+
 2026-11-16 runtime握手离线接续：普通CCIF owner内新增默认关闭的runtime
 映射、64槽协商、v2.1 SRAM回复/BUSY门铃和有状态HS1/HS2 consumer，含超时、
 端口错误和STOP同步。实际C sanitizer、ARM64启用构建及关闭配置检查通过。

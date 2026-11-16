@@ -115,8 +115,8 @@ static int ccci_scp_mmio_check(struct ccci_scp_mmio_port *port)
 	return ret;
 }
 
-int ccci_scp_mmio_md_invalid(struct ccci_scp_mmio *mmio,
-			     const struct ccci_scp_layout *layout, u64 generation)
+int ccci_scp_mmio_apccci(struct ccci_scp_mmio *mmio,
+			 const struct ccci_scp_layout *layout, u64 generation, u16 op, u32 data)
 {
 	const struct ccci_scp_pin *tx, *rx;
 	struct ccci_scp_mmio_port *port;
@@ -133,12 +133,12 @@ int ccci_scp_mmio_md_invalid(struct ccci_scp_mmio *mmio,
 	if (tx->mbox != 1 || tx->offset || tx->irq || tx->words != 2)
 		return -EPROTO;
 	port = &mmio->ports[1];
+	ret = ccci_scp_encode(message, sizeof(message), 2, op, data);
+	if (ret != sizeof(message))
+		return ret < 0 ? ret : -EPROTO;
 	ret = ccci_scp_mmio_check(port);
 	if (ret)
 		return ret;
-	ret = ccci_scp_encode(message, sizeof(message), 2, CCCI_SCP_OP_MD_STATE, 0);
-	if (ret != sizeof(message))
-		return ret < 0 ? ret : -EPROTO;
 	/* Vendor has no separate send-status resource: read the SET alias itself. */
 	pending = readl(port->base + 0x100);
 	mmio->register_reads++;
@@ -162,6 +162,12 @@ int ccci_scp_mmio_md_invalid(struct ccci_scp_mmio *mmio,
 	}
 	/* Uncertain consumption: never retry or clear SCP's receive bit from AP. */
 	return -ETIMEDOUT;
+}
+
+int ccci_scp_mmio_md_invalid(struct ccci_scp_mmio *mmio,
+			     const struct ccci_scp_layout *layout, u64 generation)
+{
+	return ccci_scp_mmio_apccci(mmio, layout, generation, CCCI_SCP_OP_MD_STATE, 0);
 }
 
 static int ccci_scp_mmio_pending(void *context, u32 *mask)

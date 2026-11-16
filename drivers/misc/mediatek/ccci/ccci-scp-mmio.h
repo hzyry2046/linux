@@ -37,7 +37,10 @@ int ccci_scp_mmio_discard(struct ccci_scp_mmio *mmio,
 			  const struct ccci_scp_layout *layout,
 			  int (*check)(void *context), void *context, u32 *discarded);
 
-/* Owner holds READY, AP awake and serialization; exact APCCCI MD invalid only. */
+/* Owner holds READY, AP awake and serialization; bounded MD1 APCCCI messages. */
+int ccci_scp_mmio_apccci(struct ccci_scp_mmio *mmio,
+			 const struct ccci_scp_layout *layout, u64 generation, u16 op, u32 data);
+/* Compatibility entry for the original one-shot MD-invalid test. */
 int ccci_scp_mmio_md_invalid(struct ccci_scp_mmio *mmio,
 			     const struct ccci_scp_layout *layout, u64 generation);
 

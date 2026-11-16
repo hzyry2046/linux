@@ -11,6 +11,7 @@ block, compile_run = initial['block'], initial['compile_run']
 prefix = initial['prefix'].replace('struct ccci_scp_pin {u32 channel;};',
                                   'struct ccci_scp_pin {u32 channel;bool response;};')
 prefix += r'''
+typedef uint16_t u16;
 #include <stddef.h>
 #define container_of(p,t,m) ((t *)((char *)(p)-offsetof(t,m)))
 #define lockdep_assert_held(m) assert((m)->held)
@@ -119,6 +120,8 @@ struct ccci_scp_mmio {u64 generation;struct ccci_scp_mmio_port ports[5];unsigned
 static unsigned char page[4096];
 static unsigned writes,barriers,polls,checks,fail_check;
 static bool busy,retain;
+static u16 txop=1;
+static u32 txdata;
 static void put_unaligned_le16(u16 n,void *p){memcpy(p,&n,2);}
 static void put_unaligned_le32(u32 n,void *p){memcpy(p,&n,4);}
 static u32 get_unaligned_le32(const void *p){u32 n;memcpy(&n,p,4);return n;}
@@ -127,8 +130,8 @@ static int ccci_scp_apccci_pins(const struct ccci_scp_layout *l,const struct ccc
 static int ccci_scp_mmio_check(struct ccci_scp_mmio_port *p){assert(p->base==page);return ++checks==fail_check?-EIO:0;}
 static u32 readl(void *p){assert(p==page+0x100);polls++;return 0x80 | (busy || (writes && (retain || polls<4)));}
 static void writel(u32 v,void *p){
- if(writes==0)assert(p==page && v==0x10000 && !barriers);
- if(writes==1)assert(p==page+4 && !v && !barriers);
+ if(writes==0)assert(p==page && v==((u32)txop<<16) && !barriers);
+ if(writes==1)assert(p==page+4 && v==txdata && !barriers);
  if(writes==2)assert(p==page+0x100 && v==1 && barriers==1);
  assert(writes<3);writes++;
 }
@@ -155,12 +158,21 @@ int main(void){
   if(f==5)assert(r==-EIO && writes==3);
   if(f==6)assert(r==-ESTALE && !writes && !polls);
  }
- puts("PASS: actual MD-invalid TX and codec; exact two words/barriers/SET, busy/stale/geometry/prerequisite rejection, bounded timeout without retry/ACK");
+ for(unsigned f=0;f<4;f++){
+  struct ccci_scp_mmio m={.generation=1};m.ports[1].base=page;
+  struct ccci_scp_layout l={.tx={.mbox=1,.words=2}};
+  writes=barriers=polls=checks=fail_check=0;busy=retain=false;
+  txop=f==0?1:f==3?4:2;txdata=f==0?2:f==2?3:0x80120000;
+  int r=ccci_scp_mmio_apccci(&m,&l,1,txop,txdata);
+  if(f<2)assert(!r && writes==3 && polls==4);
+  else assert(r<0 && !writes && !polls && !checks);
+ }
+ puts("PASS: actual MD-invalid/MD-ready/SHM_INIT TX and codec; exact two words/barriers/SET, busy/stale/geometry/prerequisite rejection, bounded timeout without retry/ACK");
 }
 """
     source = (D / 'ccci-scp-mmio.c').read_text()
     codec = block((D / 'ccci-scp-protocol.c').read_text(), 'int ccci_scp_encode(')
-    compile_run(prefix + codec + block(source, 'int ccci_scp_mmio_md_invalid(') + tests)
+    compile_run(prefix + codec + block(source, 'int ccci_scp_mmio_apccci(') + block(source, 'int ccci_scp_mmio_md_invalid(') + tests)
 
 
 def main():
@@ -172,8 +184,8 @@ def main():
     code = prefix.replace('static ', 'static __attribute__((unused)) ') + clean('ccci-scp-awake.h') + awake_stubs
     code += clean('ccci-scp-runtime.h') + clean('ccci-scp-reset.h') + reset + owner
     source = (D / 'ccci-scp-runtime.c').read_text()
-    for name in ('stop', 'fault_work', 'consume', 'asserted', 'awake', 'start'):
-        kind = 'void' if name == 'fault_work' else 'int'
+    for name in ('notify', 'stop', 'fault_work', 'consume', 'asserted', 'awake', 'start'):
+        kind = 'void' if name in ('notify', 'fault_work') else 'int'
         code += block(source, f'static {kind} ccci_scp_runtime_{name}(')
     compile_run(code + tests)
     test_tx()

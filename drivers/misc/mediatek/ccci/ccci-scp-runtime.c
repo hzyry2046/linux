@@ -11,6 +11,19 @@
 #include "ccci-scp-owner.h"
 #include "ccci-scp-receive.h"
 
+/* owner->lock held; callback may only enqueue scalar events, never reenter. */
+static void ccci_scp_runtime_notify(struct ccci_scp_resource_owner *owner, u32 state, int error)
+{
+	struct ccci_scp_client *client = owner->runtime.client;
+
+	lockdep_assert_held(&owner->lock);
+	if (!client || client->faulted)
+		return;
+	if (error)
+		client->faulted = true;
+	client->notify(client->context, client->generation, state, error);
+}
+
 /* control held; receive worker must be joined without owner->lock. */
 static int ccci_scp_runtime_stop(struct ccci_scp_resource_owner *owner)
 {
@@ -27,6 +40,7 @@ static int ccci_scp_runtime_stop(struct ccci_scp_resource_owner *owner)
 		return runtime->cleanup_error;
 	}
 	runtime->ready = false;
+	ccci_scp_runtime_notify(owner, 0, runtime->error ? runtime->error : -ESHUTDOWN);
 	ccci_scp_awake_invalidate(&runtime->awake);
 	owner->reset_generation = 0;
 	ret = ccci_scp_reset_assert(&reset, owner->core_tcm,
@@ -94,6 +108,7 @@ static int ccci_scp_runtime_consume(void *context, const struct ccci_scp_event *
 		}
 		runtime->apccci_events++;
 		runtime->apccci_state = state;
+		ccci_scp_runtime_notify(owner, state, 0);
 		break;
 	case 21:
 		runtime->logger_events++;
@@ -108,6 +123,7 @@ fault:
 		runtime->error = ret;
 	runtime->ready = false;
 	owner->boot_error = runtime->error;
+	ccci_scp_runtime_notify(owner, 0, runtime->error);
 	complete_all(&runtime->ready_event);
 	/* A separate work item may join the receive worker after this returns. */
 	schedule_work(&runtime->fault_work);
@@ -253,9 +269,14 @@ static ssize_t runtime_store(struct device *dev, struct device_attribute *attr,
 	if (sysfs_streq(buf, "start")) {
 		ret = ccci_scp_runtime_start(owner);
 	} else if (sysfs_streq(buf, "stop")) {
-		ret = ccci_scp_runtime_stop(owner);
+		ret = runtime->client ? -EBUSY : ccci_scp_runtime_stop(owner);
 	} else if (send || sysfs_streq(buf, "awake")) {
 		mutex_lock(&owner->lock);
+		if (send && runtime->client) {
+			ret = -EBUSY;
+			mutex_unlock(&owner->lock);
+			goto unlock;
+		}
 		ret = send && runtime->tx_completed ? -EALREADY :
 			ccci_scp_runtime_awake(owner, send);
 		if (ret && ret != -EALREADY) {
@@ -268,8 +289,9 @@ static ssize_t runtime_store(struct device *dev, struct device_attribute *attr,
 	} else {
 		ret = -EINVAL;
 	}
+unlock:
 	mutex_unlock(&runtime->control);
-	return ret ? ret : count;
+	return ret ? ret : (ssize_t)count;
 }
 DEVICE_ATTR_WO(runtime);
 

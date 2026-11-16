@@ -78,6 +78,7 @@ V 为 `/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/` 下的
 - [x] 有界runtime编解码、保留位/连续ID/版本/长度、0xac整包与v2.1结构边界，
   接入实际CCIF TX和有状态consumer，见[实现](MODEM-RUNTIME-HANDSHAKE.md)。
 - [x] 对照BOOT_INFO控制RX0与HS2，区分AT_CHANNEL_NUM计数；尚需实际MD验证。
-- [ ] 连接已有SCP真实READY/awake与CCIF2/CCISM共享内存/MD通知生命周期。
+- [x] SCP client与后置CCISM协议core，见[实现](MODEM-CCISM.md)；不等待CCISM完成才放行MD。
+- [ ] CCIF2硬件/SMEM owner、system端口及有界事件worker/timer，接实际MD通知生命周期。
 - [ ] FS私有工作副本、RPC/端口服务和能力表，先合成请求测试，再合并放行MD。
 - [ ] 真实HS1/HS2、异常/停止验收；当前仅离线consumer，不代表基带可用。

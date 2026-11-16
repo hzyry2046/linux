@@ -304,7 +304,7 @@ int main(void){
 '''
 
 
-def main():
+def main(extra_test='', extra_units=()):
     with tempfile.TemporaryDirectory(prefix='op6893-handshake-') as tmp:
         root = Path(tmp)
         inc = root / 'linux'
@@ -312,12 +312,14 @@ def main():
         (inc/'types.h').write_text('#pragma once\n#include <stdint.h>\n#include <stdbool.h>\n'
             'typedef uint8_t u8;typedef uint16_t u16;typedef uint32_t u32;typedef uint64_t u64;\n')
         (inc/'unaligned.h').write_text('#pragma once\n#include <linux/types.h>\n'
+            'static inline u16 get_unaligned_le16(const void *p){const u8 *b=p;return b[0]|(u16)b[1]<<8;}\n'
+            'static inline void put_unaligned_le16(u16 v,void *p){u8 *b=p;b[0]=v;b[1]=v>>8;}\n'
             'static inline u32 get_unaligned_le32(const void *p){const u8 *b=p;'
             'return (u32)b[0]|(u32)b[1]<<8|(u32)b[2]<<16|(u32)b[3]<<24;}\n'
             'static inline u64 get_unaligned_le64(const void *p){return get_unaligned_le32(p)|'
             '(u64)get_unaligned_le32((const u8 *)p+4)<<32;}\n'
             'static inline void put_unaligned_le32(u32 v,void *p){u8 *b=p;for(unsigned i=0;i<4;i++)b[i]=v>>(8*i);}\n')
-        (inc/'limits.h').write_text('#include <stdint.h>\n#define U64_MAX UINT64_MAX\n')
+        (inc/'limits.h').write_text('#include <stdint.h>\n#define U64_MAX UINT64_MAX\n#define U32_MAX UINT32_MAX\n')
         (inc/'errno.h').write_text('#include <asm-generic/errno.h>\n')
         (inc/'string.h').write_text('#include <string.h>\n')
         (inc/'kernel.h').write_text('#define ALIGN(n,a) (((n)+(a)-1)&~((a)-1))\n'
@@ -326,11 +328,12 @@ def main():
         for name in ('device.h', 'err.h', 'interrupt.h', 'io.h', 'slab.h', 'spinlock.h',
                      'workqueue.h', 'kconfig.h', 'ioport.h', 'jiffies.h', 'ktime.h', 'mutex.h', 'sysfs.h'):
             (inc/name).write_text('/* Models supplied by the harness. */\n')
-        (root/'test.c').write_text(shim+baseline+GLUE+TEST)
+        test = TEST if not extra_test else TEST.replace('int main(void){', 'static void handshake_tests(void){') + extra_test
+        (root/'test.c').write_text(shim+baseline+GLUE+test)
         units = ['ccci-ccif-ring.c', 'ccci-ccif-protocol.c', 'ccci-runtime.c',
-                 'ccci-ccif-tx.c', 'ccci-handshake.c']
+                 'ccci-ccif-tx.c', 'ccci-handshake.c', *extra_units]
         subprocess.run(['cc', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
-            '-Wno-misleading-indentation', '-fsanitize=address,undefined',
+            '-Wno-misleading-indentation', '-Wno-sign-compare', '-fsanitize=address,undefined',
             '-fno-sanitize-recover=all', '-no-pie', '-D__iomem=', '-I'+str(root),
             '-I'+str(SRC), '-I'+str(K/'include'),
             *[str(SRC/n) for n in units], str(root/'test.c'), '-o', str(root/'test')], check=True)

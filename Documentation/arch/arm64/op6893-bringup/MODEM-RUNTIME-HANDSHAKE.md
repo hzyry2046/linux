@@ -108,3 +108,8 @@ connectivity代码中产生既有告警；最终增量构建及新增CCCI代码�
 工作副本和端口服务。由 owner 从这些有效资源生成能力表并检查服务门控，
 再统一接首次 MD CPU release、异常/超时停止和真实 HS1/HS2 合并测试。
 DPMAIF/AT/注册/数据上网分别验收，不由 HS2_SEEN 自动宣布完成。
+
+
+2026-11-16接续顺序修正：SCP硬件READY/资源及服务先准备，CCISM协议完成
+在HS2后，不作为MD CPU释放前的等待项。新增core/client的实现边界见
+[CCISM](MODEM-CCISM.md)，最终桥/端口caller仍待接入。
