@@ -81,7 +81,7 @@ int ccci_handshake_consume(struct ccci_handshake *hs, const struct ccci_ccif_eve
 	    hs->state != CCCI_HANDSHAKE_HS2_SEEN)
 		return -ESHUTDOWN;
 	if (event->type == CCCI_CCIF_EVENT_NOTIFY) {
-		if (event->notifications & ~BIT(7))
+		if (event->notifications & ~CCCI_CCIF_NOTIFY_VALID)
 			return handshake_fail(hs, -EREMOTEIO);
 		ret = hs->ops->port(hs->context, event);
 		return ret ? handshake_fail(hs, ret) : 0;

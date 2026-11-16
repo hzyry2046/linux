@@ -17,6 +17,7 @@
 #include "ccci-smem.h"
 
 struct ccci_ccif_controller {
+	struct device *dev;
 	void __iomem *ap;
 	void __iomem *runtime;
 	struct ccci_ccif_rx *rx;
@@ -116,8 +117,12 @@ static int control_consume(void *context, const struct ccci_ccif_event *event)
 	if (control->active) {
 		ret = ccci_handshake_consume(&control->hs, event,
 					     ktime_to_ms(ktime_get_boottime()));
-		if (ret)
+		if (ret) {
+			dev_err(control->dev,
+				"control event failed: type=%u size=%u state=%u error=%d\n",
+				event->type, event->size, control->hs.state, ret);
 			control->active = false;
+		}
 		control_report(control);
 	}
 	mutex_unlock(&control->lock);
@@ -257,6 +262,7 @@ struct ccci_ccif_controller *ccci_ccif_control_create(struct device *dev, void _
 	control = devm_kzalloc(dev, sizeof(*control), GFP_KERNEL);
 	if (!control)
 		return ERR_PTR(-ENOMEM);
+	control->dev = dev;
 	ret = ccci_runtime_plan(smem, &control->plan);
 	if (ret)
 		return ERR_PTR(ret);

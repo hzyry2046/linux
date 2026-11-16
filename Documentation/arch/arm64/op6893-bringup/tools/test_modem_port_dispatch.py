@@ -53,6 +53,8 @@ static void *alloc(size_t n){return alloc_fail?NULL:calloc(1,n);}
 #define kzalloc_obj(x) alloc(sizeof(x))
 #define kfree(p) free(p)
 struct device {void (*cleanup)(void *);void *context;};
+#define dev_info(d,fmt,...) ((void)0)
+#define dev_err(d,fmt,...) ((void)0)
 static int devm_add_action_or_reset(struct device *d,void (*fn)(void *),void *p){
  if(action_fail){fn(p);return -ENOMEM;}d->cleanup=fn;d->context=p;return 0;
 }
@@ -179,7 +181,7 @@ int main(void){
  }
  /* Notifications accept only validated peer wake (bit 7). */
  d=running();struct ccci_ccif_event notify={.type=CCCI_CCIF_EVENT_NOTIFY,.notifications=BIT(7)};
- clearlog();assert(!consumer(consumer_ctx,&notify));notify.notifications|=BIT(4);assert(consumer(consumer_ctx,&notify)==-EREMOTEIO);assert(!logn);dispose(d);
+ clearlog();assert(!consumer(consumer_ctx,&notify));notify.notifications|=BIT(16);assert(!consumer(consumer_ctx,&notify));notify.notifications|=BIT(4);assert(consumer(consumer_ctx,&notify)==-EREMOTEIO);assert(!logn);dispose(d);
  assert(ccci_port_dispatch_offline(NULL)==0);
  puts("PASS: actual dispatcher, runtime/HS2 ordering, fault deferral, lifecycle veto and dormant construction");
  return 0;

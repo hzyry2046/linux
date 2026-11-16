@@ -84,6 +84,8 @@ static void *devm_ioremap_wc(struct device *d,u64 start,u64 size){
  assert(d==&dev && start==0x8011e000 && size==8192);maps++;return map_fail?NULL:rt_pages;
 }
 static const char *dev_name(struct device *d){assert(d==&dev);return "ccci-synthetic";}
+#define dev_err(d,fmt,...) ((void)0)
+#define dev_info(d,fmt,...) ((void)0)
 #include "ccci-ccif-control.c"
 '''
 
@@ -261,6 +263,8 @@ static void state_machine(void){
  state_setup();assert(!ccci_handshake_consume(&machine,&ev,200));assert(ccci_handshake_tick(&machine,60200)==-ETIMEDOUT);failed(-ETIMEDOUT);
  state_setup();assert(ccci_handshake_tick(&machine,99)==-ERANGE);failed(-ERANGE);
  state_setup();ev.type=CCCI_CCIF_EVENT_NOTIFY;ev.notifications=BIT(16)|BIT(7);
+ assert(!ccci_handshake_consume(&machine,&ev,200) && port_calls==1);
+ state_setup();ev.type=CCCI_CCIF_EVENT_NOTIFY;ev.notifications=BIT(4);
  assert(ccci_handshake_consume(&machine,&ev,200)==-EREMOTEIO && !port_calls && !publishes);
  state_setup();assert(!ccci_handshake_consume(&machine,&ev,200));hs2_event();ev.queue=1;
  assert(ccci_handshake_consume(&machine,&ev,201)==-EPROTO);

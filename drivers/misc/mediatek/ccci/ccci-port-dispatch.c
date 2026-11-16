@@ -6,6 +6,7 @@
 #include <linux/mutex.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/string.h>
 #include <linux/sysfs.h>
 #include <linux/workqueue.h>
 
@@ -27,6 +28,7 @@ enum dispatch_state {
 };
 
 struct ccci_port_dispatch {
+	struct device *dev;
 	/* Parent lock may nest this mutex, callbacks never take the parent lock. */
 	struct mutex lock;
 	/* Control fault callbacks only latch and enqueue; no mutex or I/O. */
@@ -40,6 +42,7 @@ struct ccci_port_dispatch {
 	int error;
 	bool attempted;
 	bool fault_closed;
+	bool ex_ack_logged;
 };
 
 static void dispatch_fault(void *context, int error)
@@ -75,8 +78,11 @@ static int dispatch_port(void *context, const struct ccci_ccif_event *event)
 {
 	struct ccci_port_dispatch *dispatch = context;
 	struct ccci_ccif_header header;
+	enum ccci_ccif_control kind = CCCI_CCIF_CONTROL_OTHER;
 	int ret;
 
+	memset(&header, 0, sizeof(header));
+	header.channel = 0xffff;
 	mutex_lock(&dispatch->lock);
 	ret = READ_ONCE(dispatch->error);
 	if (ret)
@@ -90,16 +96,26 @@ static int dispatch_port(void *context, const struct ccci_ccif_event *event)
 		goto out;
 	}
 	if (event->type == CCCI_CCIF_EVENT_NOTIFY) {
-		ret = event->notifications & ~BIT(7) ? -EREMOTEIO : 0;
+		if (event->notifications & ~CCCI_CCIF_NOTIFY_VALID) {
+			ret = -EREMOTEIO;
+			goto out;
+		}
+		/* EX_ACK is already acknowledged by the RX scanner; no payload. */
+		if (event->notifications & CCCI_CCIF_NOTIFY_EX_ACK && !dispatch->ex_ack_logged) {
+			dispatch->ex_ack_logged = true;
+			dev_info(dispatch->dev, "notification: ex-ack=0x%x\n",
+				 event->notifications & CCCI_CCIF_NOTIFY_EX_ACK);
+		}
 		goto out;
 	}
 	ret = ccci_ccif_header_decode(event->data, event->size, &header);
 	if (ret)
 		goto out;
 	if (event->type == CCCI_CCIF_EVENT_SRAM) {
+		kind = ccci_ccif_control_decode(&header);
 		if (dispatch->state != DISPATCH_WAIT_HS1 ||
 		    event->size != CCCI_CCIF_HS1_SIZE ||
-		    ccci_ccif_control_decode(&header) != CCCI_CCIF_CONTROL_HS1) {
+		    kind != CCCI_CCIF_CONTROL_HS1) {
 			ret = -EPROTO;
 			goto out;
 		}
@@ -107,6 +123,9 @@ static int dispatch_port(void *context, const struct ccci_ccif_event *event)
 		ret = ccci_service_endpoint_arm(dispatch->endpoint, dispatch->generation);
 		if (!ret)
 			dispatch->state = DISPATCH_WAIT_HS2;
+		if (!ret)
+			dev_info(dispatch->dev, "HS1 accepted: generation=%llu\n",
+				 dispatch->generation);
 		goto out;
 	}
 	if (event->type != CCCI_CCIF_EVENT_RING) {
@@ -114,9 +133,10 @@ static int dispatch_port(void *context, const struct ccci_ccif_event *event)
 		goto out;
 	}
 	if (!header.channel) {
+		kind = ccci_ccif_control_decode(&header);
 		if (dispatch->state != DISPATCH_WAIT_HS2 || event->queue ||
 		    event->size != CCCI_CCIF_HEADER_SIZE ||
-		    ccci_ccif_control_decode(&header) != CCCI_CCIF_CONTROL_HS2) {
+		    kind != CCCI_CCIF_CONTROL_HS2) {
 			ret = -EPROTO;
 			goto out;
 		}
@@ -125,6 +145,9 @@ static int dispatch_port(void *context, const struct ccci_ccif_event *event)
 			ret = ccci_ccism_bridge_port(dispatch->bridge, event);
 		if (!ret)
 			dispatch->state = DISPATCH_HS2;
+		if (!ret)
+			dev_info(dispatch->dev, "HS2 accepted: generation=%llu\n",
+				 dispatch->generation);
 	} else if (header.channel == CCCI_FS_RX || header.channel == CCCI_RPC_RX) {
 		ret = dispatch->state == DISPATCH_WAIT_HS1 ? -EPROTO :
 			ccci_service_endpoint_receive(dispatch->endpoint,
@@ -136,8 +159,13 @@ static int dispatch_port(void *context, const struct ccci_ccif_event *event)
 		ret = -EOPNOTSUPP;
 	}
 out:
-	if (ret)
+	if (ret) {
+		dev_err(dispatch->dev,
+			"port event rejected: type=%u size=%u queue=%u channel=%u kind=%d state=%u error=%d\n",
+			event->type, event->size, event->queue, header.channel, kind,
+			dispatch->state, ret);
 		dispatch_fault(dispatch, ret);
+	}
 	mutex_unlock(&dispatch->lock);
 	return ret;
 }
@@ -270,6 +298,7 @@ ccci_port_dispatch_create(struct device *dev, struct ccci_ccif *ccif,
 	mutex_init(&dispatch->lock);
 	spin_lock_init(&dispatch->fault_lock);
 	INIT_WORK(&dispatch->fault_work, dispatch_fault_work);
+	dispatch->dev = dev;
 	dispatch->ccif = ccif;
 	dispatch->bridge = bridge;
 	dispatch->endpoint = endpoint;
