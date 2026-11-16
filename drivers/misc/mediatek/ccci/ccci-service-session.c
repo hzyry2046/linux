@@ -58,6 +58,8 @@ struct ccci_service_session {
 	u64 generation;
 	u32 head;
 	u32 count;
+	u32 tx_packets;
+	int tx_error;
 	int queue_error;
 	bool armed;
 	bool accepting;
@@ -116,7 +118,11 @@ static int service_send(void *context, const void *packet, size_t length, bool h
 		ret = service_admit(session);
 	if (ret)
 		return ret;
-	return ccci_ccif_service_send(session->ccif, packet, length, hs2_seen);
+	ret = ccci_ccif_service_send(session->ccif, packet, length, hs2_seen);
+	session->tx_error = ret;
+	if (!ret)
+		session->tx_packets++;
+	return ret;
 }
 
 static const struct ccci_service_ops service_router_ops = {
@@ -441,6 +447,8 @@ void ccci_service_session_status(struct ccci_service_session *session,
 	spin_lock_irqsave(&session->queue_lock, flags);
 	status->generation = session->generation;
 	status->queued = session->count;
+	status->tx_packets = session->tx_packets;
+	status->tx_error = session->tx_error;
 	status->error = session->router.error ? session->router.error : session->queue_error;
 	status->armed = session->armed;
 	status->accepting = session->accepting;

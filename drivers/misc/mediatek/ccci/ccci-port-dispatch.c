@@ -100,11 +100,15 @@ static int dispatch_port(void *context, const struct ccci_ccif_event *event)
 			ret = -EREMOTEIO;
 			goto out;
 		}
-		/* EX_ACK is already acknowledged by the RX scanner; no payload. */
-		if (event->notifications & CCCI_CCIF_NOTIFY_EX_ACK && !dispatch->ex_ack_logged) {
-			dispatch->ex_ack_logged = true;
-			dev_info(dispatch->dev, "notification: ex-ack=0x%x\n",
-				 event->notifications & CCCI_CCIF_NOTIFY_EX_ACK);
+		/* The RX scanner already acknowledged these RCHNUM bits; no payload. */
+		if (event->notifications & CCCI_CCIF_NOTIFY_MD_EXCEPTION) {
+			if (!dispatch->ex_ack_logged) {
+				dispatch->ex_ack_logged = true;
+				dev_err(dispatch->dev, "MD exception init notified (bit16)\n");
+			}
+		} else if (event->notifications & CCCI_CCIF_NOTIFY_EX_ACK) {
+			dev_info(dispatch->dev, "notification: ex=0x%x\n",
+					     event->notifications & CCCI_CCIF_NOTIFY_EX_ACK);
 		}
 		goto out;
 	}

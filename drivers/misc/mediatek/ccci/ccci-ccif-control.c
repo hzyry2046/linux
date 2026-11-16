@@ -242,10 +242,12 @@ ssize_t ccci_ccif_control_status(struct ccci_ccif_controller *control, char *buf
 
 	mutex_lock(&control->lock);
 	ret = sysfs_emit(buf,
-			 "state=%u error=%d active=%u attempted=%u bytes=%u rejected=%u hs2_seen=%u cpu_release_issued=0\n",
+			 "state=%u error=%d active=%u attempted=%u bytes=%u rejected=%u hs2_seen=%u md_head=0x%x md_word1=0x%x cpu_release_issued=0\n",
 			 control->hs.state, control->hs.error, control->active, control->attempted,
 			 control->hs.used, control->hs.rejected,
-			 control->hs.hs2_seen);
+			 control->hs.hs2_seen,
+			 readl(control->runtime + CCCI_RUNTIME_HALF),
+			 readl(control->runtime + CCCI_RUNTIME_HALF + 4));
 	mutex_unlock(&control->lock);
 	return ret;
 }

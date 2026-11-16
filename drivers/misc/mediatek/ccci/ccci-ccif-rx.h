@@ -5,8 +5,12 @@
 #include <linux/types.h>
 /* CCIF RCHNUM notification bits delivered to the control consumer. */
 #define CCCI_CCIF_NOTIFY_CCB		BIT(7)
-#define CCCI_CCIF_NOTIFY_EX_ACK		0x00ff0000U
-#define CCCI_CCIF_NOTIFY_VALID		(CCCI_CCIF_NOTIFY_CCB | CCCI_CCIF_NOTIFY_EX_ACK)
+/* RCHNUM bit16 is D2H_EXCEPTION_INIT: the MD asserted, not a benign ACK. */
+#define CCCI_CCIF_NOTIFY_MD_EXCEPTION	BIT(16)
+#define CCCI_CCIF_NOTIFY_EX_ACK		0x7ffe0000U
+#define CCCI_CCIF_NOTIFY_VALID		(CCCI_CCIF_NOTIFY_CCB | \
+					 CCCI_CCIF_NOTIFY_MD_EXCEPTION | \
+					 CCCI_CCIF_NOTIFY_EX_ACK)
 
 
 #include "ccci-ccif-protocol.h"

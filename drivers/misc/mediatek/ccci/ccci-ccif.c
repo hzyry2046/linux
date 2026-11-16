@@ -424,15 +424,22 @@ int ccci_ccif_service_send(struct ccci_ccif *ccif, const void *packet, u32 size,
 		goto out;
 	if (readl(ccif->ap + 4) & BIT(queue)) {
 		ret = -EBUSY;
+		pr_info_ratelimited("ccci: service send deferred: channel=%u queue=%u busy=%#x\n",
+				    channel, queue, readl(ccif->ap + 4));
 		goto out;
 	}
 	/* HIF owns sequence per channel; FS/RPC assert only while awaiting HS2. */
 	put_unaligned_le32(channel | ((u32)ccif->service_sequence[index] << 16) |
 			   (hs2_seen ? 0 : BIT(31)), copy + 8);
 	ret = ccci_ccif_ring_transmit(&ccif->ring[CCCI_CCIF_NORMAL][queue], copy, size);
-	if (ret == -ENOSPC)
+	if (ret == -ENOSPC) {
+		pr_info_ratelimited("ccci: service ring full: channel=%u queue=%u size=%u\n",
+				    channel, queue, size);
 		goto out;
+	}
 	if (ret) {
+		pr_err("ccci: service transmit failed: channel=%u queue=%u error=%d\n",
+		       channel, queue, ret);
 		WRITE_ONCE(ccif->tx_error, ret);
 		ccif->tx_active = false;
 		ccci_ccif_rx_abort(ccif->rx, ret);

@@ -4,6 +4,7 @@
 #include <linux/bitops.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/hex.h>
 #include <linux/mfd/syscon.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
@@ -52,6 +53,9 @@ struct ccci_md_platform {
 	struct ccci_port_dispatch *dispatch;
 	struct ccci_nvram_cache *cache;
 	struct ccci_md_boot *boot;
+	/* Read-only MD exception record header, mapped only when LK exported it. */
+	void __iomem *ee;
+	size_t ee_bytes;
 };
 
 /* Independent hardware check also catches a genpd power-off veto/failure. */
@@ -459,10 +463,82 @@ static ssize_t dispatch_show(struct device *dev, struct device_attribute *attr, 
 }
 static DEVICE_ATTR_RO(dispatch);
 
+/* Bounded decode of the v5 exception overview header, never the payload. */
+static ssize_t md_ee_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	char core[12] = {}, path[64] = {};
+	u32 version = 0, cores = 0, line = 0, ex_type = 0;
+	ssize_t ret;
+
+	mutex_lock(&md->lock);
+	if (!md->ee || md->ee_bytes < 0xa4) {
+		ret = sysfs_emit(buf, "present=%u\n", md->ee ? 1 : 0);
+		goto out;
+	}
+	version = readl(md->ee);
+	cores = readl(md->ee + 4);
+	if (cores > 12)
+		cores = 12;
+	for (u32 i = 0; i < cores; i++) {
+		u32 base = 8 + i * 12;
+
+		if (base + 12 > md->ee_bytes)
+			break;
+		if (!readb(md->ee + base + 11))
+			continue;
+		for (u32 j = 0; j < 11; j++)
+			core[j] = readb(md->ee + base + j);
+		break;
+	}
+	ex_type = readw(md->ee + 0x98);
+	if (md->ee_bytes >= 0xa4) {
+		for (u32 i = 0; i < sizeof(path) - 1 && 0xa0 + i < md->ee_bytes; i++) {
+			u8 c = readb(md->ee + 0xa0 + i);
+
+			if (!c)
+				break;
+			path[i] = (c >= 0x20 && c < 0x7f) ? c : '.';
+		}
+	}
+	if (md->ee_bytes >= 0x1a4)
+		line = readl(md->ee + 0x1a0);
+	ret = sysfs_emit(buf,
+			 "present=1 bytes=%zu version=%#x cores=%u offender=%s ex_type=%u line=%u path=%s para=%#x,%#x,%#x lr=%#x\n",
+			 md->ee_bytes, version, cores, core, ex_type, line, path,
+			 md->ee_bytes >= 0x1a8 ? readl(md->ee + 0x1a4) : 0,
+			 md->ee_bytes >= 0x1ac ? readl(md->ee + 0x1a8) : 0,
+			 md->ee_bytes >= 0x1b0 ? readl(md->ee + 0x1ac) : 0,
+			 md->ee_bytes >= 0x1b4 ? readl(md->ee + 0x1b0) : 0);
+out:
+	mutex_unlock(&md->lock);
+	return ret;
+}
+static DEVICE_ATTR_RO(md_ee);
+
+/* Raw header bytes for offline decode; no payload or core dump is exposed. */
+static ssize_t md_ee_raw_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	ssize_t ret;
+	u32 bytes;
+
+	mutex_lock(&md->lock);
+	bytes = md->ee ? min_t(u32, (u32)md->ee_bytes, 0x1c0) : 0;
+	for (u32 i = 0; i < bytes; i++)
+		hex_byte_pack(buf + i * 2, readb(md->ee + i));
+	ret = bytes * 2;
+	buf[ret++] = '\n';
+	buf[ret] = 0;
+	mutex_unlock(&md->lock);
+	return ret;
+}
+static DEVICE_ATTR_RO(md_ee_raw);
+
 static struct attribute *md_attrs[] = {
 	&dev_attr_md_power.attr, &dev_attr_md_boot.attr, &dev_attr_ccif.attr,
 	&dev_attr_handshake.attr, &dev_attr_ccism.attr, &dev_attr_services.attr,
-	&dev_attr_dispatch.attr, NULL,
+	&dev_attr_dispatch.attr, &dev_attr_md_ee.attr, &dev_attr_md_ee_raw.attr, NULL,
 };
 
 static const struct attribute_group md_group = { .attrs = md_attrs };
@@ -566,6 +642,23 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 		ret = md_rails_check(md);
 	if (ret)
 		return dev_err_probe(dev, ret, "cold rail baseline unavailable/unstable\n");
+	if (md->smem.users[CCCI_SMEM_MDSS_DBG].present) {
+		const struct ccci_smem_region *ee = &md->smem.users[CCCI_SMEM_MDSS_DBG];
+		u32 bytes = min_t(u32, ee->size, 0x1000);
+		u64 page = ee->ap & ~0xfffULL;
+		u64 end = (ee->ap + bytes + 0xfff) & ~0xfffULL;
+		bool inside = ccci_lk_contains(&md->smem.noncached, page, end - page) ||
+			      ccci_lk_contains(&md->smem.cached, page, end - page);
+
+		if (inside && devm_request_mem_region(dev, page, end - page, "ccci-md-ee")) {
+			void __iomem *map = devm_ioremap(dev, page, end - page);
+
+			if (map) {
+				md->ee = map + (ee->ap - page);
+				md->ee_bytes = bytes;
+			}
+		}
+	}
 	if (IS_ENABLED(CONFIG_OP6893_CCCI_CCIF)) {
 		md->ccif = ccci_ccif_create(pdev, layout, md->infra);
 		if (IS_ERR(md->ccif))

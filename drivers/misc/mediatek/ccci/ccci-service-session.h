@@ -27,6 +27,8 @@ struct ccci_service_backend_ops {
 struct ccci_service_session_status {
 	u64 generation;
 	u32 queued;
+	u32 tx_packets;
+	int tx_error;
 	int error;
 	bool armed;
 	bool accepting;
