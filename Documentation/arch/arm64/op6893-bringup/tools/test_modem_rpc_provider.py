@@ -77,7 +77,17 @@ int main(void){
  n=make(0x400e,args,2);scalars(&facts,n,-2,-2,2);
  /* Every declared/reserved A/V ID is unavailable without audited facts. */
  for(unsigned op=0x4001;op<=0x4017;op++){
-  assert(ccci_rpc_provider_known(op));n=make(op,NULL,0);unchanged(-EOPNOTSUPP,NULL,n);
+  assert(ccci_rpc_provider_known(op));
+  if(op==0x4007)continue;
+  n=make(op,NULL,0);unchanged(-EOPNOTSUPP,NULL,n);
+ }
+ /* 0x4007 emits A's unavailable-value reply: get_md_adc_val() returns -1. */
+ {
+  static const u8 channel[8]={9,0,0,0,0,0,0,0};
+  struct ccci_rpc_arg a={channel,4};
+  n=make(0x4007,&a,1);scalars(NULL,n,-1,-1,2);
+  a.size=8;n=make(0x4007,&a,1);scalars(NULL,n,-2,-2,2);
+  n=make(0x4007,NULL,0);scalars(NULL,n,-2,-2,2);
  }
  for(unsigned op=0x3001;op<=0x3012;op++){
   assert(ccci_rpc_provider_known(op));n=make(op,NULL,0);unchanged(-EOPNOTSUPP,&facts,n);

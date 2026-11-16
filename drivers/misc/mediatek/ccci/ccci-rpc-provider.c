@@ -146,6 +146,21 @@ int ccci_rpc_provider_reply(const struct ccci_rpc_provider *provider,
 	ret = ccci_rpc_provider_available(provider, operation);
 	if (ret < 0)
 		return ret;
+	result = RPC_PARAM_ERROR;
+	args[0] = (struct ccci_rpc_arg){scalar, sizeof(scalar)};
+	args[1] = args[0];
+	if (operation == 0x4007) {
+		/*
+		 * Same-board A get_md_adc_val() returns -1 when no ADC driver is
+		 * bound; the 0x4007 case then serializes that value twice. This
+		 * provider performs no ADC conversion, so it emits that exact
+		 * unavailable-value reply instead of a fabricated measurement.
+		 */
+		if (request.argc != 1 || request.args[0].size != sizeof(u32))
+			goto scalar_reply;
+		put_unaligned_le32(0xffffffff, scalar);
+		return ccci_rpc_encode_reply(&request, args, 2, reply, capacity);
+	}
 	if (!ret) {
 		if (ccci_rpc_provider_known(operation))
 			return -EOPNOTSUPP;
@@ -153,9 +168,6 @@ int ccci_rpc_provider_reply(const struct ccci_rpc_provider *provider,
 		args[0] = (struct ccci_rpc_arg){scalar, sizeof(scalar)};
 		return ccci_rpc_encode_reply(&request, args, 1, reply, capacity);
 	}
-	result = RPC_PARAM_ERROR;
-	args[0] = (struct ccci_rpc_arg){scalar, sizeof(scalar)};
-	args[1] = args[0];
 	if (operation == 0x400e) {
 		if (request.argc != 1)
 			goto scalar_reply;
