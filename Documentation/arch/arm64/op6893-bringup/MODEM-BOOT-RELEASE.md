@@ -86,11 +86,12 @@ RX 关闭、controller 故障、generation 变化或 SPM 单 bit 都不被接受
 
 ## 首次上机步骤（尚未执行）
 
-已离线构建测试镜像 `dist/1bf863e95714/boot.img`（release
-`7.3.0-op6893-d1-1bf863e95714+`，SHA256
-`637651f50fb4e1a378413ff5741eaa0ffd24ec2cbb54ee5d6a1d8b4ad95065f2`），
+已离线构建测试镜像 `dist/8e13583dbaa5/boot.img`（release
+`7.3.0-op6893-d1-8e13583dbaa5+`，SHA256
+`21a1c3147cfc9a3745e57c0f55ad33d2146ddc30613ac5c684cdb1dbfb9ee847`），
 其 kernel config 含全部新选项，board DTB 中平台节点为 okay 且带
-`mediatek,no-external-32k`。尚未刷入。
+`mediatek,no-external-32k`，initramfs 的 `debian.sha256` 已指向新 rootfs。
+尚未刷入。
 
 目标端 runner：已在当前 `debian/tree`（`debian-5499c9f794dd` 基座）安装
 `python3 3.13.5`，并把四个 runner 脚本放到

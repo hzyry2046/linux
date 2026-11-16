@@ -116,12 +116,13 @@
     "active unbind unsupported; cache/boot owners have no callbacks"
   ],
   "prepared_image": {
-    "path": "mt6893-direct/dist/1bf863e95714/boot.img",
-    "release": "7.3.0-op6893-d1-1bf863e95714+",
-    "sha256": "637651f50fb4e1a378413ff5741eaa0ffd24ec2cbb54ee5d6a1d8b4ad95065f2",
+    "path": "mt6893-direct/dist/8e13583dbaa5/boot.img",
+    "release": "7.3.0-op6893-d1-8e13583dbaa5+",
+    "sha256": "21a1c3147cfc9a3745e57c0f55ad33d2146ddc30613ac5c684cdb1dbfb9ee847",
     "bytes": 33554432,
     "config": "kernel.config has HANDSHAKE/CCISM/SERVICES/DISPATCH/NVRAM_CACHE/MD_BOOT=y",
     "dtb": "modem-platform status okay and mediatek,no-external-32k present",
+    "rootfs_pin": "initramfs/debian.sha256 hash c1282c3136a370b9747ff1f6a09995448d825300972b1dd0e4d3fa7b674f515d points at debian-5f8741f4101a",
     "flashed": false
   },
   "runner_deployment": {
