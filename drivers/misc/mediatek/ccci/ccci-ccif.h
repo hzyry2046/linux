@@ -31,6 +31,14 @@ ssize_t ccci_ccif_handshake_status(struct ccci_ccif *ccif, char *buf);
  * EBUSY/ENOSPC publish nothing; other transport failures poison this owner.
  */
 int ccci_ccif_system_send(struct ccci_ccif *ccif, u32 message, u32 reserved);
+/*
+ * Validated FS/RPC reply packets only; normal FS q4/ch15 or RPC q1/ch33.
+ * Caller validates protocol/slot/generation and supplies actual HS2 state.
+ * Calls are admitted only in WAIT_HS2 or after accepted HS2, never WAIT_HS1.
+ * Transport replaces sequence/assert as in the same-board HIF. No MD lock.
+ */
+int ccci_ccif_service_send(struct ccci_ccif *ccif, const void *packet, u32 size,
+			   bool hs2_seen);
 /* Sleepable: close TX/RX admission without waiting on consumer or parent lock. */
 void ccci_ccif_abort(struct ccci_ccif *ccif, int error);
 int ccci_ccif_stop(struct ccci_ccif *ccif);
@@ -63,6 +71,12 @@ static inline ssize_t ccci_ccif_handshake_status(struct ccci_ccif *ccif, char *b
 }
 
 static inline int ccci_ccif_system_send(struct ccci_ccif *ccif, u32 message, u32 reserved)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int ccci_ccif_service_send(struct ccci_ccif *ccif, const void *packet,
+					 u32 size, bool hs2_seen)
 {
 	return -EOPNOTSUPP;
 }

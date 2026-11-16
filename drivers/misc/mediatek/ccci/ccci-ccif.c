@@ -27,6 +27,7 @@ struct ccci_ccif {
 	struct mutex tx_lock;
 	bool tx_active;
 	u16 tx_sequence;
+	u16 service_sequence[2];
 	int tx_error;
 	struct ccci_ccif_rx *rx;
 	struct ccci_ccif_controller *control;
@@ -374,6 +375,74 @@ ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf)
 			  READ_ONCE(ccif->tx_sequence),
 			  ccif->layout.used[0], ccif->layout.used[1],
 			  ccif->layout.debug_md, ccif->layout.debug_size);
+}
+
+/* Packet codec and leased request ownership are checked by the service caller. */
+int ccci_ccif_service_send(struct ccci_ccif *ccif, const void *packet, u32 size,
+			   bool hs2_seen)
+{
+	const u8 *input = packet;
+	u8 *copy;
+	u32 channel, queue, index;
+	int ret;
+
+	if (!ccif || !packet || size <= 20 || size > 20 + 0xd80 ||
+	    get_unaligned_le32(input + 4) != size)
+		return -EINVAL;
+	channel = get_unaligned_le32(input + 8) & 0xffff;
+	if (channel == 15) {
+		if (get_unaligned_le32(input + 12) >= 5)
+			return -ERANGE;
+		queue = 4;
+		index = 0;
+	} else if (channel == 33) {
+		if (size < 24 || size > 2048 || get_unaligned_le32(input + 12) > 2)
+			return -ERANGE;
+		queue = 1;
+		index = 1;
+	} else {
+		return -EOPNOTSUPP;
+	}
+	copy = kmemdup(packet, size, GFP_KERNEL);
+	if (!copy)
+		return -ENOMEM;
+	mutex_lock(&ccif->tx_lock);
+	ret = ccif->tx_error;
+	if (ret)
+		goto out;
+	if (!ccif->tx_active) {
+		ret = -ESHUTDOWN;
+		goto out;
+	}
+	ret = ccci_ccif_rx_error(ccif->rx);
+	if (ret)
+		goto out;
+	if (readl(ccif->ap + 4) & BIT(queue)) {
+		ret = -EBUSY;
+		goto out;
+	}
+	/* HIF owns sequence per channel; FS/RPC assert only while awaiting HS2. */
+	put_unaligned_le32(channel | ((u32)ccif->service_sequence[index] << 16) |
+			   (hs2_seen ? 0 : BIT(31)), copy + 8);
+	ret = ccci_ccif_ring_transmit(&ccif->ring[CCCI_CCIF_NORMAL][queue], copy, size);
+	if (ret == -ENOSPC)
+		goto out;
+	if (ret) {
+		WRITE_ONCE(ccif->tx_error, ret);
+		ccif->tx_active = false;
+		ccci_ccif_rx_abort(ccif->rx, ret);
+		goto out;
+	}
+	ccif->service_sequence[index] = (ccif->service_sequence[index] + 1) & 0x7fff;
+	/* Complete WC payload and producer stores before ordinary queue doorbell. */
+	mb();
+	writel(BIT(queue), ccif->ap + 4);
+	writel(queue, ccif->ap + 0xc);
+	ret = 0;
+out:
+	mutex_unlock(&ccif->tx_lock);
+	kfree_sensitive(copy);
+	return ret;
 }
 
 ssize_t ccci_ccif_handshake_status(struct ccci_ccif *ccif, char *buf)
