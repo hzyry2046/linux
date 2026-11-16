@@ -5,9 +5,11 @@
 MD继承ON接管、冷上电及普通CCIF prepare/stop/off已在8ec93b17bbb5实测。
 普通CCIF接收、runtime协商/回复与有状态HS1/HS2 consumer已离线实现验证，
 见[R7.3](MODEM-RUNTIME-HANDSHAKE.md)。随后增加SCP client与后置CCISM core，
-见[R7.4](MODEM-CCISM.md)。无MD CPU release caller或真实HS1/HS2；下一组
-CCIF2硬件owner、system端口与FS/RPC/NVRAM服务门控及实际能力表，
-随后合并通信测试，不为纯资源或dormant代码单独刷机。AI辅助源码分析与实现。
+见[R7.4](MODEM-CCISM.md)。CCIF2/system 与服务 dispatcher 已完成离线连接，
+见[R7.8](MODEM-PORT-DISPATCH.md)。下一组是本机 RPC 事实/用户后端、feature36
+cache、真实能力/ready gate 与 MD CPU 启停 owner；随后合并首次通信测试。
+没有 MD CPU release caller 或真实 HS1/HS2，不为 dormant 代码单独刷机。
+AI辅助源码分析与实现。
 SID3 shutdown 对照及启动电压契约见 [供电生命周期](MODEM-RAILS.md)。
 图形接续事项保存在 [GRAPHICS-TODO.md](GRAPHICS-TODO.md)，先推进基带框架。
 
@@ -563,3 +565,15 @@ R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、
 - [x] 实际endpoint/session/router/codec联合ASan/UBSan、13项FS/11项wire/10项runner及ARM64启用/恢复构建；本轮完全离线，无蜂窝验收。
 - [ ] FindFirst成功/DOS entry、递归Move/XDelete及其他所需操作；RPC实际provider/census及feature36 NVRAM cache策略。
 - [ ] accepted HS1/HS2与普通端口dispatcher、真实能力清单/ready gate、唯一MD启停owner和CPU/DMA停止原语，再合并首次放行测试。当前只构造服务入口，未调用arm/start。
+
+
+### R7.8 握手/服务/CCISM 分发与 typed RPC（2026-11-16）
+
+- [x] accepted HS1 只在 runtime 发布后转发并 arm endpoint，HS2 先入服务队列再交桥；普通 FS/RPC/system 统一分发，见[连接顺序](MODEM-PORT-DISPATCH.md)。
+- [x] 后端预留与 arm 分开、断连 containment；controller 故障只排队，HS2 后继续观察 RX 错误，停止失败保留父 offline veto。
+- [x] 内核/用户 RPC 按本机 A 分流；GPIO/ADC/EINT/DT immutable 事实 provider、已知不可用拒绝和真正未知 NO_OP，无本机事实自动填充。
+- [x] 私有副本 FindFirst/Next/Close、vendor DOSentry、递归 XDelete/Move 目标删除；128 共享句柄，40 项合成 FS/wire/runner 测试。
+- [x] actual C sanitizer、启用新组合/恢复原配置 ARM64 构建及 strict checkpatch；本轮完全离线，没有新增蜂窝验收。
+- [ ] 审计并填入本机 RPC 完整 namespace；实现确需的用户 RPC 与实际请求 census，FS-only runner 不能充当完整 bootstrap 后端。
+- [ ] 明确 feature36 cache 来源/填充和私有工作副本准备契约，按真实服务生成 runtime offers/ready gate。
+- [ ] 补唯一 MD CPU 启停 owner 和 CPU/DMA 停止证明，合并首次放行、HS1/runtime/HS2、CCISM、异常与停止实测；不拆 dormant 刷机。

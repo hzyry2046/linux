@@ -1,5 +1,12 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16 服务分发离线整合：accepted HS1 在 runtime 发布后才 arm 服务，
+HS2 顺序连接 service/CCISM，补 controller 故障通知、后端预留及父生命周期门控。
+内核 typed RPC 与 A 用户 RPC 分流，FS 枚举/递归删除补齐；没有本机 RPC 事实、
+完整用户后端或启动 ready gate。实际 C sanitizer/合成 FS 回归及启用/恢复 ARM64
+构建通过；未操作设备、未放行 MD，蜂窝支持状态不变。
+见[端口分发与下一步](MODEM-PORT-DISPATCH.md)。
+
 2026-11-16 Linux服务入口离线接续：新增有序session、独占privileged字符端点、
 父关电/prepare门控及显式FS runner；补普通文件Move、Detail、CMPT失败应答。
 实际endpoint/session/router/codec联合sanitizer及ARM64启用/恢复构建通过。

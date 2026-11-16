@@ -34,7 +34,8 @@
 
 `CONFIG_OP6893_CCCI_SERVICES` 默认关闭。最新实现已加入Linux有序worker/timer、
 独占字符入口和手动FS runner；submit复制、回调不重入及真实停止契约仍保留。
-尚无活跃dispatcher/MD启动caller、硬件RPC provider或服务就绪门控，详见上方接续文档。
+dispatcher 与纯 typed RPC provider 已离线连接，但无活跃 MD 启动 caller、
+本机完整硬件事实或服务就绪门控，见[当前集成](MODEM-PORT-DISPATCH.md)。
 
 ## 私有文件工作副本原型
 
@@ -44,15 +45,13 @@
 不提供原件导入、复制、恢复或直接挂载 Android 数据的操作。
 
 支持 Open/Seek/Read/Write/Close/CreateDir/GetFileSize、两个已观察 GetDrive
-查询、SetDiskFlag、普通文件Move、GetFileDetail及受限CMPT_Read成功/失败阶段。UTF-16LE 路径经逐层目录 fd
+查询、SetDiskFlag、Move、GetFileDetail、FindFirst/Next/Close、递归 XDelete 及受限 CMPT_Read 成功/失败阶段。UTF-16LE 路径经逐层目录 fd
 遍历，拒绝上跳、符号链接及特殊文件；写入前检查普通文件及单链接，Close
 按已确认 flags 执行 fsync。每个请求先核对 generation，shutdown 先撤销代际
 再关闭句柄。测试只使用临时合成树，没有访问真实 NVRAM。
 
 下列项保留 UnsupportedOperation，不能序列化成猜测的 vendor errno：
 
-- Move目标为目录时的递归XDelete语义。
-- FindFirst成功DOS entry及查找；缺目录失败布局已恢复。
 - CMPT非完整五步、非0x700 flags。
 - 未观察GetDrive查询、其他opcode及目录/OTP/device/ioctl操作。
 
@@ -63,8 +62,8 @@
 
 1. 完成仍未支持的FS语义；wire与已实现操作应答编码已接，按实际实现生成能力清单，
    未知语义阻止启动，不用通用 NO_OP 或零值代答。
-2. Linux worker/队列和后端入口已接，继续连普通端口dispatcher，
-   关联超时/断连/HS2/STOP；按真实 provider 准备内核与用户态 RPC。
+2. Linux worker/队列、后端入口和普通端口 dispatcher 已接；继续按真实
+   provider 准备内核事实与用户态 RPC，以及能力清单/ready gate。
    当前缺完整冷启动 RPC census，历史 flight 查询不能代替该清单。
 3. 明确 runtime feature36 NVRAM cache 的填充策略；预留内存不是服务能力。
 4. 补唯一 MD 启停 owner 与真实 CPU/DMA 停止原语，再合并首次 CPU 释放、

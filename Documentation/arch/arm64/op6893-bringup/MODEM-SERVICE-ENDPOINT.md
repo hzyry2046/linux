@@ -11,7 +11,8 @@
 MD构造路径创建session和 `/dev/ccci-service-<device-name>`。构造只分配存储、
 注册入口，不访问MD寄存器、不启动IRQ/会话或MD。原型端点为0600并要求
 CAP_SYS_RAWIO，单后端独占打开。打开前后的准备仍由唯一MD owner负责。
-当前没有调用端点arm或MD释放的上层caller。
+新 dispatcher 已连接 accepted HS1 后的 arm，但尚无调用 dispatcher prepare/start
+或 MD 释放的上层 caller，见[端口分发](MODEM-PORT-DISPATCH.md)。
 
 session以私有有序工作队列串行执行router，32项有界输入队列复制请求/完整
 回复。事件时间包含排队延迟；首片起60秒覆盖重组、后端与回复发布。
@@ -33,7 +34,7 @@ stop(false)无副作用。父prepare/off/shutdown在服务仍armed时拒绝继�
 
 状态位于父设备只读 `services` 属性，始终显示 `experimental=1 service_ready=0`。
 支持未启动/已停止对象的清理与打开FD的引用存活；主动移除活跃会话仍不支持，
-拒绝销毁并保留callback存储。当前驱动内建、禁止bind属性且没有arm caller；
+拒绝销毁并保留callback存储。当前驱动内建、禁止bind属性且没有活跃启动 caller；
 未来添加主动移除需同时解决父CCIF/电源资源与所有生产者生命周期，不能只释放端点。
 
 ## 私有实验记录格式
@@ -61,12 +62,12 @@ sequence/assert和FS分片仍由内核持有。不能把一次record拆成多次
 本轮对同一个AP `ccci_mdinit` 做离线静态分析，记录hash和函数/文件偏移，
 没有搬入binary、反编译转储或私人文件。见[恢复的FS语义](MODEM-FS-SEMANTICS.md)。
 
-- Move是普通文件复制，源保留；按已证明flags处理目标删除和只读错误，
+- Move是普通文件复制，源保留；支持递归目标删除，按已证明flags处理只读错误，
   先完整暂存源数据再截断目标，不使用rename，不宣称原子替换或掉电持久性。
 - GetFileDetail成功含24字节mtime/atime/ctime；错误中vendor未初始化字段清零。
 - CMPT_Read完整五步/0x700路径支持真实阶段完成位图、错误、size/count/data四参数。
-- FindFirst缺目录失败可返回已证明的三参数；成功DOS entry仍未实现，
-  不能用标准DOS时间编码猜测本机vendor的特殊行为。
+- FindFirst/Next/Close 已支持成功 DOSentry 和共享句柄，按本机 vendor 的特殊
+  时间编码实现；XDelete 支持递归 flags 和删除数量返回，见 FS 语义文档。
 
 `tools/modem_fs_wire.py`对canonical包及每个操作的参数宽度/长度先做完整检查，
 再调用私有工作副本。`tools/modem_service_backend.py`仅在调用者显式提供
@@ -86,7 +87,7 @@ sequence/assert和FS分片仍由内核持有。不能把一次record拆成多次
 首轮构建暴露current宏碰撞，已改名并在host shim加入同名宏防回归。
 证据见[evidence/modem-service-endpoint-validation.json](evidence/modem-service-endpoint-validation.json)。
 
-接续先完成FindFirst成功兼容和递归Move/XDelete，明确实际硬件RPC provider与
-feature36 cache填充，再接唯一MD启动/停止owner、accepted HS1/HS2与端口dispatcher。
-当前存在receive/HS2入口，但尚未连到活跃控制consumer；能力清单/ready gate及
-真实CPU/DMA停止原语仍缺，不能直接凭本轮入口释放MD。
+最新离线接续已增加后端 reservation、内核 typed RPC 分流及 accepted HS1/HS2
+端口 dispatcher，见[集成与当前剩余条件](MODEM-PORT-DISPATCH.md)。当前仍无
+活跃启动 caller、本机实际 RPC 事实或用户 RPC 后端、feature36 cache 策略、
+真实 ready gate 和 CPU/DMA 停止原语，不能凭入口存在释放 MD。

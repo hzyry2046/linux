@@ -1,0 +1,163 @@
+{
+  "date": "2026-11-16",
+  "implementation_base": "90fffa41c2e11f9687ed524e1e3d000be150b9b0",
+  "ai_assistance": "Codex with delegated implementation and independent review; no DCO certification",
+  "feature": "Default-off accepted HS1/HS2 and normal-port dispatcher, backend reservation, typed RPC providers, kernel/user routing and expanded private-copy FS semantics",
+  "validation": {
+    "tests": [
+      {
+        "script": "test_modem_ccif.py",
+        "result": "pass",
+        "log_sha256": "72cfc66f1214f9315fc6954d783b11753e203320538c8b177ce5424ea3c9d809"
+      },
+      {
+        "script": "test_modem_handshake.py",
+        "result": "pass",
+        "log_sha256": "15279a027ccfc63f0219d10be14b1be2634f999f0c802e8b35aab1676f70cc6e"
+      },
+      {
+        "script": "test_modem_rpc_provider.py",
+        "result": "pass",
+        "log_sha256": "d20a0fd9bd7b48d01c3354e716d395deb2cf3a485af7fbb4d4d8df3e728232e6"
+      },
+      {
+        "script": "test_modem_service_endpoint.py",
+        "result": "pass",
+        "log_sha256": "1b97145c2955923d375784c619679c866b011fbae5c360ef502d06330ea29eca"
+      },
+      {
+        "script": "test_modem_port_dispatch.py",
+        "result": "pass",
+        "log_sha256": "f9ced05a3702ec3a30cabf05f705fec4a85777f090faa4f9a9f989027954821f"
+      },
+      {
+        "script": "test_modem_fs_backend.py",
+        "result": "pass",
+        "log_sha256": "fa5bca7ff4705c556b2baf4f190f5b3670750b8d3c9b5b86885486091f7d34f7"
+      },
+      {
+        "script": "test_modem_fs_wire.py",
+        "result": "pass",
+        "log_sha256": "e6cbbad6e7b47b4ec33a62b4b503cca172728201955b091def9fd9186f21f6b7"
+      },
+      {
+        "script": "test_modem_service_backend.py",
+        "result": "pass",
+        "log_sha256": "b3422b145032ac3a56ce40c0e8bbe6f04030fe26a1ce1f5388afec7a5b7cbee0"
+      },
+      {
+        "script": "test_modem_service_session.py",
+        "result": "pass",
+        "log_sha256": "7a0903801d60ba9ac558ff3f623c4eed4fdfe2a99d4db1c5be2c996d4e778230"
+      },
+      {
+        "script": "test_modem_service_router.py",
+        "result": "pass",
+        "log_sha256": "a3a2338ac3bd80d68a8de084d4aea4adf3b31ad6b97fa893fd2c5d5ceb019cc8"
+      },
+      {
+        "script": "test_modem_ccif_service_tx.py",
+        "result": "pass",
+        "log_sha256": "61dc9db7d4e596b02c868d502f5f60797a30adf79c7348608dc7efdff463496a"
+      },
+      {
+        "script": "test_modem_ccif_system_tx.py",
+        "result": "pass",
+        "log_sha256": "a9d69b29b8b346844e71872834b2a35e704923c66c55fbd2863d8dc84488d9fa"
+      },
+      {
+        "script": "test_modem_fs_protocol.py",
+        "result": "pass",
+        "log_sha256": "393e6902828047584c6214f5b65d89817b7c459246193c8f4f6ed65e111931ac"
+      },
+      {
+        "script": "test_modem_rpc_protocol.py",
+        "result": "pass",
+        "log_sha256": "8ed4a4ab443bc5b562c56dab2b553806a2d817f881a173f3a4f2f3acfb013794"
+      },
+      {
+        "script": "test_modem_ccism.py",
+        "result": "pass",
+        "log_sha256": "d68d3547e86fcf56c3a63bfd10b8a86760e66cb41140affeb7ecc42166966c26"
+      },
+      {
+        "script": "test_modem_ccism_bridge.py",
+        "result": "pass",
+        "log_sha256": "79cdd19626445aaf6ad9e1d995340439a97a69fd6e9339abb69f650720d85939"
+      },
+      {
+        "script": "test_modem_ccism_session.py",
+        "result": "pass",
+        "log_sha256": "a9793b4698c3af7c2c73e1618cf0729b3c433f7474ee53d81ec8650923811ca7"
+      },
+      {
+        "script": "test_modem_platform.py",
+        "result": "pass",
+        "log_sha256": "59a99baf7d4b5f436465b77a3d410d4c6135d44f9ed308c565be278bd2312249"
+      }
+    ],
+    "actual_c_asan_ubsan": "All listed C harnesses; pure Python backend and runner use synthetic private trees; wire fixture links actual FS codec",
+    "synthetic_fs_backend_tests": 19,
+    "synthetic_fs_wire_tests": 11,
+    "synthetic_fs_runner_tests": 10,
+    "dispatcher_dependencies": "Deterministic strict ordering mocks; actual dispatcher and wire decoder. Does not establish SMP or hardware behavior.",
+    "endpoint_integration": "Actual endpoint/session/router/codecs/provider and fops under host kernel shims; synthetic configured facts only.",
+    "arm64_enabled_image_gz_modules": true,
+    "arm64_original_config_restored_image_gz_modules": true,
+    "build_warnings": 0,
+    "strict_file_checkpatch": "0 errors, 0 warnings, 0 checks",
+    "regression_adjustment": "Avoided exposing control header disabled-config inline stubs through ccif.h; reran bridge and owner tests after the header dependency change.",
+    "series_checkpatch": "0 errors, 1 generic new-file MAINTAINERS review warning, 0 checks"
+  },
+  "activation": {
+    "default_disabled": true,
+    "dormant_parent_constructor": true,
+    "accepted_hs1_arm_connected": true,
+    "dispatcher_prepare_start_caller": false,
+    "md_cpu_release_caller": false,
+    "populated_board_rpc_facts": false,
+    "user_rpc_backend": false,
+    "feature36_cache_population": false,
+    "service_ready_gate": false,
+    "hardware_actions": false,
+    "new_hardware_support_claim": false
+  },
+  "contracts": {
+    "prepare": "One attempt, exact connected backend generation reserved before SCP lease; reservation is not readiness.",
+    "hs1": "Forward accepted SRAM HS1 only after successful runtime publication; arm service before FS/RPC admission.",
+    "hs2": "Queue endpoint HS2 before bridge HS2; system RX routed only after accepted HS2.",
+    "rpc": "A 400f/4010 go to userspace; kernel typed providers use immutable audited namespaces. Known unavailable faults, unknown single NO_OP=-1. Default provider NULL.",
+    "stop": "Requires external real MD CPU/DMA stop proof, then RX/controller join, fault work join, endpoint cleanup and CCISM/SCP stop. Failure retains offline veto.",
+    "active_unbind": "Unsupported; dormant built-in cleanup only, future owner must retain all parent resources and producer lifetimes.",
+    "fs": "Private disposable working trees only; shared 128 file/search handles, vendor DOSentry, XDelete counts and recursive Move destination deletion; no real NVRAM accessed."
+  },
+  "remaining": [
+    "Actual board RPC namespaces and required user operations/request census",
+    "feature36 cache provenance and population",
+    "Actual service capability/runtime offer and ready gate",
+    "Unique MD CPU start/stop owner with real CPU/DMA stop proof",
+    "Combined first MD release/HS1/runtime/HS2/CCISM and exception/stop hardware validation"
+  ],
+  "local_evidence_directory": "/data/src/mainline/mt6893-direct/evidence/modem-port-dispatch",
+  "local_evidence_sha256": {
+    "build-enabled-final.log": "d0bf8c1f13319130e206c860ed1fdd9a2af7b451ed034d703d0ad67ca10afe79",
+    "build-restored.log": "0be5d26131efc57d9eca86ead2539bd4b7d0ef82835942733c7e503652ad4b94",
+    "config.enabled": "bb8f7990a11d191fc34b87fc89da25c18da4934ac8ae06f90a25101b6892e1ef",
+    "config.original": "c7cc77e1dc501a0ca9301cdd05aa64880c28f26383d026f8f12bcbe784a29280",
+    "config.restored": "c7cc77e1dc501a0ca9301cdd05aa64880c28f26383d026f8f12bcbe784a29280",
+    "maintainers.txt": "a1b209a8d0fdb6b83502e2a5f4db5b595719c3cb55157867d18f369b214bc0d4",
+    "style-final.log": "d5583f614bca0a431d0b7e8edd7022fb10518e8926d03a54e31c6007c5e3b1d2",
+    "series-checkpatch.log": "fee8c17d521010571794013ba20c7ab0c763c21c50f3be9458dbd4612bab3384"
+  },
+  "source_sha256": {
+    "drivers/misc/mediatek/ccci/ccci-ccif-control.c": "f4e1c5f60bf799fd82b579bb9682b9fe371118c268cfb9b924deab11034a1ca7",
+    "drivers/misc/mediatek/ccci/ccci-handshake.c": "720b818647c64126e7eef3860b2f2e7e1f9ce490e159466a2421823461b86f38",
+    "drivers/misc/mediatek/ccci/ccci-port-dispatch.c": "0e13be0945a0d50764c5fc0698159cdad94d85950cabc8448b49c6169b6ce937",
+    "drivers/misc/mediatek/ccci/ccci-rpc-provider.c": "77d467210c821c71bca24b6a4c985c931277491f8596964a681e83cd3fb1c245",
+    "drivers/misc/mediatek/ccci/ccci-service-endpoint.c": "c6e5b83d8dbf6c84ba7f7b4bf225a6b8e29ce1bd38b8e855310e53cadd8d3c4e"
+  },
+  "implementation_commits": [
+    "59fc6294f",
+    "e330c770f"
+  ]
+}
