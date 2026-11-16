@@ -222,7 +222,12 @@ void ccci_scp_receive_stop(struct ccci_scp_receive *receive)
 
 static void ccci_scp_receive_release(void *data)
 {
-	ccci_scp_receive_quiesce(data, true);
+	struct ccci_scp_receive *receive = data;
+	u32 i;
+
+	ccci_scp_receive_quiesce(receive, true);
+	for (i = 0; i < receive->requested; i++)
+		irq_clear_status_flags(receive->irqs[i], IRQ_DISABLE_UNLAZY);
 }
 
 int ccci_scp_receive_start(struct ccci_scp_receive *receive,
@@ -367,6 +372,8 @@ int ccci_scp_receive_reserve(struct platform_device *pdev, struct mutex *owner_l
 				       IRQF_NO_AUTOEN, "op6893-scp-rx", receive);
 		if (ret)
 			goto stop;
+		/* GIC lacks irq_disable: STOP must mask hardware, not disable lazily. */
+		irq_set_status_flags(number, IRQ_DISABLE_UNLAZY);
 		receive->disabled |= BIT(i);
 		receive->requested++;
 	}

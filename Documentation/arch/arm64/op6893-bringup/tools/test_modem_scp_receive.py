@@ -21,6 +21,8 @@ preamble = preamble.replace('assert(allocation);return allocation;',
 preamble += r'''
 #include <stddef.h>
 #define IRQF_NO_AUTOEN 0x80000
+#define IRQ_DISABLE_UNLAZY 1
+static bool unlazy[5],hardware_masked[5];
 #define IRQ_HANDLED 1
 #define IRQCHIP_STATE_MASKED 1
 #define container_of(p,t,m) ((t *)((char *)(p)-offsetof(t,m)))
@@ -57,16 +59,18 @@ static int ccci_scp_irq_resolve(struct platform_device *p,u32 b){assert(p==&pdev
 static int devm_request_irq(struct device *d,int n,irqreturn_t (*fn)(int,void *),unsigned f,const char *name,void *data){
  unsigned b=n-100;assert(d==&pdev.dev && b<5 && f==IRQF_NO_AUTOEN);
  if(request_failure==(int)b)return -EBUSY;
- assert(!depths[b]);depths[b]=1;handlers[b]=fn;handler_data[b]=data;requested_irqs++;return 0;
+ assert(!depths[b]);depths[b]=1;hardware_masked[b]=true;handlers[b]=fn;handler_data[b]=data;requested_irqs++;return 0;
 }
-static void disable_irq_nosync(int n){unsigned b=n-100;assert(b<5 && !depths[b]);depths[b]++;}
-static void enable_irq(int n){unsigned b=n-100;assert(b<5 && depths[b]==1);depths[b]--;}
+static void irq_set_status_flags(int n,unsigned f){assert(f==IRQ_DISABLE_UNLAZY);unlazy[n-100]=true;}
+static void irq_clear_status_flags(int n,unsigned f){assert(f==IRQ_DISABLE_UNLAZY);unlazy[n-100]=false;}
+static void disable_irq_nosync(int n){unsigned b=n-100;assert(b<5 && !depths[b]);depths[b]++;if(unlazy[b])hardware_masked[b]=true;}
+static void enable_irq(int n){unsigned b=n-100;assert(b<5 && depths[b]==1);depths[b]--;hardware_masked[b]=false;}
 static void synchronize_irq(int n){assert(!owner.held && n>=100 && n<105);syncs++;if(sync_hook){void (*h)(void)=sync_hook;sync_hook=NULL;h();}}
 static void cancel_work_sync(struct work_struct *w){assert(!owner.held && !w->running);cancels++;w->pending=false;}
 static int devm_add_action_or_reset(struct device *d,void (*fn)(void *),void *data){
  assert(d==&pdev.dev);if(action_failure){fn(data);return -ENOMEM;}release_action=fn;release_data=data;return 0;
 }
-static int irq_get_irqchip_state(int n,int state,bool *v){assert(state==IRQCHIP_STATE_MASKED);*v=depths[n-100];return 0;}
+static int irq_get_irqchip_state(int n,int state,bool *v){assert(state==IRQCHIP_STATE_MASKED);*v=hardware_masked[n-100];return 0;}
 '''
 harness = r'''
 static const u32 tx[]={@TX@},rt[]={@RX@};
@@ -93,15 +97,15 @@ static void reset_model(void){
  for(unsigned i=0;i<6;i++){u64 base=i?0x107fb000+(i-1)*4096:0x10724000;resources[i]=(struct resource){base,base+4095,IORESOURCE_MEM};}
  missing=bad_map=resolve_failure=request_failure=-1;spec_failure=0;nomem=fail_queue=action_failure=new_arrival=continuous=false;
  lookups=maps=reads=writes=barriers=checks=fail_check=requested_irqs=syncs=cancels=0;store_outstanding=false;
- memset(depths,0,sizeof(depths));memset(stage,0,sizeof(stage));memset(copied,0,sizeof(copied));memset(known,0,sizeof(known));
+ memset(unlazy,0,sizeof(unlazy));memset(hardware_masked,0,sizeof(hardware_masked));memset(depths,0,sizeof(depths));memset(stage,0,sizeof(stage));memset(copied,0,sizeof(copied));memset(known,0,sizeof(known));
  assert(!ccci_scp_build_layout(tx,ARRAY_SIZE(tx),rt,ARRAY_SIZE(rt),5,&layout));
  for(unsigned j=0;j<layout.rx_count;j++)known[layout.rx[j].mbox]|=BIT(layout.rx[j].irq);
  reset_generation=17;assert(!ccci_scp_mmio_reserve(&pdev,&mmio));
 }
 static int reserve(void){return ccci_scp_receive_reserve(&pdev,&owner,mmio,prerequisite,&reset_generation,&receive);}
-static void setup(void){reset_model();assert(!reserve());assert(requested_irqs==5 && !checks && !reads && !writes);for(unsigned b=0;b<5;b++)assert(depths[b]==1);}
+static void setup(void){reset_model();assert(!reserve());assert(requested_irqs==5 && !checks && !reads && !writes);for(unsigned b=0;b<5;b++)assert(depths[b]==1 && hardware_masked[b]);}
 static void messages(void){for(unsigned b=0;b<5;b++){for(unsigned i=0;i<256;i++)pages[b+1][i]=(u8)(i+b+7);put_unaligned_le32(known[b],pages[b+1]+0x10c);}}
-static void contained(void){assert(receive->fault && !receive->armed && receive->queue.fault && !receive->queue.count && mmio->fault);for(unsigned b=0;b<5;b++)assert(depths[b]==1);}
+static void contained(void){assert(receive->fault && !receive->armed && receive->queue.fault && !receive->queue.count && mmio->fault);for(unsigned b=0;b<5;b++)assert(depths[b]==1 && hardware_masked[b]);}
 static void start(unsigned budget){assert(!ccci_scp_receive_start(receive,&layout,reset_generation,budget));assert(receive->work.pending);}
 /* Inject at final unmask gate unlock while work still runs. */
 static void irq_after_unmask(void){if(!depths[0])trigger(0);else unlock_hook=irq_after_unmask;}
@@ -115,7 +119,7 @@ int main(void){
   reset_model();if(type)request_failure=i;else resolve_failure=i;
   assert(reserve()==(type?-EBUSY:-EPROBE_DEFER) && !receive);
   assert(requested_irqs==i && syncs==i && cancels==1);
-  for(unsigned b=0;b<i;b++)assert(depths[b]==1);
+  for(unsigned b=0;b<i;b++)assert(depths[b]==1 && hardware_masked[b]);
  }
  reset_model();spec_failure=-EINVAL;assert(reserve()==-EINVAL && !requested_irqs);
  reset_model();nomem=true;assert(reserve()==-ENOMEM && !requested_irqs);
@@ -138,6 +142,7 @@ int main(void){
  /* STOP closes before synchronizing; late IRQ cannot queue, no owner-held wait. */
  trigger(0);sync_hook=late_irq;ccci_scp_receive_stop(receive);
  assert(!receive->work.pending && receive->quiesced && !receive->generation && syncs==5 && cancels==1);
+ for(unsigned b=0;b<5;b++)assert(depths[b]==1 && hardware_masked[b]);
  assert(ccci_scp_receive_start(receive,&layout,17,4)==-ESTALE);
  reset_generation=18;start(4);run_work(&receive->work);assert(!receive->fault);
  release_action(release_data);release_action=NULL;assert(receive->terminal);
