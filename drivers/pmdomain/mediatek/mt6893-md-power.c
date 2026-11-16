@@ -32,7 +32,7 @@ static int mt6893_md_wait(struct regmap *map, unsigned int reg,
 					MD_POLL_US, MD_TIMEOUT_US);
 }
 
-/* Only adopt an already quiescent domain; never synchronize by cycling it. */
+/* Recognize exact OFF or inherited ON without changing hardware. */
 int mt6893_md_power_init(struct mt6893_md_power *md, struct regmap *spm,
 			 struct regmap *infra)
 {
@@ -40,6 +40,7 @@ int mt6893_md_power_init(struct mt6893_md_power *md, struct regmap *spm,
 	int ret;
 
 	md->state = MT6893_MD_POWER_UNKNOWN;
+	md->inherited_on = false;
 	md->step = "initial-state";
 	if (!spm || !infra)
 		return -EINVAL;
@@ -61,7 +62,13 @@ int mt6893_md_power_init(struct mt6893_md_power *md, struct regmap *spm,
 	ret = regmap_read(infra, 0xbc4, &protect3);
 	if (ret)
 		return ret;
-	if ((status & MD_PWR_ACK) || (control & (MD_PWR_ON | MD_RESET_B)) ||
+	if ((status & MD_PWR_ACK) &&
+	    (control & (MD_PWR_ON | MD_RESET_B)) == (MD_PWR_ON | MD_RESET_B) &&
+	    !(iso & GENMASK(1, 0)) && !(protect1 & MD_PROTECT1) &&
+	    !(protect2 & MD_PROTECT2) && !(protect3 & MD_PROTECT3)) {
+		md->state = MT6893_MD_POWER_ON;
+		md->inherited_on = true;
+	} else if ((status & MD_PWR_ACK) || (control & (MD_PWR_ON | MD_RESET_B)) ||
 	    (iso & GENMASK(1, 0)) != GENMASK(1, 0) ||
 	    (protect1 & MD_PROTECT1) != MD_PROTECT1 ||
 	    (protect2 & MD_PROTECT2) != MD_PROTECT2 ||
@@ -70,8 +77,18 @@ int mt6893_md_power_init(struct mt6893_md_power *md, struct regmap *spm,
 
 	md->spm = spm;
 	md->infra = infra;
-	md->state = MT6893_MD_POWER_OFF;
-	md->step = "off";
+	if (!md->inherited_on)
+		md->state = MT6893_MD_POWER_OFF;
+	md->step = md->inherited_on ? "lk-on-held" : "off";
+	return 0;
+}
+
+/* Caller holds an active genpd runtime reference and has checked LK completion. */
+int mt6893_md_power_adopt(struct mt6893_md_power *md)
+{
+	if (md->state != MT6893_MD_POWER_ON || !READ_ONCE(md->inherited_on))
+		return -EINVAL;
+	WRITE_ONCE(md->inherited_on, false);
 	return 0;
 }
 
@@ -130,6 +147,9 @@ int mt6893_md_power_set(struct mt6893_md_power *md, bool on)
 		return -EIO;
 	if (md->state == MT6893_MD_POWER_UNKNOWN)
 		return -EINVAL;
+	/* Never let unused-domain work power off LK before the explicit handoff. */
+	if (!on && READ_ONCE(md->inherited_on))
+		return -EBUSY;
 	if (md->state == (on ? MT6893_MD_POWER_ON : MT6893_MD_POWER_OFF))
 		return 0;
 

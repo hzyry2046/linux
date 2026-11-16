@@ -19,10 +19,12 @@ struct mt6893_md_power {
 	struct regmap *infra;
 	enum mt6893_md_power_state state;
 	const char *step;
+	bool inherited_on;
 };
 
 int mt6893_md_power_init(struct mt6893_md_power *md, struct regmap *spm,
 			 struct regmap *infra);
 int mt6893_md_power_set(struct mt6893_md_power *md, bool on);
+int mt6893_md_power_adopt(struct mt6893_md_power *md);
 
 #endif

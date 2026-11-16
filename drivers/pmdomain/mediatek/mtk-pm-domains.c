@@ -13,9 +13,11 @@
 #include <linux/of_clk.h>
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
+#include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/soc/mediatek/infracfg.h>
+#include <linux/soc/mediatek/mt6893-md.h>
 #include <linux/soc/mediatek/mtk_sip_svc.h>
 
 #include "mt6735-pm-domains.h"
@@ -798,7 +800,7 @@ static int scpsys_power_off_internal(struct scpsys_domain *pd)
 
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_MT6893_MD_PWRSEQ)) {
 		ret = mt6893_md_power_set(&pd->md_power, false);
-		if (ret)
+		if (ret && !(ret == -EBUSY && READ_ONCE(pd->md_power.inherited_on)))
 			dev_err(scpsys->dev, "MD1 power off failed at %s: %d\n",
 				pd->md_power.step, ret);
 		return ret;
@@ -931,7 +933,7 @@ generic_pm_domain *scpsys_add_one_domain(struct scpsys *scpsys, struct device_no
 		ret = mt6893_md_power_init(&pd->md_power, scpsys->base, infra);
 		if (ret)
 			return dev_err_ptr_probe(scpsys->dev, ret,
-						"MD1 is not safely off; refusing adoption\n");
+						"MD1 state is incomplete; refusing adoption\n");
 	}
 
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_DOMAIN_SUPPLY)) {
@@ -1022,7 +1024,9 @@ generic_pm_domain *scpsys_add_one_domain(struct scpsys *scpsys, struct device_no
 	 * software.  The unused domains will be switched off during
 	 * late_init time.
 	 */
-	if (MTK_SCPD_CAPS(pd, MTK_SCPD_KEEP_DEFAULT_OFF)) {
+	if (MTK_SCPD_CAPS(pd, MTK_SCPD_MT6893_MD_PWRSEQ)) {
+		/* Preserve LK's exact state; no power callback during registration. */
+	} else if (MTK_SCPD_CAPS(pd, MTK_SCPD_KEEP_DEFAULT_OFF)) {
 		bool domain_is_on;
 
 		if (scpsys->soc_data->type == SCPSYS_MTCMOS_TYPE_HW_VOTER)
@@ -1047,7 +1051,9 @@ generic_pm_domain *scpsys_add_one_domain(struct scpsys *scpsys, struct device_no
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_ACTIVE_WAKEUP))
 		pd->genpd.flags |= GENPD_FLAG_ACTIVE_WAKEUP;
 
-	if (MTK_SCPD_CAPS(pd, MTK_SCPD_KEEP_DEFAULT_OFF))
+	if (MTK_SCPD_CAPS(pd, MTK_SCPD_MT6893_MD_PWRSEQ))
+		pm_genpd_init(&pd->genpd, NULL, pd->md_power.state == MT6893_MD_POWER_OFF);
+	else if (MTK_SCPD_CAPS(pd, MTK_SCPD_KEEP_DEFAULT_OFF))
 		pm_genpd_init(&pd->genpd, NULL, true);
 	else
 		pm_genpd_init(&pd->genpd, NULL, false);
@@ -1063,6 +1069,25 @@ err_put_clocks:
 	clk_bulk_put(pd->num_clks, pd->clks);
 	return ERR_PTR(ret);
 }
+
+int mt6893_md_domain_allow_off(struct device *dev)
+{
+	struct generic_pm_domain *genpd;
+	struct scpsys_domain *pd;
+
+	if (!dev || !dev->pm_domain || !dev->power.subsys_data ||
+	    !dev->power.subsys_data->domain_data || !pm_runtime_active(dev) ||
+	    atomic_read(&dev->power.usage_count) <= 0)
+		return -EINVAL;
+	genpd = pd_to_genpd(dev->pm_domain);
+	if (genpd->power_on != scpsys_power_on)
+		return -EINVAL;
+	pd = to_scpsys_domain(genpd);
+	if (!MTK_SCPD_CAPS(pd, MTK_SCPD_MT6893_MD_PWRSEQ))
+		return -EINVAL;
+	return mt6893_md_power_adopt(&pd->md_power);
+}
+EXPORT_SYMBOL_GPL(mt6893_md_domain_allow_off);
 
 static int scpsys_add_subdomain(struct scpsys *scpsys, struct device_node *parent,
 				u8 *domains_idx, u8 *num_domains)

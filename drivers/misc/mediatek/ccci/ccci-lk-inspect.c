@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Optional read-only inspection of LK metadata, not a modem control driver. */
+/* LK metadata validation; optional same-board MD platform owner. */
 #include <linux/io.h>
 #include <linux/ioport.h>
 #include <linux/module.h>
@@ -9,6 +9,7 @@
 #include <linux/slab.h>
 
 #include "ccci-lk.h"
+#include "ccci-md-platform.h"
 #include "ccci-smem.h"
 
 static int ccci_lk_get_region(struct device_node *node, const char *name,
@@ -131,6 +132,11 @@ static int ccci_lk_inspect_probe(struct platform_device *pdev)
 	}
 	dev_info(dev, "LK metadata valid: version=%u tags=%u bytes=%u ccb=%u; modem not started\n",
 		 header.version, header.count, header.size, layout.ccb_present);
+	if (IS_ENABLED(CONFIG_OP6893_CCCI_MD_PLATFORM) &&
+	    of_device_is_compatible(dev->of_node, "realme,op6893-modem-platform")) {
+		stage = "platform-owner";
+		ret = ccci_md_platform_create(pdev, smem);
+	}
 out:
 	/* Do not retain or expose unknown/private payloads, even on parse failure. */
 	kfree_sensitive(snapshot);
@@ -143,15 +149,27 @@ out:
 
 static const struct of_device_id ccci_lk_inspect_match[] = {
 	{ .compatible = "realme,op6893-modem-handoff" },
+#ifdef CONFIG_OP6893_CCCI_MD_PLATFORM
+	{ .compatible = "realme,op6893-modem-platform" },
+#endif
 	{}
 };
 MODULE_DEVICE_TABLE(of, ccci_lk_inspect_match);
 
+static void ccci_lk_inspect_shutdown(struct platform_device *pdev)
+{
+	if (IS_ENABLED(CONFIG_OP6893_CCCI_MD_PLATFORM) &&
+	    of_device_is_compatible(pdev->dev.of_node, "realme,op6893-modem-platform"))
+		ccci_md_platform_shutdown(pdev);
+}
+
 static struct platform_driver ccci_lk_inspect_driver = {
 	.probe = ccci_lk_inspect_probe,
+	.shutdown = ccci_lk_inspect_shutdown,
 	.driver = {
 		.name = "op6893-ccci-lk",
 		.of_match_table = ccci_lk_inspect_match,
+		.suppress_bind_attrs = true,
 	},
 };
 module_platform_driver(ccci_lk_inspect_driver);

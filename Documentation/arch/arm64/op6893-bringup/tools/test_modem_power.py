@@ -179,6 +179,19 @@ int main(void) {
   }
   assert(mt6893_md_power_init(&md,&spm,&infra)==-EBUSY && calls==6);
  }
+ /* Current mainline, e8509e81dbc3: exact sanitized AP-side LK ON snapshot. */
+ setup(&md,&spm,&infra);
+ spm.reg[0x16c/4]=0x10580fff;spm.reg[0x300/4]=0xd;spm.reg[0x398/4]=0;
+ infra.reg[0x228/4]=0xe70c500e;infra.reg[0xb90/4]=1;infra.reg[0xbc4/4]=0x50000;
+ assert(!mt6893_md_power_init(&md,&spm,&infra) && calls==6);
+ assert(md.state==MT6893_MD_POWER_ON && md.inherited_on);
+ clear_events();assert(mt6893_md_power_set(&md,false)==-EBUSY && !calls);
+ assert(!mt6893_md_power_set(&md,true) && !calls);
+ assert(!mt6893_md_power_adopt(&md));
+ assert(mt6893_md_power_adopt(&md)==-EINVAL);
+ assert(!mt6893_md_power_set(&md,false));compare(expected_off,12);
+ assert(md.state==MT6893_MD_POWER_OFF && !md.inherited_on);
+ assert(mt6893_md_power_adopt(&md)==-EINVAL);
  /* Exercise the actual wait predicate for stuck ON/OFF ACK and read error. */
  for (unsigned set=0;set<2;set++) {
   setup(&md,&spm,&infra); spm.reg[0x16c/4]=set?1:0;
@@ -189,6 +202,7 @@ int main(void) {
  }
  puts("PASS: actual MD1 sequence, vendor order, adjacent bits, 21 failure points,");
  puts("      6 initial read errors, 8 invalid states, 5 stuck ACKs and fault latch");
+ puts("      exact live LK ON adoption, unused-OFF veto and explicit handoff");
  return 0;
 }
 '''
@@ -200,7 +214,8 @@ with tempfile.TemporaryDirectory(prefix='op6893-md-power-') as temporary:
         'types.h': '#include <stdint.h>\n#include <stdbool.h>\ntypedef uint32_t u32;\n',
         'bitops.h': '#define BIT(n) (1U << (n))\n#define GENMASK(h,l) (((~0U) << (l)) & (~0U >> (31-(h))))\n',
         'errno.h': '#include <asm-generic/errno.h>\n',
-        'kernel.h': '#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))\n',
+        'kernel.h': '#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))\n'
+                    '#define READ_ONCE(x) (x)\n#define WRITE_ONCE(x,y) ((x)=(y))\n',
         'regmap.h': '', 'iopoll.h': '',
     }.items():
         (root/'linux'/name).write_text(content)
@@ -231,5 +246,11 @@ for path in args.dtb:
     assert len(controllers) == 1
     for n in nodes(controllers[0]):
         reg = fdt.getprop(n, 'reg', quiet=(libfdt.NOTFOUND,))
-        assert reg is not None and struct.unpack('>I', reg)[0] != 24
-    print(f'PASS: {path.name}: no board MD1 domain registration or automatic entry')
+        assert reg is not None
+        if struct.unpack('>I', reg)[0] == 24:
+            assert fdt.getprop(n, 'status') == b'disabled\0'
+    platform = fdt.path_offset('/modem-platform', quiet=(libfdt.NOTFOUND,))
+    if platform >= 0:
+        assert fdt.getprop(platform, 'status') == b'disabled\0'
+        assert fdt.getprop(platform, 'power-domains', quiet=(libfdt.NOTFOUND,)) == -libfdt.NOTFOUND
+    print(f'PASS: {path.name}: MD1 domain and owner disabled, no automatic attachment')

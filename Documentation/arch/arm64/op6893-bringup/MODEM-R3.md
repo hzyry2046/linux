@@ -1,6 +1,9 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 # op6893 基带 R3：MD1 MTCMOS 与 M0 上机验收
 
+后续接续：[平台层](MODEM-PLATFORM.md)已增加默认关闭的MD1节点及显式owner，
+支持精确LK ON初态并阻止自动关断；本篇“仅接管OFF/没有域节点”为R3历史状态。
+
 2026-11-14，基于 `6db0f4606d6e` 工作树，AI 辅助实现与验证。
 本轮吸收新增[用户态/固件分析](MODEM-PROTOCOL.md)，完成 MD1 电源序列首版，
 并单独上机验收此前的 M0。该次 M0 镜像不包含 R3 电源代码。

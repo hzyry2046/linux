@@ -1,5 +1,11 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16平台层接续：统一MD owner保留SMEM布局、四路供电基线/普通CCIF
+时钟，增加显式genpd接管与冷循环。当前e8509e81dbc3六个AP寄存器只读确认
+LK留下MD1 ON，故补CHECK_DONE/继承ON关断流程及unused OFF veto；新增
+功能已通过sanitizer/ARM64构建，尚未刷入、切换MD电源或放行CPU。设备
+继续运行原镜像。下轮合并普通CCIF功能测试，见[平台层](MODEM-PLATFORM.md)。
+
 2026-11-16离线接续：新增6297 LK共享内存子区解析（runtime/CCISM/NVRAM
 cache），保留bank跨度并计算间隙，解释历史cached 0x80000差值。定向
 sanitizer、vendor ABI及启用内核构建通过；未新增实机验收，设备状态沿用

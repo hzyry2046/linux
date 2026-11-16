@@ -1,0 +1,69 @@
+{
+  "date": "2026-11-16",
+  "implementation_base": "3c7c91c46",
+  "binding_commit": "ea688afc1555ea212c8a971b9ca36a3f69c500f1",
+  "ai_assistance": "Codex: same-board source comparison, implementation, tests and documentation; no DCO certification",
+  "live_observation": {
+    "kernel": "7.3.0-op6893-d1-e8509e81dbc3+",
+    "transport": "Wi-Fi SSH + busybox devmem, 32-bit reads",
+    "registers": {
+      "0x1000616c": "0x10580fff",
+      "0x10006300": "0x0000000d",
+      "0x10006398": "0x00000000",
+      "0x10001228": "0xe70c500e",
+      "0x10001b90": "0x00000001",
+      "0x10001bc4": "0x00050000"
+    },
+    "md1_mtcmos": "ON; not evidence of MD CPU execution or firmware readiness",
+    "writes": false,
+    "reboot_or_flash": false
+  },
+  "offline_validation": {
+    "actual_sequencer_asan_ubsan": true,
+    "cold_failure_points": 12,
+    "takeover_failure_points": 7,
+    "actual_register_callbacks_asan_ubsan": true,
+    "smc_abis": [
+      "0xc2000505 x1=7 x2=flight",
+      "0xc2000505 x1=6 x2=3 CHECK_DONE; not x2=0 CPU boot"
+    ],
+    "md1_sequence_regression_asan_ubsan": true,
+    "lk_smem_regression_asan_ubsan": true,
+    "enabled_arm64_image_gz_modules_modpost": true,
+    "default_board_dtb": true,
+    "binding_doc_and_dtb_schema": true,
+    "strict_checkpatch_changed_c_headers": "0 errors, 0 warnings, 0 checks",
+    "patch_checkpatch_advisory": "New files: FILE_PATH_CHANGES; MAINTAINERS ownership not reassigned",
+    "configuration_restored": true
+  },
+  "new_code_hardware_tested": false,
+  "new_image_packed_or_flashed": false,
+  "md_power_changed_this_turn": false,
+  "md_cpu_release_issued": false,
+  "shared_memory_mapped_or_cleared": false,
+  "default_md1_and_owner_nodes": "disabled",
+  "remaining": [
+    "Real LK CHECK_DONE/flight and initial takeover/cold ON/OFF",
+    "ordinary CCIF reset, SRAM, rings, IRQ/worker",
+    "CCIF2/SCP CCISM bridge and FS/RPC/NVRAM service gate",
+    "HS1/HS2 after explicit CPU release"
+  ],
+  "sources": [
+    {
+      "root": "/data/src/kernel_oddo_mt6893",
+      "path": "drivers/misc/mediatek/eccci/mt6885/md_sys1_platform.c",
+      "sha256": "6a8574b801e57ccfeda9e6152dd34e9e55c0970515de09306e7c3dbec3a99f58"
+    },
+    {
+      "root": "/data/src/kernel_oddo_mt6893",
+      "path": "drivers/misc/mediatek/eccci/mt6885/modem_secure_base.h",
+      "sha256": "9efb4af78aecca546bc01621714052b93c9ba1a275ae05e668995f4ef3a3f54f"
+    },
+    {
+      "root": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6",
+      "path": "drivers/misc/mediatek/eccci/fsm/md_sys1_platform.c",
+      "sha256": "7890d509a28ebd7dcb2c29db6a3738a372155f702b00a4c05376a5d8dbb03d58"
+    }
+  ],
+  "external_evidence": "/data/src/mainline/mt6893-direct/evidence/modem-platform"
+}

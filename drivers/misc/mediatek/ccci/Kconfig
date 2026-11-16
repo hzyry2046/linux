@@ -18,6 +18,21 @@ config OP6893_CCCI_SMEM
 	  and unsupported IDs. No shared-memory mapping, clearing or modem start.
 	  Disabled by default; extends the explicit LK handoff inspection only.
 
+config OP6893_CCCI_MD_PLATFORM
+	bool "Own op6893 cold modem platform power without releasing the MD CPU"
+	depends on OP6893_CCCI_LK_INSPECT=y && OP6893_CCCI_SMEM
+	depends on PM_GENERIC_DOMAINS && REGULATOR && MFD_SYSCON
+	depends on MTK_SCPSYS_PM_DOMAINS
+	depends on COMMON_CLK_MT6893_CCIF
+	help
+	  Retain validated LK shared-memory geometry and own the four supplies,
+	  four ordinary CCIF clocks and explicitly attached MD1 domain. Expose
+	  an explicit LK CHECK_DONE and inherited-domain power-off, then one cold
+	  on/off cycle using this boot's unchanged enabled-rail voltage baseline.
+	  Do not change voltages, release the MD CPU or access shared memory/CCIF.
+	  Probe preserves LK's domain state. Disabled by default;
+	  cannot coexist with the metadata-only node for the same LK buffer.
+
 config OP6893_CCCI_RESOURCES
 	tristate "Check op6893 modem regulator and ordinary CCIF clock references"
 	depends on ARM64_OP6893_BRINGUP && OF && REGULATOR

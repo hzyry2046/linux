@@ -25,6 +25,30 @@
 		status = "disabled";
 	};
 
+	/* Mutually exclusive with modem-handoff; explicit cold power cycle only. */
+	modem-platform {
+		compatible = "realme,op6893-modem-platform";
+		memory-region = <&ccci_tag>, <&md_nc_smem>, <&md_c_smem>;
+		memory-region-names = "tags", "noncached", "cached";
+		md-vmodem-supply = <&mt6315_3_vbuck1>;
+		md-vnr-supply = <&mt6315_3_vbuck3>;
+		md-vsram-supply = <&mt6315_3_vbuck4>;
+		md-vdigrf-supply = <&mt6359_vpu>;
+		clocks = <&ufs_infracfg CLK_IFRAO_CCIF_AP>,
+			 <&ufs_infracfg CLK_IFRAO_CCIF_MD>,
+			 <&ufs_infracfg CLK_IFRAO_CCIF1_AP>,
+			 <&ufs_infracfg CLK_IFRAO_CCIF1_MD>;
+		clock-names = "ccif-ap", "ccif-md", "ccif1-ap", "ccif1-md";
+		mediatek,spm = <&scpsys>;
+		mediatek,infracfg = <&ufs_infracfg>;
+		status = "disabled";
+
+		/* Avoid automatic platform-bus power-on before rail checks. */
+		power {
+			power-domains = <&spm MT6893_POWER_DOMAIN_MD1>;
+		};
+	};
+
 	/* Explicit bounded observations; no SCP start or READY assertion. */
 	scp-resource-hold@10724000 {
 		compatible = "realme,op6893-scp-resource-hold";
@@ -324,9 +348,9 @@
 	};
 
 	/*
-	 * SPM power controller, GPU domains only. CONN stays with the vendor
-	 * conninfra driver and is not described here. The MFG clock mux and
-	 * MFGPLL are left as LK set them (mfgpll, ~350 MHz).
+	 * SPM power controller, GPU domains and an opt-in MD1 domain. CONN stays
+	 * with the vendor conninfra driver and is not described here. The MFG
+	 * clock mux and MFGPLL are left as LK set them (mfgpll, ~350 MHz).
 	 */
 	scpsys: syscon@10006000 {
 		compatible = "mediatek,mt6893-scpsys", "syscon", "simple-mfd";
@@ -337,6 +361,13 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			#power-domain-cells = <1>;
+
+			md1: power-domain@MT6893_POWER_DOMAIN_MD1 {
+				reg = <MT6893_POWER_DOMAIN_MD1>;
+				#power-domain-cells = <0>;
+				mediatek,infracfg = <&ufs_infracfg>;
+				status = "disabled";
+			};
 
 			mfg0: power-domain@MT6893_POWER_DOMAIN_MFG0 {
 				reg = <MT6893_POWER_DOMAIN_MFG0>;

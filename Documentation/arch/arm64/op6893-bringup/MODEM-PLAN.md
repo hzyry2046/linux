@@ -2,8 +2,9 @@
 # op6893 基带：内核对比与搭建计划
 
 更新：2026-11-16。SCP 常驻RX/READY1、awake及一次MD-invalid传输已实测，
-见[R5.25](MODEM-SCP-RUNTIME.md)。本轮新增同板LK子区解析和bank跨度/gap计算，
-完成离线测试/构建；MD尚未启动，下一步统一平台owner、上电与CCIF/CCISM，
+见[R5.25](MODEM-SCP-RUNTIME.md)。新增同板LK子区解析及统一平台owner，
+实机只读确认LK留下MD1 ON，增加显式接管断电和一次冷循环；完成离线测试/
+构建，未实际切换MD电源或放行CPU。下一步CCIF/CCISM，
 不为纯计算或资源观测单独刷机。AI辅助源码分析与实现。历史阶段记录保留。
 SID3 shutdown 对照及启动电压契约见 [供电生命周期](MODEM-RAILS.md)。
 图形接续事项保存在 [GRAPHICS-TODO.md](GRAPHICS-TODO.md)，先推进基带框架。
@@ -478,5 +479,6 @@ UFS RO/rootfs 回归通过。接续优先审计 READY0 所在 mailbox 的 RX/IRQ
 
 - [x] 对照A/V/Q及历史4.19子区输出，解释缓存0x80000差值；实现完整LK链验证后的NC默认补全/cached aggregate解析及独立AP/MD边界，见[布局实现](MODEM-SMEM.md)。
 - [x] runtime/CCISM/NVRAM-cache必需大小、别名/重复/截断/溢出与失败清零测试、实际vendor ABI核对、启用Image.gz/modules及strict checkpatch通过。
-- [ ] 统一MD owner保存布局/供电基线、接genpd和普通CCIF控制环；CCIF2保持单独桥归属，与SCP真实状态机整合。
-- [ ] 准备FS/NVRAM工作副本及服务门控，再释放MD验证HS1/HS2。本轮不连接/刷机，真实子区tag尚待下一功能组实测。
+- [x] 统一MD owner保存布局/供电基线，显式附着genpd，增加继承LK ON的CHECK_DONE/接管断电及冷循环；完成离线验证，见[平台层](MODEM-PLATFORM.md)。未实测上下电。
+- [ ] 接普通CCIF控制环；CCIF2保持单独桥归属，与SCP真实状态机整合。和MD接管/冷循环合并上机，不拆纯资源测试。
+- [ ] 准备FS/NVRAM工作副本及服务门控，再释放MD验证HS1/HS2。新子区tag解析与MD电源切换仍待下一功能组实测，本轮未刷机。
