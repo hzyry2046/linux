@@ -294,7 +294,7 @@ static const struct mtk_gate_regs ccif_gate_regs = {
  * Only gates implemented with real set/clear operations in the ACK tree.
  * IGNORE_UNUSED preserves LK's state; registration must not enable MD paths.
  * The parent reports the inherited AXI rate, without managing its source.
- * CCIF2/4/5 used dummy operations in ACK and remain unsupported here.
+ * CCIF4/5 used dummy operations in ACK and remain unsupported here.
  */
 static const struct mtk_gate ccif_gates[] = {
 	GATE_MTK_FLAGS(CLK_IFRAO_CCIF1_AP, "mt6893_ccif1_ap",
@@ -309,6 +309,18 @@ static const struct mtk_gate ccif_gates[] = {
 	GATE_MTK_FLAGS(CLK_IFRAO_CCIF_MD, "mt6893_ccif_md",
 		       "mt6893_axi_observed", &ccif_gate_regs, 26,
 		       &mtk_clk_gate_ops_setclr, CLK_IGNORE_UNUSED),
+};
+
+/*
+ * CCIF2 uses dummy gates in both same-board vendor kernels. These aliases
+ * provide logical lifecycle references and the inherited AXI rate only:
+ * enabling them neither changes nor verifies the bank4 hardware gate state.
+ */
+static const struct mtk_fixed_factor ccif2_factors[] = {
+	FACTOR_FLAGS(CLK_IFRAO_CCIF2_AP, "mt6893_ccif2_ap",
+		     "mt6893_axi_observed", 1, 1, CLK_IGNORE_UNUSED),
+	FACTOR_FLAGS(CLK_IFRAO_CCIF2_MD, "mt6893_ccif2_md",
+		     "mt6893_axi_observed", 1, 1, CLK_IGNORE_UNUSED),
 };
 #endif
 
@@ -373,7 +385,7 @@ static int mt6893_pmif_clk_probe(struct platform_device *pdev)
 	/* Vendor IDs are sparse: the generic count-based probe is unsuitable. */
 	num_clks = top ? CLK_TOP_PWRAP_ULPOSC_SEL + 1 : CLK_IFRAO_THERM + 1;
 	if (!top && IS_ENABLED(CONFIG_COMMON_CLK_MT6893_CCIF))
-		num_clks = CLK_IFRAO_CCIF_MD + 1;
+		num_clks = CLK_IFRAO_CCIF2_MD + 1;
 	data = mtk_alloc_clk_data(num_clks);
 	if (!data)
 		return -ENOMEM;
@@ -412,6 +424,10 @@ static int mt6893_pmif_clk_probe(struct platform_device *pdev)
 					     ARRAY_SIZE(ccif_gates), data);
 		if (ret)
 			goto unregister_infra;
+		ret = mtk_clk_register_factors(ccif2_factors,
+					       ARRAY_SIZE(ccif2_factors), data);
+		if (ret)
+			goto unregister_ccif;
 #endif
 	}
 
@@ -429,6 +445,8 @@ unregister_clocks:
 		mtk_clk_unregister_muxes(top_muxes, ARRAY_SIZE(top_muxes), data);
 	} else {
 #ifdef CONFIG_COMMON_CLK_MT6893_CCIF
+		mtk_clk_unregister_factors(ccif2_factors, ARRAY_SIZE(ccif2_factors), data);
+unregister_ccif:
 		mtk_clk_unregister_gates(ccif_gates, ARRAY_SIZE(ccif_gates), data);
 unregister_infra:
 #endif

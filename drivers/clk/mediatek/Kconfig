@@ -54,7 +54,9 @@ config COMMON_CLK_MT6893_CCIF
 	  Add the four AP/MD and CCIF1 AP/MD gates to the existing infrastructure
 	  provider. Keep their inherited state until a consumer explicitly votes;
 	  the parent only observes the inherited AXI rate and does not manage it.
-	  CCIF2/4/5, MD power/reset and SCP are not supported by this option.
+	  Expose CCIF2 AP/MD as inherited 1:1 AXI aliases matching the vendor
+	  dummy clocks. Their references do not switch or verify hardware gates.
+	  CCIF4/5, MD power/reset and SCP are not supported by this option.
 	  Leave disabled until a controlled modem resource experiment is ready.
 
 config COMMON_CLK_MT2701
