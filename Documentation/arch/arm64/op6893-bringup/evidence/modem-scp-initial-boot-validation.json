@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-16",
+  "ai_assisted": true,
+  "source_base": "0f003b127",
+  "image": "949a860a1a85",
+  "boot_sha256": "7131750e689e4db46c10bb378616bd18743cdff48ebb3299bc90ed2379a8a981",
+  "tests": {
+    "actual_initial_owner_asan_ubsan": "passed",
+    "actual_pending_discard_asan_ubsan": "passed",
+    "reset_asan_ubsan": "passed",
+    "mmio_queue_rx_drain_asan_ubsan": "passed",
+    "enabled_arm64_image": "passed",
+    "fdt_and_protocol": "passed",
+    "unrelated_peripheral_suites": "skipped explicitly",
+    "kernel_checkpatch": "0 errors, 0 warnings, 0 checks",
+    "actual_receive_asan_ubsan": "passed with separate software depth / hardware mask",
+    "lazy_disable_reproducer": "failed expected hardware-mask assertion before fix",
+    "binding_doc_validation": "passed"
+  },
+  "source_config_restored": true,
+  "hardware": {
+    "first_image": "b74f21c0411e",
+    "both_images_ready_channel": 22,
+    "first_image_stop_gic_masked": 0,
+    "fixed_image_stop_gic_masked": 5,
+    "initial_boot_error": 0,
+    "cleanup_error": 0,
+    "interrupts": 2,
+    "worker_runs": 3,
+    "unexpected": 0,
+    "events_popped": 1,
+    "register_reads": 42,
+    "register_writes": 4,
+    "cfg_writes": 2,
+    "final_reset_raw": [
+      "0x0000ff00",
+      "0x0000ff00"
+    ],
+    "final_generation": 0,
+    "ready_now": false,
+    "modem_started": false,
+    "repeat_request": "EALREADY without counter changes",
+    "nonzero_old_pending": "model tested only; hardware inherited pending zero",
+    "usb_ssh": "passed",
+    "wifi_ssh": "passed",
+    "lvts": "five temperatures readable",
+    "gpu": "matching tmpfs modules loaded; Panfrost probe success; no stress/DVFS test"
+  },
+  "external_evidence": "/data/src/mainline/mt6893-direct/evidence/scp-initial/",
+  "irq_fix_commit": "46c93a303"
+}

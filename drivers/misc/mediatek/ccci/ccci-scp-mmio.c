@@ -46,6 +46,58 @@ void ccci_scp_mmio_invalidate(struct ccci_scp_mmio *mmio)
 	mmio->generation = 0;
 }
 
+int ccci_scp_mmio_discard(struct ccci_scp_mmio *mmio,
+			  const struct ccci_scp_layout *layout,
+			  int (*check)(void *context), void *context, u32 *discarded)
+{
+	u32 known[CCCI_SCP_MAX_MBOXES] = {};
+	u32 pending[CCCI_SCP_MAX_MBOXES], i, remaining;
+	int ret;
+
+	if (!mmio || !layout || !check || !discarded || mmio->prepared ||
+	    !layout->rx_count || layout->rx_count > CCCI_SCP_MAX_CHANNELS)
+		return -EINVAL;
+	*discarded = 0;
+	for (i = 0; i < layout->rx_count; i++) {
+		if (layout->rx[i].mbox >= CCCI_SCP_MAX_MBOXES || layout->rx[i].irq >= 32)
+			return -EINVAL;
+		known[layout->rx[i].mbox] |= BIT(layout->rx[i].irq);
+	}
+	ret = check(context);
+	if (ret)
+		return ret;
+	/* Reject unknown sources before touching any notification. No payload read. */
+	for (i = 0; i < CCCI_SCP_MAX_MBOXES; i++) {
+		pending[i] = readl(mmio->ports[i].base + CCCI_SCP_MMIO_PENDING);
+		mmio->register_reads++;
+		if (pending[i] & ~known[i])
+			return -EPROTO;
+	}
+	ret = check(context);
+	if (ret)
+		return ret;
+	for (i = 0; i < CCCI_SCP_MAX_MBOXES; i++) {
+		if (!pending[i])
+			continue;
+		writel(1, mmio->cfg + CCCI_SCP_MMIO_COMPLETE);
+		/* Complete the board callback before the mailbox W1C. */
+		mb();
+		writel(pending[i], mmio->ports[i].base + CCCI_SCP_MMIO_PENDING);
+		/* Reset remains asserted: readback must observe the completed W1C. */
+		mb();
+		mmio->register_writes += 2;
+		mmio->cfg_writes++;
+		*discarded += hweight32(pending[i]);
+	}
+	for (i = 0; i < CCCI_SCP_MAX_MBOXES; i++) {
+		remaining = readl(mmio->ports[i].base + CCCI_SCP_MMIO_PENDING);
+		mmio->register_reads++;
+		if (remaining)
+			return -EAGAIN;
+	}
+	return check(context);
+}
+
 static int ccci_scp_mmio_check(struct ccci_scp_mmio_port *port)
 {
 	struct ccci_scp_mmio *mmio;

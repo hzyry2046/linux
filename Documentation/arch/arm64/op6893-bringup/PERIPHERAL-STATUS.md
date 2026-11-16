@@ -1,5 +1,13 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16最新接续：`949a860a1a85` 已完成 SCP 初始启动→Linux IRQ/worker/
+队列→READY1（channel22）→STOP/双核SET 的完整短时实验。IRQ2次、worker3次、
+无unexpected，结束 GIC 五路屏蔽、generation0、两核raw=0xff00。修复了接收层
+lazy-disable 导致软件停用但 GIC 未屏蔽的问题。USB/Wi-Fi SSH、LVTS正常；
+匹配GPU模块从tmpfs加载并probe成功。SCP未常驻、基带未启动；下一步接持续
+消费、AP awake/CCCI。见[集成启动记录](MODEM-SCP-INITIAL-BOOT.md)。以下
+各版结论按历史记录理解。
+
 2026-11-16接续：当前248c64a7dd23上已用一次2秒初始释放实验观测到SCP PC
 变化及READY1（channel22、size0x180000），结束重新SET双核。确认SET读回
 bit0=0为assert，上一轮EIO判据写反；源码已修正，运行镜像仍旧版。
@@ -109,7 +117,8 @@ USB/Wi-Fi SSH 和外置 rootfs 正常；MD/SCP 尚未启动。详见 [R3](MODEM-
 | 音频 / 耳机检测 | 未启用 | codec、AFE、时钟/供电和路由待实现；accdet 尚未接入 |
 | 摄像头 / ISP | 未启用 | 传感器型号、总线、供电、时钟、ISP 管线待调查 |
 | RTC / 持久时间 | 未启用 | RTC_CLASS 关闭；不能用启动日志时间作为准确实时时钟 |
-| modem / 蜂窝 / GNSS | 未启用 | LK 及供电/普通 CCIF 引用已验收；SCP 协议基础仅主机验证，transport/固件/CCISM 待实现 |
+| SCP | 初始启动/接收实测 | LK镜像core0释放后经Linux IRQ/worker/队列收到READY1；STOP后双核SET、GIC五路屏蔽 | 尚未常驻，AP awake/CCCI/恢复待接入；不证明core1独立运行 | [集成启动](MODEM-SCP-INITIAL-BOOT.md) |
+| modem / 蜂窝 / GNSS | 未启用 | LK及供电/普通CCIF引用已验收；SCP初始启动与RX已实测，MD/CCISM待实现 |
 | NFC / 指纹 / 振动 / IMU 等传感器 | 未验证、未建立支持 | 需逐项识别本机硬件及资源，不能借用同品牌另一机型结论 |
 | UFS 写入、USB host、运行时自动挂起 | 未验证 | 目前测试策略不覆盖这些行为 |
 | pstore 故障恢复链路 | 历史不可靠，非保证能力 | 用户指出 fastboot oem peek 可读保留内存；不能把无 pstore 当作内核未执行的证明 |

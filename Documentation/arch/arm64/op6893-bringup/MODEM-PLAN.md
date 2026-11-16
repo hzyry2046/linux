@@ -460,3 +460,10 @@ UFS RO/rootfs 回归通过。接续优先审计 READY0 所在 mailbox 的 RX/IRQ
 - [x] USB/Wi-Fi正常，IRQ仍masked、generation0；旧pending保留，未ACK，未启动MD。没有添加猜测的SMC或内部时钟写入。
 - [ ] 合并一次初始启动owner：STOP/旧通知丢弃、代际、全RX队列与READY0/1、GPR1/2/CLR和最小logger策略；作为一个功能里程碑测试，不拆纯观测刷机。
 - [ ] 正式READY后接AP awake/CCCI，再推进MD；完整restore不作为LK已载入镜像首次释放的前置项目。
+
+### R5.24 整合初始启动 / IRQ / READY（2026-11-16）
+
+- [x] 默认关闭 initial_boot 一次实验：统一 STOP、双核 SET、header/share、旧通知丢弃、generation、全 RX、core0 CLR 与 READY0/1 验证，见[集成启动](MODEM-SCP-INITIAL-BOOT.md)。
+- [x] 各阶段失败、超时、错误代际及通知丢弃 ASan/UBSan 通过；不再拆资源映射或纯观测刷机。
+- [x] b74f21c0411e/949a860a1a85 两轮实测新 READY1；修复 GIC lazy-disable 后 STOP 硬件 masked=5，双核SET、generation0、USB/Wi-Fi正常。硬件旧pending均0，非零丢弃路径为模型覆盖。
+- [ ] 接持续事件消费、AP awake / APCCCI，然后进入 MD 初始化；首次启动不依赖完整备份恢复器。

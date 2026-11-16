@@ -32,6 +32,11 @@ int ccci_scp_mmio_prepare(struct ccci_scp_mmio *mmio,
 			  int (*check)(void *context, u64 generation), void *context);
 void ccci_scp_mmio_invalidate(struct ccci_scp_mmio *mmio);
 
+/* Owner lock held, receive STOP and both cores asserted throughout callback. */
+int ccci_scp_mmio_discard(struct ccci_scp_mmio *mmio,
+			  const struct ccci_scp_layout *layout,
+			  int (*check)(void *context), void *context, u32 *discarded);
+
 /* Owner serialization required; report software state without register I/O. */
 ssize_t ccci_scp_mmio_status(struct ccci_scp_mmio *mmio, char *buf);
 ssize_t ccci_scp_mmio_cfg_status(struct ccci_scp_mmio *mmio, char *buf);

@@ -2,6 +2,8 @@
 /* Explicit op6893 boot-lifetime SCP resource pin, separate from diagnostics. */
 
 #include <linux/clk.h>
+#include <linux/delay.h>
+#include <linux/jiffies.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
@@ -31,7 +33,17 @@ struct ccci_scp_resource_owner {
 	struct ccci_scp_reset reset;
 	bool reset_requested;
 #endif
-	/* Zero until a future reset owner establishes actual old-message isolation. */
+	#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_INITIAL_BOOT)
+	struct ccci_scp_layout layout;
+	bool boot_requested;
+	bool boot_running;
+	u32 boot_ready_channel;
+	u32 boot_discarded;
+	u32 boot_events;
+	int boot_error;
+	int boot_cleanup_error;
+#endif
+	/* Valid only between asserted-core old-message discard and final STOP. */
 	u64 reset_generation;
 };
 
@@ -46,7 +58,7 @@ static int ccci_scp_resource_receive_check(void *context, u64 generation)
 	int ret;
 
 	lockdep_assert_held(&owner->lock);
-	/* No current path sets reset_generation: inherited state cannot arm RX. */
+	/* Inherited state cannot arm RX; the initial boot owner establishes this. */
 	if (!generation || generation != owner->reset_generation)
 		return -ESTALE;
 	ret = ccci_scp_resource_check(&owner->resource, clk_get_rate(owner->clock));
@@ -360,7 +372,197 @@ static ssize_t reset_state_show(struct device *dev, struct device_attribute *att
 static DEVICE_ATTR_RO(reset_state);
 #endif
 
+#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_INITIAL_BOOT)
+/* Owner mutex held; no receive API reentry. */
+static int ccci_scp_initial_asserted(void *context)
+{
+	struct ccci_scp_resource_owner *owner = context;
+	int ret;
+
+	ret = ccci_scp_inspect_reset_check(owner->inspect);
+	if (ret)
+		return ret;
+	if ((readl(owner->core_tcm[0] + 4) | readl(owner->core_tcm[1] + 4)) & 1)
+		return -EBUSY;
+	return 0;
+}
+
+static int ccci_scp_initial_layout(struct device *dev, struct ccci_scp_layout *layout)
+{
+	u32 tx[42], rx[68];
+	int ret;
+
+	/* This experiment implements the complete same-board 14 TX / 17 RX table. */
+	if (of_property_count_u32_elems(dev->of_node, "mediatek,send-table") !=
+	    ARRAY_SIZE(tx) ||
+	    of_property_count_u32_elems(dev->of_node, "mediatek,recv-table") !=
+	    ARRAY_SIZE(rx))
+		return -EINVAL;
+	ret = of_property_read_u32_array(dev->of_node, "mediatek,send-table",
+					 tx, ARRAY_SIZE(tx));
+	if (ret)
+		return ret;
+	ret = of_property_read_u32_array(dev->of_node, "mediatek,recv-table",
+					 rx, ARRAY_SIZE(rx));
+	if (ret)
+		return ret;
+	return ccci_scp_build_layout(tx, ARRAY_SIZE(tx), rx, ARRAY_SIZE(rx),
+				     CCCI_SCP_MAX_MBOXES, layout);
+}
+
+static ssize_t initial_boot_store(struct device *dev, struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	struct ccci_scp_resource_owner *owner = dev_get_drvdata(dev);
+	struct ccci_scp_reset cleanup = {};
+	struct ccci_scp_event event;
+	unsigned long deadline;
+	u32 base, size, gpr1 = 0, gpr2 = 0;
+	bool saved = false;
+	int ret, cleanup_ret;
+
+	if (!sysfs_streq(buf, "test"))
+		return -EINVAL;
+	mutex_lock(&owner->lock);
+	if (owner->reset_requested) {
+		ret = -EALREADY;
+	} else {
+		ret = ccci_scp_inspect_reset_check(owner->inspect);
+		if (!ret) {
+			/* Shared one-shot gate also excludes concurrent reset_assert. */
+			owner->reset_requested = true;
+			owner->boot_requested = true;
+			owner->boot_running = true;
+		}
+	}
+	mutex_unlock(&owner->lock);
+	if (ret)
+		return ret;
+
+	ccci_scp_receive_stop(owner->receive);
+	mutex_lock(&owner->lock);
+	ret = ccci_scp_reset_assert(&owner->reset, owner->core_tcm,
+				    ccci_scp_inspect_reset_check, owner->inspect);
+	ccci_scp_inspect_record_reset(owner->inspect, owner->reset.writes);
+	if (ret)
+		goto unlock_cleanup;
+	ret = ccci_scp_inspect_boot(owner->inspect, &base, &size);
+	if (ret)
+		goto unlock_cleanup;
+	ret = ccci_scp_mmio_discard(owner->mmio, &owner->layout,
+				    ccci_scp_initial_asserted, owner, &owner->boot_discarded);
+	if (ret)
+		goto unlock_cleanup;
+	/* One attempt per Linux boot; no reuse of LK or a previous RX generation. */
+	owner->reset_generation = 1;
+	mutex_unlock(&owner->lock);
+	ret = ccci_scp_receive_start(owner->receive, &owner->layout, 1, 16);
+	if (ret)
+		goto cleanup;
+	mutex_lock(&owner->lock);
+	ret = ccci_scp_initial_asserted(owner);
+	if (ret)
+		goto unlock_cleanup;
+	gpr1 = readl(owner->core_tcm[0] + 0x44);
+	gpr2 = readl(owner->core_tcm[0] + 0x48);
+	saved = true;
+	writel(base, owner->core_tcm[0] + 0x44);
+	writel(size, owner->core_tcm[0] + 0x48);
+	writel(1, owner->core_tcm[0]);
+	/* Complete GPR publication and reset release before any READY acceptance. */
+	mb();
+	ccci_scp_inspect_record_reset(owner->inspect, 3);
+	owner->reset.latched = false;
+	ret = (readl(owner->core_tcm[0] + 4) & 1) ? 0 : -EIO;
+	mutex_unlock(&owner->lock);
+	if (ret)
+		goto cleanup;
+
+	deadline = jiffies + msecs_to_jiffies(3000);
+	ret = -ETIMEDOUT;
+	do {
+		int popped = ccci_scp_receive_pop(owner->receive, 1, &event);
+
+		if (popped == -ENODATA) {
+			usleep_range(10000, 12000);
+			continue;
+		}
+		if (popped) {
+			ret = popped;
+			break;
+		}
+		mutex_lock(&owner->lock);
+		owner->boot_events++;
+		mutex_unlock(&owner->lock);
+		if (event.pin.channel == 9 || event.pin.channel == 22) {
+			ret = event.generation == 1 ?
+				ccci_scp_decode_ready(&event.pin, event.data, event.bytes,
+						      0x180000) : -ESTALE;
+			if (!ret) {
+				mutex_lock(&owner->lock);
+				owner->boot_ready_channel = event.pin.channel;
+				mutex_unlock(&owner->lock);
+			}
+			memzero_explicit(&event, sizeof(event));
+			break;
+		}
+		/* Discard logger/client notifications; never follow firmware pointers. */
+		memzero_explicit(&event, sizeof(event));
+	} while (time_before(jiffies, deadline));
+	goto cleanup;
+
+unlock_cleanup:
+	mutex_unlock(&owner->lock);
+cleanup:
+	/* Stop consumption before asserting cores, without the worker's mutex. */
+	ccci_scp_receive_stop(owner->receive);
+	memzero_explicit(&event, sizeof(event));
+	mutex_lock(&owner->lock);
+	owner->reset_generation = 0;
+	cleanup_ret = ccci_scp_reset_assert(&cleanup, owner->core_tcm,
+					    ccci_scp_inspect_reset_check, owner->inspect);
+	ccci_scp_inspect_record_reset(owner->inspect, cleanup.writes);
+	if (!cleanup_ret && saved) {
+		writel(gpr1, owner->core_tcm[0] + 0x44);
+		writel(gpr2, owner->core_tcm[0] + 0x48);
+		/* Finish restoring AP-owned GPRs while both cores remain asserted. */
+		mb();
+		ccci_scp_inspect_record_reset(owner->inspect, 2);
+	}
+	owner->reset = cleanup;
+	owner->boot_error = ret;
+	owner->boot_cleanup_error = cleanup_ret;
+	owner->boot_running = false;
+	mutex_unlock(&owner->lock);
+	if (ret || cleanup_ret)
+		return ret ? ret : cleanup_ret;
+	return count;
+}
+static DEVICE_ATTR_WO(initial_boot);
+
+static ssize_t boot_state_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_scp_resource_owner *owner = dev_get_drvdata(dev);
+	ssize_t length;
+
+	mutex_lock(&owner->lock);
+	length = sysfs_emit(buf,
+			    "requested=%u running=%u generation=%llu discarded=%u events=%u ready_observed=%u ready_channel=%u error=%d cleanup_error=%d ready_now=0 modem_started=0\n",
+			    owner->boot_requested, owner->boot_running, owner->reset_generation,
+			    owner->boot_discarded, owner->boot_events, !!owner->boot_ready_channel,
+			    owner->boot_ready_channel, owner->boot_error,
+			    owner->boot_cleanup_error);
+	mutex_unlock(&owner->lock);
+	return length;
+}
+static DEVICE_ATTR_RO(boot_state);
+#endif
+
 static struct attribute *ccci_scp_resource_attrs[] = {
+#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_INITIAL_BOOT)
+	&dev_attr_initial_boot.attr,
+	&dev_attr_boot_state.attr,
+#endif
 	&dev_attr_state.attr,
 	&dev_attr_pin.attr,
 	&dev_attr_cfg.attr,
@@ -437,6 +639,11 @@ static int ccci_scp_resource_probe(struct platform_device *pdev)
 	ret = ccci_scp_irq_reserve(pdev, &owner->lock, &owner->irq);
 	if (ret)
 		return dev_err_probe(dev, ret, "SCP IRQ reservation failed\n");
+#endif
+#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_INITIAL_BOOT)
+	ret = ccci_scp_initial_layout(dev, &owner->layout);
+	if (ret)
+		return dev_err_probe(dev, ret, "SCP mailbox layout invalid\n");
 #endif
 	platform_set_drvdata(pdev, owner);
 	dev_info(dev, "explicit resource query/pin only; no SMC at probe or SCP start\n");

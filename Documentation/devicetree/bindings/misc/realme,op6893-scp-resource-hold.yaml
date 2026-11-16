@@ -38,6 +38,11 @@ description: |
   writes SET on both cores and records active-low reset readbacks. It does
   not release reset, copy firmware or establish message isolation or READY.
 
+  A separately enabled initial-boot test discards known old notifications
+  under asserted reset, prepares generation-tagged receive, releases core0,
+  and validates READY0/READY1. It always stops receive and reasserts both
+  cores within a bounded test. It does not restore firmware or start MD.
+
 properties:
   compatible:
     const: realme,op6893-scp-resource-hold
@@ -86,6 +91,18 @@ properties:
 
   clock-names:
     const: scp
+
+  mediatek,send-table:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 3
+    maxItems: 192
+    description: Full TX layout, channel/mailbox/words triples
+
+  mediatek,recv-table:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 4
+    maxItems: 256
+    description: Full RX layout, channel/mailbox/words/response quadruples
 
   mediatek,topckgen:
     $ref: /schemas/types.yaml#/definitions/phandle

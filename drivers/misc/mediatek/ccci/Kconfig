@@ -245,3 +245,16 @@ config OP6893_CCCI_SCP_RESET_ASSERT
 	  and valid TOPCK. One request per boot; no CLR, restore, pending ACK,
 	  IRQ enable or SCP/MD start. SET readback does not prove all DMA or
 	  old messages isolated. Disabled by default, no operation at probe.
+
+config OP6893_CCCI_SCP_INITIAL_BOOT
+	bool "Allow one bounded op6893 SCP initial boot and READY test"
+	depends on OP6893_CCCI_SCP_RESET_ASSERT
+	help
+	  Explicit initial_boot sysfs test: stop RX, assert both cores, validate
+	  LK header geometry, discard known old notifications, prepare all RX
+	  destinations and release core0 with this boot's share reservation.
+	  Accept READY0 or READY1 only through the generation-tagged IRQ/queue.
+	  On success or after three seconds, stop RX and assert both cores again.
+	  Other client messages are consumed without following firmware pointers.
+	  One attempt per boot, disabled by default, no automatic start at probe.
+	  This does not restore firmware, keep SCP running or start the modem.

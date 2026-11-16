@@ -196,6 +196,34 @@ out:
 	return ret;
 }
 
+int ccci_scp_inspect_boot(struct ccci_scp_inspect *inspect, u32 *base, u32 *size)
+{
+	const struct ccci_scp_span tcm = { .base = 0x10500000, .size = 0x180000 };
+	struct ccci_scp_inspect_sample samples[2];
+	struct ccci_scp_restore_plan plan;
+	u8 snapshot[CCCI_SCP_REGION_BYTES] = {};
+	size_t length;
+	int ret;
+
+	ret = ccci_scp_inspect_sample(inspect, samples);
+	if (ret)
+		return ret;
+	if (samples[0].clr || samples[0].set || samples[1].clr || samples[1].set)
+		return -EBUSY;
+	ret = ccci_scp_inspect_copy(inspect, snapshot, &length);
+	if (!ret)
+		ret = ccci_scp_plan_restore(snapshot, length, 2, &inspect->firmware,
+					    &inspect->share, &tcm, &plan);
+	memzero_explicit(snapshot, sizeof(snapshot));
+	if (!ret)
+		ret = ccci_scp_inspect_check(inspect);
+	if (!ret) {
+		*base = inspect->share.base;
+		*size = inspect->share.size;
+	}
+	return ret;
+}
+
 static int ccci_scp_inspect_reservation(struct device_node *np, unsigned int index,
 					struct ccci_scp_span *span)
 {
