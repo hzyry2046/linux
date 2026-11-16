@@ -1,0 +1,82 @@
+{
+  "date": "2026-11-16",
+  "implementation_base": "82dbc5aa705e70ed20029d681c8e396f64a2555d",
+  "ai_assistance": "Codex with delegated implementation/review; no DCO certification",
+  "feature": "Default-off FS/RPC codecs, bounded generation/token router, ordinary CCIF service TX and offline structured private working-copy backend",
+  "validation": {
+    "actual_c_asan_ubsan": [
+      "test_modem_fs_protocol.py",
+      "test_modem_rpc_protocol.py",
+      "test_modem_service_router.py",
+      "test_modem_ccif_service_tx.py",
+      "test_modem_ccif_system_tx.py",
+      "test_modem_ccif.py"
+    ],
+    "synthetic_fs_backend_tests": 9,
+    "sender_stop_pthread_race": true,
+    "arm64_enabled_image_gz_modules": true,
+    "arm64_original_config_restored_image_gz_modules": true,
+    "new_compile_warnings": 0,
+    "strict_checkpatch_c_headers": "0 errors, 0 warnings, 0 checks",
+    "series_checkpatch": "0 errors, 1 generic new-file MAINTAINERS warning, 0 checks"
+  },
+  "protocol": {
+    "fs_normal_queue": 4,
+    "fs_slots": 5,
+    "fs_fragment_data_max": 3456,
+    "fs_canonical_packet_max": 16584,
+    "rpc_normal_queue": 1,
+    "rpc_slots": 3,
+    "rpc_packet_max": 2048,
+    "transaction_timeout_ms": 60000,
+    "correlation": "Generation, nonreused monotonic per-request token, kind, slot and protocol fields; transport owns TX sequence",
+    "lifecycle": "Begin only after real HS1/runtime publication enters WAIT_HS2; owner abort/quiesce before leaving admissible phases; explicit real CPU/DMA stop required before wiping close"
+  },
+  "activation": {
+    "default_disabled": true,
+    "live_router_caller": false,
+    "linux_backend_endpoint": false,
+    "worker_timer_adapter": false,
+    "backend_wire_dispatch": false,
+    "service_ready_gate": false,
+    "hardware_rpc_providers": false,
+    "md_start_caller": false
+  },
+  "hardware": {
+    "device_access": false,
+    "boot_image_packed": false,
+    "flashed": false,
+    "md_cpu_released": false,
+    "real_nvram_accessed": false
+  },
+  "limitations": [
+    "No wire ordinal can detect same-slot/same-opcode FS continuation loss or reordering",
+    "Synthetic peers do not establish SMP/hardware ordering or real modem compatibility",
+    "FS Move, successful FindFirst/GetFileDetail, partial/failing CMPT and unknown queries remain unsupported",
+    "Marker confirms caller intent but cannot prove working-copy provenance",
+    "No cold-boot RPC census or actual providers",
+    "Runtime feature36 NVRAM cache population unresolved",
+    "Real MD CPU/DMA stop primitive and final start/stop integration absent"
+  ],
+  "logs_directory": "/data/src/mainline/mt6893-direct/evidence/modem-services",
+  "log_sha256": {
+    "build-enabled.log": "f38c39c00c3cf5db43ae16a7bab2e028a7e07302d45ee1efda56718278c67e05",
+    "build-restored.log": "dcfaccdee3b40396e712e45628a73358de2384d878068be79a2c66f5d160b078",
+    "config-enabled.log": "974b137f31a3128315506938080edd8e09d5e50cf006f35fc8b9077b5f346a79",
+    "config-restored.log": "23f61d4e038442d447317d99f7999c444ef0614a09dc0af116567a98a94622f9",
+    "style-fs-header-final.log": "7bfc4e138c56882f770dda0bf7deb6c7ca63bfae8ded5608ccdc1c4b40b4ccf7",
+    "style-new.log": "370d901c605c8d757a7a59b4ed035326184f6a183f5212772ca5c110211b8787",
+    "style-router-series.log": "9cf494072ab002cca1f04e82d1b580402aa202bd6ef86ed2346bb6e5bdda5202",
+    "style-tx.log": "354c98aa85232337443d54e623dbabc2f4451d4e0bb025e2f0cda87469d12d23",
+    "test-ccif.log": "72cfc66f1214f9315fc6954d783b11753e203320538c8b177ce5424ea3c9d809",
+    "test-ccif_service_tx.log": "61dc9db7d4e596b02c868d502f5f60797a30adf79c7348608dc7efdff463496a",
+    "test-ccif_system_tx.log": "a9d69b29b8b346844e71872834b2a35e704923c66c55fbd2863d8dc84488d9fa",
+    "test-fs-backend.log": "44da5ff3d8732677572559b618a09686fa21efd87af4d2b415dc65f98118d47f",
+    "test-fs-codec.log": "393e6902828047584c6214f5b65d89817b7c459246193c8f4f6ed65e111931ac",
+    "test-fs_backend.log": "3a1c4cd02a1576f2aafd89a805ce14566da40f26587c010179bb2611fcfbc795",
+    "test-fs_protocol.log": "393e6902828047584c6214f5b65d89817b7c459246193c8f4f6ed65e111931ac",
+    "test-rpc-codec.log": "8ed4a4ab443bc5b562c56dab2b553806a2d817f881a173f3a4f2f3acfb013794",
+    "test-rpc_protocol.log": "8ed4a4ab443bc5b562c56dab2b553806a2d817f881a173f3a4f2f3acfb013794",
+    "test-service_router.log": "a3a2338ac3bd80d68a8de084d4aea4adf3b31ad6b97fa893fd2c5d5ceb019cc8"
+  }
+}

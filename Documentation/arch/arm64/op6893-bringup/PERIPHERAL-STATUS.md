@@ -1,5 +1,11 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16 FS/RPC离线服务基础：完成FS五槽分片、RPC三槽codec、普通CCIF
+回复TX、generation/token请求路由和私有工作副本原型。实际C sanitizer、
+发送/STOP竞争及ARM64启用/恢复构建通过。没有live caller/daemon/硬件RPC
+provider或服务就绪门控；部分FS语义与NVRAM cache策略仍阻塞首次MD释放。
+本轮未操作设备，蜂窝状态不变；见[服务基础与边界](MODEM-SERVICES.md)。
+
 2026-11-16 CCIF2/CCISM离线整合：新增唯一桥owner、普通system TX与异步
 session队列/worker/timer，连接真实SCP client API；父prepare/off/shutdown加入
 活跃桥阻断。CCIF2时钟保留vendor dummy语义的逻辑引用，不控制真实gate。

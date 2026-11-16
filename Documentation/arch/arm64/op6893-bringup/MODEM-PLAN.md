@@ -542,3 +542,14 @@ R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、
 - [ ] 接续优先：FS/RPC/NVRAM私有工作副本协议、端口dispatcher与真实能力表。先核对已到的userspace/modem分析，不访问或导出真实NVRAM内容。
 - [ ] 实现唯一上层MD启动/停止owner：持parent锁调用bridge arm，路由accepted HS2/system回复；补MD CPU/DMA停止证明后才可放行CPU，禁止将RX关闭/FAILED当停止。
 - [ ] 合并上机验证首次MD释放、HS1/runtime/HS2、后置CCISM、异常与停止；随后分别推进AT/注册与数据面。当前无arm/start caller。
+
+
+### R7.6 FS/RPC协议、发送与有界服务路由（2026-11-16）
+
+- [x] 同板A/V核对FS q4/五槽/重复opcode分片、RPC q1/三槽/归属，见[审计](MODEM-SERVICES-AUDIT.md)。
+- [x] 默认关闭FS/RPC codec/router；generation与逐请求token，60s事务期限、分片续传、故障保留及真实stopped-close擦除。
+- [x] 普通FS/RPC TX、独立sequence/HS2 assert及STOP门控；合成私有工作副本后端，不访问真实NVRAM。
+- [x] 实际C ASan/UBSan、sender/STOP pthread竞争、合成文件测试、ARM64启用与恢复构建；未上机或新增蜂窝验收，见[实现边界](MODEM-SERVICES.md)。
+- [ ] 补Move/枚举/detail/CMPT失败应答、后端wire编码、Linux worker/端口与后端入口；当前没有live router caller或daemon。
+- [ ] 明确硬件RPC provider与冷启动请求全集、feature36 cache填充策略，按实际能力建立服务就绪门控。
+- [ ] 补唯一MD启停owner和真实CPU/DMA停止原语，再合并首次CPU释放/HS1/HS2/后置CCISM及异常停止测试。
