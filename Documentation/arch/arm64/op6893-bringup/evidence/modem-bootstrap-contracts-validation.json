@@ -1,0 +1,90 @@
+{
+  "date": "2026-11-16",
+  "implementation_base": "7a7364b05",
+  "ai_assistance": "Codex with delegated source/ELF analysis, implementation and independent review; no DCO certification",
+  "implementation_commits": [
+    "eccba1d92",
+    "5f3755a90",
+    "a2f74e6cd"
+  ],
+  "validation": {
+    "passed_scripts": [
+      "test_modem_runtime_profile.py",
+      "test_modem_rpc_board.py",
+      "test_modem_rpc_backend.py",
+      "test_modem_rpc_provider.py",
+      "test_modem_service_endpoint.py",
+      "test_modem_service_backend.py",
+      "test_modem_port_dispatch.py",
+      "test_modem_platform.py"
+    ],
+    "actual_c_sanitizers": [
+      "runtime+handshake+controller+RX/TX",
+      "board facts+provider+codec",
+      "generic provider+codec",
+      "endpoint+session+router+provider",
+      "dispatcher"
+    ],
+    "python_user_rpc_groups": 7,
+    "python_rpc_pairs_validated_by_actual_c_codec": 5,
+    "mixed_fs_rpc_runner_tests": 14,
+    "arm64_enabled_image_gz_modules": true,
+    "arm64_original_config_restored_image_gz_modules": true,
+    "build_warnings": 0,
+    "strict_c_files": "0 errors, 0 warnings, 0 checks",
+    "user_rpc_patch_style": "0 errors, 1 generic new-file MAINTAINERS warning, 0 checks",
+    "eint_regression": "Source-derived vendor enum test aborts against old committed C; fixed C passes. TYPE=-12 STRING=-11.",
+    "evidence_limits": "Host kernel shims and deterministic dependencies; no Linux SMP/hardware or real firmware acceptance proof."
+  },
+  "capabilities": {
+    "board_facts": "Machine-matched realme,op6893, saved ACK/6.6 FDT provenance, static immutable GPIO15/EINT1/DTSI3, no live sampling",
+    "user_rpc": "Explicit private JSON policy, immutable property and complete SAR snapshots, no actual board/user policy supplied",
+    "runtime_builder": "Metadata only IDs0/1/2/6/14/27/28/36 from validated layout and explicit boot/crystal input; no active caller or readiness assertion",
+    "cache_correction": "A first-start zeroes cache; later reset retains; feature36 publishes address/size. No evidence requires AP raw NVRAM prefill; MD cache header/reconstruction remains unresolved."
+  },
+  "activation": {
+    "device_access": false,
+    "firmware_or_real_nvram_contents_accessed": false,
+    "md_cpu_release": false,
+    "new_hardware_support": false,
+    "baseline_config_restored": true
+  },
+  "remaining": [
+    "Unique cache mapping/first-start clear owner and stopped lifetime",
+    "Actual external32k fact from audited source",
+    "ADC single-channel typed contract",
+    "Real user policy and private writable working-tree preparation",
+    "Unique MD CPU start/stop, CPU/DMA stop proof and readiness gate",
+    "Combined first CPU release/runtime handshake/CCISM/exception-stop hardware milestone"
+  ],
+  "local_evidence_directory": "/data/src/mainline/mt6893-direct/evidence/modem-bootstrap-contracts",
+  "evidence_sha256": {
+    "build-enabled.log": "e9190c0d993028278b9fb36f16ea025469528f23bd632fe9d70d1a4b4feb2017",
+    "build-restored.log": "b5d8401936fa164565a871522e2bd8c3fb064bec084322cc9f8df31364ca47ae",
+    "config-enabled.log": "974b137f31a3128315506938080edd8e09d5e50cf006f35fc8b9077b5f346a79",
+    "config-restored.log": "23f61d4e038442d447317d99f7999c444ef0614a09dc0af116567a98a94622f9",
+    "config.enabled": "bb8f7990a11d191fc34b87fc89da25c18da4934ac8ae06f90a25101b6892e1ef",
+    "config.original": "c7cc77e1dc501a0ca9301cdd05aa64880c28f26383d026f8f12bcbe784a29280",
+    "config.restored": "c7cc77e1dc501a0ca9301cdd05aa64880c28f26383d026f8f12bcbe784a29280",
+    "eint-after-fix.log": "d20a0fd9bd7b48d01c3354e716d395deb2cf3a485af7fbb4d4d8df3e728232e6",
+    "eint-before-fix.log": "2b4cea3edc6bfdc872a34afd289957ef278fb10186c4a7ab51d82992eef29f48",
+    "maintainers.txt": "a1b209a8d0fdb6b83502e2a5f4db5b595719c3cb55157867d18f369b214bc0d4",
+    "style-c.log": "35786cc59e062134d22ce227993c5fb82212e4de59ddec657f20217b23d887bd",
+    "style-user-rpc.log": "c2775bda694c464b3dbb7f3c0feb8056a09b5ea342f664578d5495dbaa1b164e",
+    "test-platform.log": "59a99baf7d4b5f436465b77a3d410d4c6135d44f9ed308c565be278bd2312249",
+    "test-port-dispatch.log": "f9ced05a3702ec3a30cabf05f705fec4a85777f090faa4f9a9f989027954821f",
+    "test-rpc-backend.log": "2e4b37b0a646b5f902abd5bbb5d89ed3b3c4c28c7718b4d275813767eabfa669",
+    "test-rpc-board.log": "1765f3a110f55615e6387b7cbf787388a8ee46a269f73db03fc73fe962b910e3",
+    "test-rpc-provider.log": "d20a0fd9bd7b48d01c3354e716d395deb2cf3a485af7fbb4d4d8df3e728232e6",
+    "test-runtime-profile.log": "161aa635ffc3eedea4c44cdd68f212f9fe3b9fad2dd9c4659533a18366d467b0",
+    "test-service-backend.log": "f196bef0973ff999dcbcf679ca035393cbb4be84e582dd7f9d09005e1f656ac4",
+    "test-service-endpoint.log": "1b97145c2955923d375784c619679c866b011fbae5c360ef502d06330ea29eca"
+  },
+  "source_sha256": {
+    "drivers/misc/mediatek/ccci/ccci-runtime-profile.c": "f2062c9a5d3d3293de193ad0d90dc20ebec147356be5ef293aa38d3d33564dec",
+    "drivers/misc/mediatek/ccci/ccci-rpc-op6893.c": "6741fb8509f780d1bb93c94efea2c949c957235a054f88f303d7cf9c43ef9c06",
+    "drivers/misc/mediatek/ccci/ccci-rpc-provider.c": "17e54a98a4eb80420b46097ecab38509dddb82bcda5ff92195f541af4b427622",
+    "Documentation/arch/arm64/op6893-bringup/tools/modem_rpc_backend.py": "f22eb00b129804b78f5d04b8be1b851c1855ab615680e46cb53bac0731e7f480",
+    "Documentation/arch/arm64/op6893-bringup/tools/modem_service_backend.py": "c2de9013f03f1b59213256baf212ea0c3fd010e668b1091579910fdf4f5ae686"
+  }
+}

@@ -6,6 +6,9 @@
 分发器并提供只读 `dispatch` 状态，不调用 prepare/start，不释放 MD CPU。
 本轮没有设备操作、镜像刷写或新增蜂窝验收，`service_ready=0` 保持不变。
 
+后续已接本机部分RPC事实、用户RPC policy和typed runtime builder，并纠正cache
+预填假设，见[最新接续](MODEM-BOOTSTRAP-PROFILE.md)。下文为原分发里程碑的边界。
+
 ## 生命周期与顺序
 
 未来唯一 MD owner 必须持父生命周期锁，先证明 MD CPU/DMA 已停止、准备供电

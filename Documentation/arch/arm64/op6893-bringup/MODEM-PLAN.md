@@ -6,8 +6,8 @@ MD继承ON接管、冷上电及普通CCIF prepare/stop/off已在8ec93b17bbb5实�
 普通CCIF接收、runtime协商/回复与有状态HS1/HS2 consumer已离线实现验证，
 见[R7.3](MODEM-RUNTIME-HANDSHAKE.md)。随后增加SCP client与后置CCISM core，
 见[R7.4](MODEM-CCISM.md)。CCIF2/system 与服务 dispatcher 已完成离线连接，
-见[R7.8](MODEM-PORT-DISPATCH.md)。下一组是本机 RPC 事实/用户后端、feature36
-cache、真实能力/ready gate 与 MD CPU 启停 owner；随后合并首次通信测试。
+见[R7.8](MODEM-PORT-DISPATCH.md)。本机 RPC 事实、用户应答与 typed payload 已离线接续，见 R7.9。下一组是
+cache首次清零/32k事实、实际用户策略、真实能力/ready gate 与 MD CPU 启停 owner；随后合并首次通信测试。
 没有 MD CPU release caller 或真实 HS1/HS2，不为 dormant 代码单独刷机。
 AI辅助源码分析与实现。
 SID3 shutdown 对照及启动电压契约见 [供电生命周期](MODEM-RAILS.md)。
@@ -577,3 +577,14 @@ R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、
 - [ ] 审计并填入本机 RPC 完整 namespace；实现确需的用户 RPC 与实际请求 census，FS-only runner 不能充当完整 bootstrap 后端。
 - [ ] 明确 feature36 cache 来源/填充和私有工作副本准备契约，按真实服务生成 runtime offers/ready gate。
 - [ ] 补唯一 MD CPU 启停 owner 和 CPU/DMA 停止证明，合并首次放行、HS1/runtime/HS2、CCISM、异常与停止实测；不拆 dormant 刷机。
+
+
+### R7.9 本机RPC事实、用户应答与bootstrap payload（2026-11-16）
+
+- [x] 核对保存ACK/6.6 FDT，按realme,op6893安装15 GPIO名、SIM1 EINT、DTSI3项的immutable provider；ADC保持不可用，见[来源](MODEM-RPC-BOARD-FACTS.md)。
+- [x] 用vendor enum回归复现并修正EINT -12/-11；纯用户RPC属性/SAR wire与显式私有policy接runner，不猜真实值或校准表。
+- [x] typed runtime 0/1/2/6/14/27/28/36 metadata builder；严格几何、64KiB exception、明确32k策略和失败清零，无活跃调用者。
+- [x] cache源码审计撤销未经证明的AP prefill blocker：本机A首次清零、后续保留，feature36仅地址/大小，见[证据](MODEM-NVRAM-CACHE.md)。
+- [x] actual C sanitizer、用户RPC与混合runner合成回归、启用/恢复ARM64构建；完全离线，无新增基带实测。
+- [ ] 接唯一cache owner/首次清零、32k事实读取和ADC single-channel；准备真实用户策略和可写私有工作副本。
+- [ ] 唯一MD CPU启停与CPU/DMA停止证明、ready gate；合并首次放行/HS1/runtime/HS2/CCISM及异常停止上机。

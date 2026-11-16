@@ -9,6 +9,13 @@ kernel-owned RPC requests through these providers; its default provider is
 `NULL`. Passing synthetic tables in tests does not establish real device RPC
 availability or modem boot success.
 
+A subsequent same-board integration now installs audited GPIO/EINT/DTSI facts
+only for `realme,op6893`, and the explicit runner supports opt-in user RPC
+policy. ADC and remaining hardware services stay unavailable. See
+[board facts](MODEM-RPC-BOARD-FACTS.md) and
+[current bootstrap integration](MODEM-BOOTSTRAP-PROFILE.md); the original
+provider API and completeness contracts below still apply.
+
 ## Audited sources
 
 A root: `/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/eccci`.

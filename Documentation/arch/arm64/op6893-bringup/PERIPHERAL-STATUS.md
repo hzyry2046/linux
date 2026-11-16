@@ -1,5 +1,11 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16 本机RPC/启动数据离线接续：匹配op6893的GPIO/EINT/DTSI静态事实、
+显式用户属性/SAR应答与混合runner、typed runtime builder已接；EINT错码修复。
+cache审计确认A首次清零/后续保留，撤销无证据的AP预填要求。sanitizer/合成
+回归和启用/恢复ARM64构建通过；未访问设备、未启动MD，蜂窝支持状态不变。
+见[剩余实际启动条件](MODEM-BOOTSTRAP-PROFILE.md)。
+
 2026-11-16 服务分发离线整合：accepted HS1 在 runtime 发布后才 arm 服务，
 HS2 顺序连接 service/CCISM，补 controller 故障通知、后端预留及父生命周期门控。
 内核 typed RPC 与 A 用户 RPC 分流，FS 枚举/递归删除补齐；没有本机 RPC 事实、
