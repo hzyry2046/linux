@@ -79,7 +79,7 @@ def _reply(record, packet):
         raise RecordError('invalid canonical response size')
     length, sequence, slot, operation = struct.unpack_from('<4I', packet, 4)
     request_operation, = struct.unpack_from('<I', record.packet, 16)
-    expected_operation = request_operation if record.kind == FS else request_operation | 0xffff0000
+    expected_operation = request_operation | 0xffff0000
     if (length != len(packet) or sequence & 0xffff != channel or slot != record.slot or
             operation != expected_operation or packet[:4] != record.packet[:4]):
         raise RecordError('invalid canonical response metadata')

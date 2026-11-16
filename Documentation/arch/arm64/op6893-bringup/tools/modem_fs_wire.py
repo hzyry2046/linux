@@ -131,6 +131,19 @@ def _operation(request):
     if op == 0x100c:
         _count(args, 3)
         return op, (_path(args[0]), _path(args[1]), _u32(args[2]))
+    if op == 0x1021:
+        _count(args, 3)
+        return op, (_path(args[0]), _u32(args[1]), _u32(args[2]))
+    if op == 0x1010:
+        _count(args, 1)
+        return op, (_path(args[0]),)
+    if op == 0x100e:
+        # GetDiskInfo: wide drive path plus one bounded scalar argument whose
+        # exact width is not yet established; the backend ignores it.
+        _count(args, 2)
+        if len(args[1]) > 16:
+            raise MalformedRequest('GetDiskInfo scalar too long')
+        return op, (_path(args[0]), args[1])
     if op == 0x1018:
         _count(args, 2)
         return op, (_path(args[0]), _u32(args[1]))
@@ -166,10 +179,14 @@ def _operation(request):
         if len(args[1]) != 40:
             raise MalformedRequest('CMPT_Read requires ten u32 words')
         words = struct.unpack('<10I', args[1])
-        if words[0] != 0x1f or words[3] != 0x700:
-            raise UnsupportedOperation('CMPT_Read variant unresolved')
-        if words[6] > 2 or words[8] > MAX_IO:
-            raise MalformedRequest('invalid CMPT_Read seek or read size')
+        # The MD has been observed sending 0x1f and 0x13; every stage bit is
+        # independent, so admit the known subset and reject unknown bits.
+        if words[0] & ~0x1f:
+            raise UnsupportedOperation('CMPT_Read mask outside the known stages')
+        if words[0] & 4 and words[6] > 2:
+            raise MalformedRequest('invalid CMPT_Read seek origin')
+        if words[0] & 8 and words[8] > MAX_IO:
+            raise MalformedRequest('invalid CMPT_Read size')
         return op, (name, args[1])
     raise UnsupportedOperation('operation reply schema unresolved')
 
@@ -183,7 +200,8 @@ def _word(value):
 def _reply_args(op, result):
     if not isinstance(result, tuple):
         raise ValueError('backend response must be a tuple')
-    if op in (0x1001, 0x1002, 0x1005, 0x1007, 0x100c, 0x1014, 0x1018, 0x101a, 0x101c):
+    if op in (0x1001, 0x1002, 0x1005, 0x1007, 0x100c, 0x1010, 0x1014, 0x1018,
+              0x101a, 0x101c, 0x1021):
         if len(result) != 1:
             raise ValueError('invalid backend scalar response')
         return (_word(result[0]),)
@@ -208,6 +226,16 @@ def _reply_args(op, result):
         elif result[2] and (len(result[2]) < 4 or result[2][-2:] != b'\0\0'):
             raise ValueError('invalid backend Find name terminator')
         return _word(result[0]), result[1], result[2]
+    if op == 0x1021:
+        _count(args, 3)
+        return op, (_path(args[0]), _u32(args[1]), _u32(args[2]))
+    if op == 0x1010:
+        _count(args, 1)
+        return op, (_path(args[0]),)
+    if op == 0x100e:
+        if len(result) != 2 or not isinstance(result[1], bytes) or len(result[1]) != 84:
+            raise ValueError('invalid backend disk info response')
+        return _word(result[0]), result[1]
     if op == 0x1025:
         if len(result) != 2 or not isinstance(result[1], bytes) or len(result[1]) != 24:
             raise ValueError('invalid backend file detail response')
@@ -237,7 +265,8 @@ def respond(backend, generation, packet):
         raise StaleGeneration('working-copy generation revoked')
     result = backend.operate(generation, op, *args)
     values = _reply_args(op, result)
-    body = bytearray(struct.pack('<II', request.operation, len(values)))
+    # The MD strips the response prefix on TX but requires it on every reply.
+    body = bytearray(struct.pack('<II', request.operation | 0xffff0000, len(values)))
     for value in values:
         body.extend(struct.pack('<I', len(value)))
         body.extend(value)

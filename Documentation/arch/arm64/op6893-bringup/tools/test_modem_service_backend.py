@@ -131,7 +131,7 @@ class ServiceTest(unittest.TestCase):
         requests = [record(rpc, kind=RPC, slot=2), record(kind=2),
                     record(packet(0x1016)),
                     record(packet(0x1022, (("Z:/sample\0").encode('utf-16le'),
-                                           struct.pack('<10I', *([0] * 10)))))]
+                                           struct.pack('<10I', *([0x20] + [0] * 9)))))]
         for request in requests:
             fd = self.descriptor()
             writer = Mock()

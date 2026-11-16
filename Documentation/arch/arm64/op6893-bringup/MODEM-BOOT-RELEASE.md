@@ -174,3 +174,29 @@ MTCMOS OFF 六寄存器读回 → dispatcher/endpoint 停止。结果
 `off_rc=0`、`md_power state=stopped`、`dispatch state=6 (STOPPED)`、
 `services stopped=1 error=0`；SCP 保持 `active=1 ready=1`，没有被误停。
 这验证了停止顺序和硬件停止证据，不需要再为停止单独刷机。
+
+## 后续真机结果（2026-11-17，镜像 a6025a735b61）
+
+在首次放行之后，按 MD 实际请求逐项修正了 FS/RPC 线格式，MD 现在能完成
+完整的 NVRAM 读取扫描，但停在 NVRAM 初始化（详见
+[MODEM-FS-SEMANTICS.md](MODEM-FS-SEMANTICS.md) 的 live 小节和
+`evidence/modem-fs-live-sequence.json`）。
+
+关键修正：
+
+- **FS 应答必须带 `0xffff0000 | op` 前缀**。MD 请求用裸 op，但它的
+  `ccci_fs.c` 在应答 op 不匹配时断言；首次放行时 `para=0xffff1001,0x1001`
+  就是这个原因。内核端点现在只接受带前缀的应答。
+- 新增 `GetDiskInfo(0x100e)`、`GetAttributes(0x1010)`、`Restore(0x1021)`、
+  `CMPT_Read` 的 `0x13` 变体、只读目录打开、盘符根路径。
+- `0x4007`（ADC 值）按同板 `get_md_adc_val()` 的失败返回值回复两个 `-1`，
+  不再以 `-EOPNOTSUPP` 终止会话。
+- `handshake` 状态新增 `md_head`，`ccif` 新增服务发送计数/最后错误，
+  `md_ee`/`md_ee_raw` 暴露 MD 异常记录头（offender、断言文件/行/参数）。
+- bit16 的通知改判为 `D2H_EXCEPTION_INIT`（MD 断言），不再当作普通 ex-ack。
+
+真机观察：HS1 之后 MD 依次完成 RPC、`md_nv_config.txt` 打开/取大小/关闭、
+磁盘信息、属性、目录打开、约 350 次 `CMPT_Read`，随后 `Restore NV0S_000`
+失败并在 `mcu/service/nvram/src/nvram_io.c:2394` 断言
+（`para=0x1,0x4,0xf008`）。诊断性“假成功 Restore”不改变该断言，说明
+MD 需要真实 NVRAM 内容或 bin-region 备份；按项目约束不导入。

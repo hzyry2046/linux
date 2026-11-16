@@ -86,12 +86,64 @@ class BackendTest(unittest.TestCase):
 
     def test_utf16_and_traversal_rejected_before_file_open(self):
         for value in ('Z:\\..\\original', 'Z:\\a..b', 'Z:\\a\\.\\b',
-                      'Z:sample', '/sample', 'z:\\sample', 'Z:\\\\sample',
+                      'Z:sample', '/sample', 'z:\\sample', 'Z:/',
                       'Z:\\sample\0junk'):
             self.assertEqual(self.call(0x1001, path(value), 0x20400), (-16,))
         for value in (b'\x00', b'\x00\xd8', b''):
             self.assertEqual(self.call(0x1001, value, 0x700), (-16,))
         self.assertEqual(self.seed.read_bytes(), bytes(range(256)))
+
+    def test_drive_root_attributes_and_create(self):
+        self.assertEqual(self.call(0x1010, path('Z:')), (0x10,))
+        self.assertEqual(self.call(0x1010, path('Z:\\')), (0x10,))
+        self.assertEqual(self.call(0x1010, path('U:')), (-9,))
+        self.assertEqual(self.call(0x1007, path('Z:')), (-18,))
+        self.assertEqual(self.call(0x1007, path('W:')), (0,))
+        self.assertEqual(self.call(0x1010, path('W:')), (0x10,))
+
+    def test_readonly_directory_open_and_size(self):
+        (self.root / 'Z' / 'nvram').mkdir()
+        handle, = self.call(0x1001, path('Z:\\nvram'), 0x900)
+        self.assertGreater(handle, 0)
+        self.assertGreaterEqual(self.call(0x1009, handle)[1], 0)
+        self.assertEqual(self.call(0x1005, handle), (0,))
+        for flags in (0x10000, 0x20000, 0x200):
+            self.assertEqual(self.call(0x1001, path('Z:\\nvram'), flags), (-16,))
+
+    def test_restore_without_bin_region_fails_closed(self):
+        self.assertEqual(self.call(0x1021, path('Z:/NVRAM/NVD_DATA/SM21_003'),
+                                   b'\0\0\0\0', b'\0\0\0\0'), (-18,))
+
+    def test_get_attributes_readonly_and_directory_bits(self):
+        (self.root / 'Z' / 'dir').mkdir()
+        (self.root / 'Z' / 'ro').write_bytes(b'x')
+        (self.root / 'Z' / 'ro').chmod(0o444)
+        self.assertEqual(self.call(0x1010, path('Z:/sample')), (0,))
+        self.assertEqual(self.call(0x1010, path('Z:/ro')), (1,))
+        self.assertEqual(self.call(0x1010, path('Z:/dir')), (0x10,))
+        self.assertEqual(self.call(0x1010, path('Z:/missing')), (-9,))
+
+    def test_get_disk_info_record_matches_vendor_fields(self):
+        status, record = self.call(0x100e, path('Z:'), b'\0\0\0\0')
+        self.assertEqual(status, 0)
+        self.assertEqual(len(record), 84)
+        sector, total, free = struct.unpack_from('<III', record, 0x30)
+        cluster, = struct.unpack_from('<I', record, 0x40)
+        self.assertEqual((sector, cluster), (512, 512))
+        self.assertGreater(total, 0)
+        self.assertGreaterEqual(free, 0)
+        self.assertEqual(record[:0x30], bytes(0x30))
+        self.assertEqual(record[0x3c:0x40], bytes(4))
+        self.assertEqual(record[0x44:], bytes(len(record) - 0x44))
+        self.assertEqual(self.call(0x100e, path('C:'), b'\0\0\0\0'), (-16,))
+
+    def test_drive_doubled_separator_matches_one_separator(self):
+        # Observed MD request form: "X://md_nv_config.txt" with flag 0x700.
+        for value in ('Z://sample', 'Z:\\\\sample', 'Z:///sample'):
+            handle, = self.call(0x1001, path(value), 0x700)
+            self.assertEqual(self.call(0x1009, handle), (0, 256))
+            self.assertEqual(self.call(0x1005, handle), (0,))
+        self.assertEqual(self.call(0x1001, path('X://md_nv_config.txt'), 0x700), (-9,))
 
     def test_symlink_hardlink_and_special_files_cannot_escape_or_truncate(self):
         (self.root / 'Z' / 'link').symlink_to(self.seed)
@@ -134,7 +186,22 @@ class BackendTest(unittest.TestCase):
                                    struct.pack('<10I', *words)),
                          (struct.pack('<Ii', 0, -9), 0, 0, b''))
         self.assertEqual(self.backend.handles, {})
+        # Bit 0 is mandatory: the vendor serializes {completed=0, error=-18}.
+        words[0] = 0x0e
+        self.assertEqual(self.call(0x1022, path('Z:/sample'),
+                                   struct.pack('<10I', *words)),
+                         (struct.pack('<Ii', 0, -18), 0, 0, b''))
+        # Without the close bit the file is closed but completion stays 0x0f.
         words[0] = 0x0f
+        self.assertEqual(self.call(0x1022, path('Z:/sample'),
+                                   struct.pack('<10I', *words))[0],
+                         struct.pack('<II', 0x0f, 0))
+        # Observed MD variant: open+size+close only.
+        words[0], words[3] = 0x13, 0x100
+        self.assertEqual(self.call(0x1022, path('Z:/sample'),
+                                   struct.pack('<10I', *words)),
+                         (struct.pack('<II', 0x13, 0), 256, 0, b''))
+        words[0] = 0x20
         with self.assertRaises(UnsupportedOperation):
             self.call(0x1022, path('Z:/sample'), struct.pack('<10I', *words))
 

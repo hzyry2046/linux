@@ -1,0 +1,45 @@
+{
+  "date": "2026-11-17",
+  "image": {
+    "path": "mt6893-direct/dist/a6025a735b61/boot.img",
+    "release": "7.3.0-op6893-d1-a6025a735b61+",
+    "sha256": "632830a03d462798ea807f483a8f27a6d729f78225b0b49743508fe7d27055d9"
+  },
+  "device": {
+    "serial": "IF7HHUAUVSHIGMJR",
+    "mainline": "7.3.0-op6893-d1-a6025a735b61+"
+  },
+  "sequence": [
+    "md_power takeover/on -> powered-cpu-not-released",
+    "md_boot prepare 6400 -> prepared; release -> SMC(6,0) boot_ret=0",
+    "HS1 accepted; runtime published; endpoint armed",
+    "26 kernel-owned RPC requests answered; 0x4007 (ADC value) now replies -1 twice",
+    "FS Open X://md_nv_config.txt -> handle 1; GetFileSize 0; Close 0",
+    "GetDiskInfo Z:\\ -> status 0 + 84-byte record",
+    "GetAttributes Z:\\FAT6F5923D6.log -> -9",
+    "Open Z:\\NVRAM read-only directory -> handle 1; Close",
+    "GetAttributes of NVD_DATA/NVD_CORE/CALIBRAT/NVD_IMEI/BACKUP -> 0x10",
+    "GetAttributes/CreateDir on X:\\ and Y:\\ drive roots",
+    "~350 CMPT_Read requests (mask 0x13, flags 0x100) answered {0,-9} for absent files",
+    "Restore Z:\\NVRAM\\NVD_IMEI\\NV0S_000 -> -18 (no bin-region backup)",
+    "MD asserted in mcu/service/nvram/src/nvram_io.c line 2394 para=0x1,0x4,0xf008"
+  ],
+  "root_cause_fixed": {
+    "symptom": "MD asserted in ccci_fs.c line 1302 with para=0xffff1001,0x1001,0x0",
+    "cause": "reply operation lacked the 0xffff0000 prefix the MD requires",
+    "fix": "kernel endpoint requires request_op | 0xffff0000; adapter emits the prefix"
+  },
+  "counts": {
+    "service_tx": 727,
+    "tx_error": 0,
+    "fs_requests_observed": 350
+  },
+  "not_reached": [
+    "HS2",
+    "post-HS2 CCISM",
+    "radio READY",
+    "NVRAM initialisation"
+  ],
+  "boundary": "NV0S_000 cannot be read or restored from an empty private working copy; real NVRAM content or a real bin-region backup is required and is outside the project constraints",
+  "no_private_data": "the runner used a disposable private working copy with empty NVRAM directories; no vendor NVRAM, identity, firmware or TCM content was read"
+}

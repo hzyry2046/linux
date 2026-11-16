@@ -24,8 +24,9 @@ def wide(value):
     return (value + '\0').encode('utf-16le')
 
 
-def packet(operation, args, data0=0x40001234, sequence=0x83570000, slot=4):
-    body = word(0xffff0000 | operation) + word(len(args))
+def packet(operation, args, data0=0x40001234, sequence=0x83570000, slot=4,
+           prefix=True):
+    body = word((0xffff0000 if prefix else 0) | operation) + word(len(args))
     for arg in args:
         body += word(len(arg)) + arg + b'\0' * (-len(arg) % 4)
     return struct.pack('<4I', data0, len(body) + 16, sequence | 14, slot) + body
@@ -82,6 +83,28 @@ class WireTest(unittest.TestCase):
         self.assertEqual(self.call(0x1005, word(handle)), (word(0),))
         self.assertEqual(self.call(0x1003, word(handle), word(1)),
                          (word(-10), word(0), b''))
+
+    def test_bare_request_operation_gets_prefixed_reply(self):
+        # Observed MD request form: bare 0x1001; the MD asserts unless the
+        # reply carries 0xffff1001 (same-board ccci_fs.c assert parameters).
+        request = packet(0x1001, (wide('X:\\md_nv_config.txt'), word(0x700)),
+                         data0=0, sequence=0, slot=0, prefix=False)
+        reply = respond(self.backend, 17, request)
+        self.assertEqual(struct.unpack_from('<I', reply, 16)[0], 0xffff1001)
+        self.assertEqual(struct.unpack_from('<I', reply, 12)[0], 0)
+
+    def test_get_attributes_reply_shape(self):
+        attrs, = self.call(0x1010, wide('Z:/sample'))
+        self.assertEqual(struct.unpack('<I', attrs)[0], 0)
+        missing, = self.call(0x1010, wide('Z:/missing'))
+        self.assertEqual(struct.unpack('<i', missing)[0], -9)
+
+    def test_get_disk_info_reply_shape(self):
+        status, record = self.call(0x100e, wide('Z:'), word(0))
+        self.assertEqual(struct.unpack('<i', status)[0], 0)
+        self.assertEqual(len(record), 84)
+        self.assertEqual(struct.unpack_from('<I', record, 0x30)[0], 512)
+        self.assertEqual(struct.unpack_from('<I', record, 0x40)[0], 512)
 
     def test_known_errors_and_control_operations(self):
         self.assertEqual(self.call(0x1001, wide('Z:/missing'), word(0x700)), (word(-9),))
@@ -153,7 +176,7 @@ class WireTest(unittest.TestCase):
         unknown = [                   packet(0x101a, (word(4), word(2), word(0))),
                    packet(0x1016, ()),
                    packet(0x1022, (wide('Z:/sample'),
-                          struct.pack('<10I', 0xf, 0, 0, 0x700, 0, 0, 1, 0, 1, 0)))]
+                          struct.pack('<10I', 0x20, 0, 0, 0x700, 0, 0, 1, 0, 1, 0)))]
         for request in unknown:
             with patch.object(self.backend, 'operate') as operate:
                 with self.assertRaises(UnsupportedOperation):

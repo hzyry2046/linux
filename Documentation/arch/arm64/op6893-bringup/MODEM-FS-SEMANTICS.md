@@ -290,3 +290,69 @@ summarized paths/results), successful FindFirst response acceptance on MD,
 installed libc `localtime` pointer behavior, full Unicode names, and MD requirements
 for otherwise-uninitialized failure fields. Synthetic filesystem tests can
 validate new provider choices; do not label them captured MD behavior.
+
+## Live MD wire results (2026-11-17, image a6025a735b61)
+
+These are real hardware observations from the op6893 with the gated release
+owner and the private FS runner; no vendor NVRAM, identity or firmware data
+was read. They correct two earlier static assumptions.
+
+### Replies must carry the 0xffff0000 operation prefix
+
+The MD sends requests with a **bare** operation (`0x1001`, `0x1009`, `0x100e`,
+`0x1010`, `0x1021`, `0x1022`), but its FS client asserts unless every reply
+carries `0xffff0000 | op`. The first release attempt answered `0x1001` and the
+MCU asserted 3 s later:
+
+```
+ex_type=0x50 (ASSERT) offender=MCU
+path=mcu/service/hif/ncccisrv/ccci_fs/src/ccci_fs.c line=1302
+para=0xffff1001,0x1001,0x0        (expected, actual, unused)
+```
+
+After the reply prefix was added, the same request sequence completed without
+an assert. The kernel endpoint now accepts only
+`reply_op == (request_op | 0xffff0000)`; the fragment router still compares the
+low 16 bits. This is a wire requirement, not a cosmetic difference.
+
+### Observed boot sequence before NVRAM initialisation
+
+```
+Open    X://md_nv_config.txt   flags 0x700   (double separator, trailing NUL)
+GetFileSize handle 1
+Close   handle 1
+GetDiskInfo Z:\                argc 2, reply status + 84-byte record
+GetAttributes Z:\FAT6F5923D6.log            -> -9 when absent
+Open    Z:\NVRAM               flags 0x900   (read-only directory open)
+GetAttributes Z:\NVRAM\{NVD_DATA,NVD_CORE,CALIBRAT,NVD_IMEI,BACKUP}
+GetAttributes / CreateDir on X:\ and Y:\ drive roots
+CMPT_Read (mask 0x13, flags 0x100) of ~350 Z:\NVRAM\... files
+CMPT_Read Z:\NVRAM\NVD_CORE\MTCR_000
+Restore Z:\NVRAM\NVD_IMEI\NV0S_000 (argc 3)
+```
+
+`GetDiskInfo` returns two arguments: a 4-byte status and an 84-byte record.
+The same-board helper writes sector size 512 at 0x30, `statfs.f_blocks >> 9`
+at 0x34, `statfs.f_bfree` at 0x38 and 512 at 0x40; every other byte stays
+zero. `GetAttributes` returns `(read-only ? 0x1 : 0) | (dir ? 0x10 : 0)`.
+`Restore` returns the `NVM_RestoreFromBinRegion_OneFile` status and maps a
+failed restore to `-18`; a provider without a bin-region backup must return
+`-18`, not a fabricated success.
+
+### CMPT_Read masks
+
+The MD has been observed sending both `0x1f` (open,size,seek,read,close) and
+`0x13` (open,size,close) with flags `0x700` and `0x100`. The stage bits are
+independent: `completed` accumulates the performed stages and a missing bit 0
+serializes the vendor constant `{completed=0, error=-18}`. The adapter now
+admits any subset of `0x1f` and rejects unknown bits; the seek origin and read
+length are validated only when their bits are set.
+
+### NVRAM data is the current hard boundary
+
+With an empty private NVRAM tree every `CMPT_Read` returns `{0, -9}` and the
+MD continues the scan, but it asserts in `mcu/service/nvram/src/nvram_io.c`
+line 2394 (`para=0x1,0x4,0xf008`) once `NV0S_000` cannot be read or restored.
+A diagnostic run that reported `Restore` success without creating the file
+produced the same assert, so the MD needs real NVRAM content or a real
+bin-region backup. Importing either is outside this project's constraints.

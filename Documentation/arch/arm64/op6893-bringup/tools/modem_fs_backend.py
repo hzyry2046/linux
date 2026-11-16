@@ -115,10 +115,11 @@ class WorkingCopy:
         if ('\0' in text or '..' in text or len(text) < 3 or
                 text[0] not in DRIVES or text[1:3] != ':/'):
             raise PermissionError(errno.EACCES, 'invalid path')
-        parts = text[3:].split('/')
-        if parts and parts[-1] == '':
-            parts.pop()
-        if any(not part or part == '.' or ':' in part for part in parts):
+        # The MD spells a drive-relative path with a doubled separator
+        # (X://name); POSIX collapses repeated separators, so only empty
+        # components are dropped. A bare drive root is not a file path.
+        parts = [part for part in text[3:].split('/') if part]
+        if not parts or any(part == '.' or ':' in part for part in parts):
             raise PermissionError(errno.EACCES, 'invalid path')
         return [text[0], *parts]
 
@@ -163,6 +164,7 @@ class WorkingCopy:
             return -5
         native_flags = self._flags(flags)
         parent, name = self._parent(path)
+        directory = False
         try:
             try:
                 info = os.stat(name, dir_fd=parent, follow_symlinks=False)
@@ -170,15 +172,25 @@ class WorkingCopy:
                 if not native_flags & os.O_CREAT:
                     raise
             else:
-                if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                if stat.S_ISDIR(info.st_mode):
+                    # The MD opens NVRAM directories read-only; nothing is
+                    # readable through a directory fd, so allow exactly that.
+                    if native_flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT |
+                                       os.O_TRUNC):
+                        raise PermissionError(errno.EACCES, 'directory write rejected')
+                    directory = True
+                    native_flags = (os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW |
+                                    os.O_CLOEXEC | os.O_NONBLOCK)
+                elif not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
                     raise PermissionError(errno.EACCES, 'non-private file')
             fd = os.open(name, native_flags, 0o660, dir_fd=parent)
         finally:
             os.close(parent)
         try:
-            self._regular(fd)
-            if flags & 0x20000:
-                os.ftruncate(fd, 0)
+            if not directory:
+                self._regular(fd)
+                if flags & 0x20000:
+                    os.ftruncate(fd, 0)
         except BaseException:
             os.close(fd)
             raise
@@ -219,6 +231,86 @@ class WorkingCopy:
                 if not result:
                     result = fs_error(exc)
         return result
+
+    @staticmethod
+    def _drive_root(path):
+        """Return the drive letter when the request names only the root."""
+        if not isinstance(path, bytes) or not path or len(path) > MAX_PATH:
+            raise PermissionError(errno.EACCES, 'invalid path')
+        try:
+            text = path.decode('utf-16le', errors='strict')
+        except UnicodeError:
+            raise PermissionError(errno.EACCES, 'invalid path') from None
+        if text.endswith('\0'):
+            text = text[:-1]
+        text = text.replace('\\', '/').rstrip('/')
+        if len(text) == 2 and text[1] == ':' and text[0] in DRIVES:
+            return text[0]
+        return None
+
+    def _attributes(self, path):
+        """Same-board GetAttributes word: read-only 0x1, directory 0x10."""
+        root = self._drive_root(path)
+        if root is not None:
+            info = os.stat(root, dir_fd=self.root, follow_symlinks=False)
+        else:
+            parent, name = self._parent(path)
+            try:
+                info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            finally:
+                os.close(parent)
+        return (0x1 if self._readonly(info) else 0) | \
+               (0x10 if stat.S_ISDIR(info.st_mode) else 0)
+
+    def _restore(self, path, unused1, unused2):
+        """Restore needs the vendor bin-region backup this provider never has.
+
+        Same-board fsd_main returns the NVM_RestoreFromBinRegion_OneFile status
+        and maps a failed restore to -18; nothing is written on failure.
+        """
+        self._path(path)
+        return -18
+
+    @staticmethod
+    def _drive(path):
+        """Drive-root spelling for GetDiskInfo: one letter, optional colon."""
+        if not isinstance(path, bytes) or not path or len(path) > MAX_PATH:
+            raise PermissionError(errno.EACCES, 'invalid path')
+        try:
+            text = path.decode('utf-16le', errors='strict')
+        except UnicodeError:
+            raise PermissionError(errno.EACCES, 'invalid path') from None
+        if text.endswith('\0'):
+            text = text[:-1]
+        text = text.replace('\\', '/')
+        if ('\0' in text or '..' in text or len(text) < 2 or
+                text[0] not in DRIVES or text[1] != ':'):
+            raise PermissionError(errno.EACCES, 'invalid path')
+        return text[0]
+
+    def _disk_info(self, path, unused):
+        """Same-board GetDiskInfo reply: 84-byte record, four set fields.
+
+        The vendor helper statfs()es the mapped drive and writes sector size,
+        total 512-byte sectors and free blocks at 0x30/0x34/0x38/0x40; every
+        other byte of the 84-byte record stays zero.
+        """
+        drive = self._drive(path)
+        try:
+            fd = os.open(drive, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW |
+                         os.O_CLOEXEC, dir_fd=self.root)
+        except FileNotFoundError:
+            fd = os.dup(self.root)
+        try:
+            info = os.fstatvfs(fd)
+        finally:
+            os.close(fd)
+        record = bytearray(84)
+        struct.pack_into('<I', record, 0x30, 512)
+        struct.pack_into('<I', record, 0x34, (info.f_blocks >> 9) & 0xffffffff)
+        struct.pack_into('<I', record, 0x38, info.f_bfree & 0xffffffff)
+        struct.pack_into('<I', record, 0x40, 512)
+        return 0, bytes(record)
 
     @staticmethod
     def _length(length):
@@ -527,37 +619,44 @@ class WorkingCopy:
         if not isinstance(control, bytes) or len(control) != 40:
             raise ValueError('CMPT_Read requires ten u32 words')
         words = struct.unpack('<10I', control)
-        if words[0] != 0x1f or words[3] != 0x700 or words[6] not in (0, 1, 2):
-            raise UnsupportedOperation('unobserved CMPT_Read variant')
-        self._length(words[8])
+        mask, flags = words[0], words[3]
+        if mask & ~0x1f:
+            raise UnsupportedOperation('CMPT_Read mask outside the known stages')
+        # Bit 0 is mandatory in the vendor helper; without it the constant
+        # {completed=0, error=-18} is serialized and no file is touched.
+        if not mask & 1:
+            return struct.pack('<Ii', 0, -18), 0, 0, b''
         completed, size, data, handle = 0, 0, b'', None
         error = 0
         try:
-            handle = self._open(path, words[3])
+            handle = self._open(path, flags)
             if handle < 0:
                 error = handle
             else:
                 completed |= 1
                 fd = self.handles[handle][0]
-                size = self._regular(fd).st_size
-                if size > 0xffffffff:
-                    raise OSError(errno.EOVERFLOW, 'size exceeds wire field')
-                completed |= 2
-                offset = struct.unpack('<i', control[20:24])[0]
-                os.lseek(fd, offset, words[6])
-                completed |= 4
-                data = os.read(fd, words[8])
-                completed |= 8
+                if mask & 2:
+                    size = self._regular(fd).st_size
+                    if size > 0xffffffff:
+                        raise OSError(errno.EOVERFLOW, 'size exceeds wire field')
+                    completed |= 2
+                if mask & 4:
+                    offset = struct.unpack('<i', control[20:24])[0]
+                    os.lseek(fd, offset, words[6])
+                    completed |= 4
+                if mask & 8:
+                    data = os.read(fd, words[8])
+                    completed |= 8
         except OSError as exc:
             error = fs_error(exc)
         finally:
             if handle is not None and handle > 0:
                 close_error = self._close(handle)
-                if not error:
-                    if not close_error:
-                        completed |= 16
-                    else:
+                if not error and mask & 16:
+                    if close_error:
                         error = close_error
+                    else:
+                        completed |= 16
         return struct.pack('<Ii', completed, error), size, len(data), data
 
     def operate(self, generation, op, *args):
@@ -608,12 +707,23 @@ class WorkingCopy:
                     return 0, os.write(fd, data)
                 if rest:
                     raise ValueError('unexpected size arguments')
-                size = self._regular(fd).st_size
+                size = os.fstat(fd).st_size
                 if size > 0xffffffff:
                     raise OSError(errno.EOVERFLOW, 'size exceeds wire field')
                 return 0, size
+            if op == 0x100e:
+                return self._disk_info(*args)
+            if op == 0x1010:
+                path, = args
+                return (self._attributes(path),)
+            if op == 0x1021:
+                return (self._restore(*args),)
             if op == 0x1007:
                 path, = args
+                root = self._drive_root(path)
+                if root is not None:
+                    os.mkdir(root, 0o770, dir_fd=self.root)
+                    return (0,)
                 parent, name = self._parent(path)
                 try:
                     os.mkdir(name, 0o770, dir_fd=parent)
