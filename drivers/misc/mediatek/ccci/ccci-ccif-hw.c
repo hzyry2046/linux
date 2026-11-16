@@ -35,7 +35,7 @@ int ccci_ccif_hw_reset(const struct ccci_ccif_hw_ops *ops, void *context,
 	if (ret)
 		return ret;
 	ops->fence(context);
-	/* Exact SRAM readback; no dump of inherited data or unknown registers. */
+	/* AP/MD SRAM views alias: the AP debug footer is visible through both. */
 	for (u32 offset = 0x100; offset < 0x300; offset += 4) {
 		u32 expected = offset == 0x2f4 ? 0x7274626e :
 			       offset == 0x2f8 ? layout->debug_md :
@@ -49,7 +49,7 @@ int ccci_ccif_hw_reset(const struct ccci_ccif_hw_ops *ops, void *context,
 		ret = ops->read(context, 2, offset, &value);
 		if (ret)
 			return ret;
-		if (value)
+		if (value != expected)
 			return -EIO;
 	}
 	/* Reset must clear BUSY and receive notifications in both directions. */

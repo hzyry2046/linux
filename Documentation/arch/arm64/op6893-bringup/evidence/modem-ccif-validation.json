@@ -17,8 +17,8 @@
     "strict_checkpatch_c_headers": "0 errors, 0 warnings, 0 checks",
     "configuration_restored": true
   },
-  "new_code_hardware_tested": false,
-  "new_image_packed_or_flashed": false,
+  "new_code_hardware_tested": "partial on 420ed6e96546; corrected shared-SRAM verification pending hardware retest",
+  "new_image_packed_or_flashed": true,
   "device_access_this_stage": {
     "transport": "Wi-Fi SSH",
     "read_only": true,
@@ -60,5 +60,33 @@
       "sha256": "a17441bde821b2ef816cb808e4a4a6fc80135db4bdad92b1ecf0b8532faf8edb"
     }
   ],
-  "binding_commit": "1b383d302"
+  "binding_commit": "1b383d302",
+  "live_validation": {
+    "image": "420ed6e96546",
+    "lk_smem_users": 23,
+    "lk_cached_gap_bytes": 524288,
+    "inherited_on_takeover": true,
+    "cold_power_on": true,
+    "all_32_rings_format_and_verify": true,
+    "ccif_result": "EIO: verifier incorrectly expected zero MD footer despite shared SRAM views",
+    "both_ap_md_footer": [
+      "0x7274626e",
+      "0x40110800",
+      "0x00003800"
+    ],
+    "both_busy_and_rchnum_zero": true,
+    "ccif_irq_counts": [
+      0,
+      0
+    ],
+    "usb_wifi_ssh": true,
+    "cpus": "0-7",
+    "kernel_warnings_or_oops": false,
+    "final_state": "powered; sticky CCIF fault preserves clock/domain references; CPU not released"
+  },
+  "regression_reproducer": {
+    "old_c_with_shared_sram": "SIGABRT in hardware success assertion",
+    "corrected_c_with_shared_sram": "ASan/UBSan pass, including 521 failure positions",
+    "threat_model_classification": "functional bug in root-only opt-in hardware initialization; no security boundary crossing demonstrated"
+  }
 }

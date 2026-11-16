@@ -151,7 +151,7 @@ static int hwrite(void *c,u32 b,u32 o,u32 v){
  (void)c;assert(b<3 && o<0x1000 && !(o&3));
  if(++hw_calls==hw_fail)return -EACCES;
  if(!b){assert((o==0x150 || o==0x154) && v==256);}
- else {assert(o>=0x100 && o<0x300);hw[b][o/4]=v;}
+ else {assert(o>=0x100 && o<0x300);hw[1][o/4]=hw[2][o/4]=v;}
  return 0;
 }
 static int hread(void *c,u32 b,u32 o,u32 *v){

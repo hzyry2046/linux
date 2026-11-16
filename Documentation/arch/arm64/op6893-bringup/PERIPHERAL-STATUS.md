@@ -1,5 +1,10 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16 CCIF首轮实测：420ed6e96546完成LK/SMEM校验、继承ON接管关电、
+冷上电及32环校验；SRAM初始化后的双视图footer相同，被原来的MD全零判据
+误判EIO。已复现并修正，待修正版复测stop/off；当前故障保留电源/时钟，
+IRQ未启用、MD CPU未放行。USB/Wi-Fi与8核正常，见[CCIF实测](MODEM-CCIF.md)。
+
 2026-11-16 CCIF离线接续：同一MD owner新增普通CCIF窗口/屏蔽IRQ/联合WC环映射、
 6297正常/异常环CPU收发后端、CCIF0复位与SRAM初始化/读回及关电前stop。
 定向sanitizer、A/V表核对和启用内核构建通过；尚未上机，IRQ不启用、MD CPU

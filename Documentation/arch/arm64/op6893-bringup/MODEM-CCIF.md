@@ -1,9 +1,10 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 # op6893 普通 CCIF 与 6297 控制环
 
-2026-11-16，AI 辅助实现。此版本完成离线实现、sanitizer 与启用 ARM64
-构建；尚未在设备执行 CCIF 初始化、MD 接管或电源切换。最后实测镜像仍是
-`e8509e81dbc3`，不能据此宣称基带或 CCIF 通信可用。
+2026-11-16，AI 辅助实现。`420ed6e96546` 已验证本次 LK 子区解析、继承ON
+接管关电、冷上电和32环格式化/校验。CCIF写入完成后因两侧SRAM视图共享
+footer而误判EIO，已复现并修正校验；修正版完整流程待复测。尚无现场CCIF
+通信或基带READY，MD CPU未放行。
 
 ## 所有权及启用条件
 
@@ -27,7 +28,7 @@ WC 属性遵循本机 A/V 的 `ccci_map_phy_addr()`，不映射其余 SMEM 或 N
 2. 按本机 6297 表格式化正常/异常各16个环，逐个读回控制区和外层标记。
 3. infra `+0x150/+0x154` bit8 复位 CCIF0，清双方各512B SRAM；AP最后12B
    写入 `0x7274626e`、ID13 RAW_MDSS_DBG 的 MD 地址及大小。
-4. 读回双方完整 SRAM，以及双方 BUSY/RCHNUM=0，进入 prepared-irqs-masked。
+4. 读回双方完整 SRAM（共享同一footer），以及双方 BUSY/RCHNUM=0，进入 prepared-irqs-masked。
 
 每次启动仅允许一次准备。开始写入后任一步失败锁存 fault，不重试或猜测回滚。
 `md_power=off` 和 shutdown 会先检查 masked 并重新复位/核对 SRAM，再关 MD1
@@ -85,3 +86,23 @@ CCB/SRAM runtime handshake、doorbell/BUSY/ACK 和 FS/RPC 服务仍待接入。
 预留或单次寄存器读取单独刷机。成功后接 IRQ/worker 和控制通道，再与 SCP
 常驻、CCIF2/CCISM、FS/RPC/NVRAM工作副本服务整合；条件齐备才执行 MD CPU
 boot `(6,0)`，验证 HS1/HS2。此版本不发出该命令。
+
+
+## 首轮合并实测与 SRAM 校验修正
+
+`420ed6e96546` 启动后owner ready，LK v3/20tags/2664B、23子区，NC24MiB、
+cached76939264B、间隙0x80000。初态lk-on；CHECK_DONE/接管成功进入cold，
+冷上电后powered/clocks1/domain1，四路RG电压800/800/800/700mV未改动。
+32环均格式化与校验成功；CCIF写入完成后停在reset-and-sram/EIO。
+
+仅补读已由本次初始化写入的最后三个字：AP `0x102092f4/f8/fc` 与MD
+`0x1020a2f4/f8/fc` 均为 `7274626e / 40110800 / 00003800`。
+双方BUSY/RCHNUM均0，IRQ304/305计数均0，无unexpected、内核告警或Oops，
+USB/Wi-Fi SSH和8核正常。该证据表明MD视图也能看到AP footer；旧测试模型
+将两边设为独立存储，漏掉这个硬件契约。改成共享SRAM模型后实际旧C断言失败，
+修正为两侧都核对相同footer后通过，仍拒绝非footer的非零内容及坏footer。
+
+这是默认关闭、root显式硬件准备入口的功能性错误，不涉及权限边界跨越；
+按本树threat-model作为普通bug处理。首次失败锁定保留电源/时钟，不绕过内核
+fault执行重试/关电。修正版需要重新启动后重测prepare→stop→off。
+原始结果位于 `/data/src/mainline/mt6893-direct/evidence/modem-ccif-image/`。

@@ -492,3 +492,8 @@ UFS RO/rootfs 回归通过。接续优先审计 READY0 所在 mailbox 的 RX/IRQ
 - [x] 实际后端与抽取生命周期sanitizer、A/V表比对、平台/域/SMEM回归、启用ARM64 Image.gz/modules/modpost、默认DTB/schema和strict checkpatch通过。
 - [ ] 合并LK布局→继承ON接管→冷上电→CCIF准备→关电实测；目前没有新硬件验收，不启IRQ或MD CPU。
 - [ ] 接IRQ/worker、控制通道/异常与runtime握手；整合SCP/CCIF2/CCISM和FS/RPC/NVRAM服务后才放行MD及HS1/HS2。
+
+
+R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、冷上电和
+32环格式化/校验。SRAM写入完成后因双视图共享footer而误判EIO；共享模型
+复现旧C失败并已修正。需修正版复测完整prepare/stop/off，不绕过fault重试。
