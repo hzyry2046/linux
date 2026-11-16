@@ -7,9 +7,9 @@ an individual MORE fragment. Output is a complete canonical reply, not a TX
 fragment; the kernel transport must fragment it and assign HIF sequence/assert.
 Opaque header metadata is preserved here except the TX channel and total size.
 
-Unknown semantics raise UnsupportedOperation rather than a guessed reply. In
-particular recursive Move deletion and successful FindFirst results are not
-guessed. Vendor-uninitialized failure bytes are deliberately zeroed. This
+Unknown semantics raise UnsupportedOperation rather than a guessed reply.
+Supported Find-family and recursive deletion policies are documented in
+MODEM-FS-SEMANTICS.md. Vendor-uninitialized failure bytes are deliberately zeroed. This
 adapter does not provide request leases, duplicate suppression,
 concurrency, restart recovery, a daemon, or service-readiness certification.
 """
@@ -120,7 +120,7 @@ def _operation(request):
         if len(args[1]) != length:
             raise MalformedRequest('write payload length mismatch')
         return op, (handle, args[1], length)
-    if op in (0x1005, 0x1009):
+    if op in (0x1005, 0x1009, 0x1014):
         _count(args, 1)
         return op, (_u32(args[0]),)
     if op == 0x1007:
@@ -129,11 +129,23 @@ def _operation(request):
     if op == 0x100c:
         _count(args, 3)
         return op, (_path(args[0]), _path(args[1]), _u32(args[2]))
+    if op == 0x1018:
+        _count(args, 2)
+        return op, (_path(args[0]), _u32(args[1]))
+    if op == 0x1013:
+        _count(args, 2)
+        capacity = _u32(args[1])
+        if not capacity:
+            raise MalformedRequest('Find capacity must be positive')
+        return op, (_u32(args[0]), capacity)
     if op == 0x1012:
         _count(args, 4)
         if len(args[1]) != 1 or len(args[2]) != 1:
             raise MalformedRequest('FindFirst attribute/mask must contain one byte')
-        return op, (_path(args[0]), args[1][0], args[2][0], _u32(args[3]))
+        capacity = _u32(args[3])
+        if not capacity:
+            raise MalformedRequest('Find capacity must be positive')
+        return op, (_path(args[0]), args[1][0], args[2][0], capacity)
     if op == 0x1025:
         _count(args, 1)
         return op, (_path(args[0]),)
@@ -169,7 +181,7 @@ def _word(value):
 def _reply_args(op, result):
     if not isinstance(result, tuple):
         raise ValueError('backend response must be a tuple')
-    if op in (0x1001, 0x1002, 0x1005, 0x1007, 0x100c, 0x101a, 0x101c):
+    if op in (0x1001, 0x1002, 0x1005, 0x1007, 0x100c, 0x1014, 0x1018, 0x101a, 0x101c):
         if len(result) != 1:
             raise ValueError('invalid backend scalar response')
         return (_word(result[0]),)
@@ -182,10 +194,17 @@ def _reply_args(op, result):
                 result[1] != len(result[2]) or len(result[2]) > MAX_IO):
             raise ValueError('invalid backend read response')
         return _word(result[0]), _word(result[1]), result[2]
-    if op == 0x1012:
-        if (len(result) != 3 or type(result[0]) is not int or result[0] >= 0 or
-                result[1] != bytes(52) or result[2] != b''):
-            raise UnsupportedOperation('FindFirst success response unresolved')
+    if op in (0x1012, 0x1013):
+        if (len(result) != 3 or type(result[0]) is not int or
+                not isinstance(result[1], bytes) or len(result[1]) != 52 or
+                not isinstance(result[2], bytes) or len(result[2]) > MAX_PATH or
+                len(result[2]) % 2):
+            raise ValueError('invalid backend Find response')
+        if result[0] < 0:
+            if result[1] != bytes(52) or result[2] != b'':
+                raise ValueError('invalid backend Find failure storage')
+        elif result[2] and (len(result[2]) < 4 or result[2][-2:] != b'\0\0'):
+            raise ValueError('invalid backend Find name terminator')
         return _word(result[0]), result[1], result[2]
     if op == 0x1025:
         if len(result) != 2 or not isinstance(result[1], bytes) or len(result[1]) != 24:

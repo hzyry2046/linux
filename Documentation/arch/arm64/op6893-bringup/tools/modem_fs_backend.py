@@ -6,10 +6,11 @@ Only caller-provisioned private working copies are accepted. Never point this at
 Android mounts or original backups: no import/copy/restore operation is provided.
 The marker is an explicit acknowledgement, not proof of snapshot provenance.
 No operation prints paths, payloads or file contents. Calls must be serialized.
-Move implements established regular-file copy flags, never source deletion.
-Its recursive-directory destination deletion remains unsupported.
-FindFirst can report a missing path, but its successful result layout
-and wildcard searching are unsupported. CMPT_Read accepts only all-five-step
+Move implements established copy/deletion flags, never source deletion.
+FindFirst/Next/Close retain native directory streams and byte-widen names;
+DOS timestamps deliberately use the documented Bionic shared-mtime policy.
+XDelete preflights private regular-file/directory trees before mutation.
+CMPT_Read accepts only all-five-step
 requests with read-only 0x700 flags. Uninitialized vendor failure outputs are
 zeroed; GetFileDetail returns only the established three timestamp words.
 GetDrive accepts exactly the two observed query tuples, never arbitrary flags.
@@ -27,13 +28,24 @@ import os
 import stat
 import struct
 import tempfile
+import time
 
 MARKER = '.op6893-fs-working-copy'
 ACKNOWLEDGEMENT = b'PRIVATE DISPOSABLE MODEM FS WORKING COPY\n'
 DRIVES = frozenset('ZXYWVUTSRQ')
-MAX_HANDLES = 0x81
+MAX_HANDLES = 0x80
 MAX_IO = 0x4000
 MAX_PATH = 1024
+MAX_TREE_DEPTH = 64
+
+
+class _Search:
+    def __init__(self, fd, iterator, pattern, required, excluded):
+        self.fd = fd
+        self.iterator = iterator
+        self.pattern = pattern
+        self.required = required
+        self.excluded = excluded
 
 
 def fs_error(exc):
@@ -61,6 +73,7 @@ class WorkingCopy:
             raise ValueError('positive generation required')
         self.root = -1
         self.handles = {}
+        self.searches = {}
         self.generation = generation
         self.active = False
         fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW |
@@ -146,7 +159,7 @@ class WorkingCopy:
         return result | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
 
     def _open(self, path, flags):
-        if len(self.handles) == MAX_HANDLES:
+        if len(self.handles) + len(self.searches) == MAX_HANDLES:
             return -5
         native_flags = self._flags(flags)
         parent, name = self._parent(path)
@@ -170,18 +183,32 @@ class WorkingCopy:
             os.close(fd)
             raise
         handle = next(i for i in range(1, MAX_HANDLES + 1)
-                      if i not in self.handles)
+                      if i not in self.handles and i not in self.searches)
         self.handles[handle] = fd, flags
         return handle
 
-    def _close(self, handle):
+    def _close(self, handle, sync=True):
+        search = self.searches.pop(handle, None)
+        if search is not None:
+            result = 0
+            try:
+                search.iterator.close()
+            except OSError as exc:
+                result = fs_error(exc)
+            finally:
+                try:
+                    os.close(search.fd)
+                except OSError as exc:
+                    if not result:
+                        result = fs_error(exc)
+            return result
         entry = self.handles.pop(handle, None)
         if entry is None:
             return -10
         fd, flags = entry
         result = 0
         try:
-            if flags & 0x1030000:
+            if sync and flags & 0x1030000:
                 os.fsync(fd)
         except OSError as exc:
             result = fs_error(exc)
@@ -220,10 +247,13 @@ class WorkingCopy:
         return info is not None and info.st_mode & 0xdb == 0 and info.st_mode & 0x124 != 0
 
     def _move(self, source, destination, flags):
-        if self._path(source) == self._path(destination):
+        source_parts, destination_parts = self._path(source), self._path(destination)
+        if source_parts == destination_parts:
             return -2
         if not isinstance(flags, int) or flags & ~0x10003 or not flags & 3:
             return -2
+        if flags & 0x10000 and source_parts[:len(destination_parts)] == destination_parts:
+            raise PermissionError(errno.EACCES, 'overlapping Move tree rejected')
         if flags & 2 and self._readonly(self._move_info(source)):
             return -45
         result = -18
@@ -233,15 +263,18 @@ class WorkingCopy:
                 return -45
             if info is not None:
                 if stat.S_ISDIR(info.st_mode):
-                    raise UnsupportedOperation('Move recursive XDelete unresolved')
-                if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-                    raise PermissionError(errno.EACCES, 'non-private destination')
-                parent, name = self._parent(destination)
-                try:
-                    os.unlink(name, dir_fd=parent)
-                finally:
-                    os.close(parent)
-                result = 0
+                    result = self._xdelete(destination, 0x1c)
+                    if result < 0:
+                        return result
+                else:
+                    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                        raise PermissionError(errno.EACCES, 'non-private destination')
+                    parent, name = self._parent(destination)
+                    try:
+                        os.unlink(name, dir_fd=parent)
+                    finally:
+                        os.close(parent)
+                    result = 0
         # Vendor bit1 only logs; it never unlinks the source (even on success).
         if not flags & 1:
             return result
@@ -303,6 +336,193 @@ class WorkingCopy:
                     except OSError:
                         pass
 
+    @staticmethod
+    def _match(pattern, name):
+        # Same language as PatMatch: case-sensitive bytes, '*' and '?' only.
+        # Iterative backtracking avoids vendor recursion on adversarial stars.
+        p = n = 0
+        star = -1
+        restart = 0
+        while n < len(name):
+            if p < len(pattern) and (pattern[p] == 63 or pattern[p] == name[n]):
+                p += 1
+                n += 1
+            elif p < len(pattern) and pattern[p] == 42:
+                star = p
+                p += 1
+                restart = n
+            elif star >= 0:
+                p = star + 1
+                restart += 1
+                n = restart
+            else:
+                return False
+        while p < len(pattern) and pattern[p] == 42:
+            p += 1
+        return p == len(pattern)
+
+    @staticmethod
+    def _packed_time(value):
+        local = time.localtime(value)
+        # Deliberate vendor quirks: year since1900, unhalved seconds and day
+        # used for BOTH customary month/day fields. All arithmetic is u32.
+        packed = ((local.tm_sec & 31) | ((local.tm_min & 63) << 5) |
+                  ((local.tm_hour & 31) << 11) | 0x60000000)
+        packed = (packed + ((local.tm_year - 1900) << 25)) & 0xffffffff
+        return ((packed & 0xfe000000) | ((local.tm_mday & 15) << 21) |
+                (packed & 0xffff) | ((local.tm_mday & 31) << 16))
+
+    def _dos_entry(self, info, raw_name, capacity):
+        value = bytearray(52)
+        value[11] = int(self._readonly(info)) | (0x10 if stat.S_ISDIR(info.st_mode) else 0)
+        value[12] = int(len(raw_name) < capacity)
+        # Bionic localtime returns shared static storage: the second (mtime)
+        # call overwrites the first (atime) before either pointer is read.
+        packed = self._packed_time(info.st_mtime_ns // 1000000000)
+        struct.pack_into('<I', value, 14, packed)
+        struct.pack_into('<I', value, 22, packed)
+        struct.pack_into('<I', value, 28, info.st_size & 0xffffffff)
+        return bytes(value)
+
+    @staticmethod
+    def _search_capacity(capacity):
+        if type(capacity) is not int or not 1 <= capacity <= 0xffffffff:
+            raise ValueError('Find capacity must be a positive u32')
+
+    def _search_result(self, search, capacity, status):
+        for entry in search.iterator:
+            raw_name = os.fsencode(entry.name)
+            if not self._match(search.pattern, raw_name):
+                continue
+            info = os.stat(entry.name, dir_fd=search.fd, follow_symlinks=False)
+            if (not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)) or
+                    (stat.S_ISREG(info.st_mode) and info.st_nlink != 1)):
+                raise PermissionError(errno.EACCES, 'non-private search entry')
+            attr = int(self._readonly(info)) | (0x10 if stat.S_ISDIR(info.st_mode) else 0)
+            if search.required & ~attr or attr & search.excluded:
+                continue
+            name = raw_name[:capacity - 1]
+            # Exact byte widening, not a claim of Unicode transcoding. fsd
+            # sends zero bytes if the converter returned zero characters.
+            wide = b''.join(bytes((byte if byte != 47 else 92, 0)) for byte in name)
+            if name:
+                wide += b'\0\0'
+            return status, self._dos_entry(info, raw_name, capacity), wide
+        return -6, bytes(52), b''
+
+    def _find_first(self, path, required, excluded, capacity):
+        self._search_capacity(capacity)
+        if any(type(value) is not int or not 0 <= value <= 255
+               for value in (required, excluded)):
+            raise ValueError('Find attributes must be bytes')
+        fd, pattern = self._parent(path)
+        search = None
+        try:
+            search = _Search(fd, os.scandir(fd), os.fsencode(pattern), required, excluded)
+            result = self._search_result(search, capacity, 0)
+            if result[0] < 0:
+                return result
+            handle = next((i for i in range(1, MAX_HANDLES + 1)
+                           if i not in self.handles and i not in self.searches), None)
+            if handle is None:
+                return -5, bytes(52), b''
+            self.searches[handle] = search
+            search = None
+            fd = -1
+            return handle, result[1], result[2]
+        finally:
+            try:
+                if search is not None:
+                    search.iterator.close()
+            finally:
+                if fd >= 0:
+                    os.close(fd)
+
+    def _find_next(self, handle, capacity):
+        self._search_capacity(capacity)
+        search = self.searches.get(handle)
+        if search is None:
+            return -10, bytes(52), b''
+        return self._search_result(search, capacity, 0)
+
+    def _tree_info(self, fd, name):
+        info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+        if (info.st_dev != os.fstat(self.root).st_dev or
+                not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)) or
+                (stat.S_ISREG(info.st_mode) and info.st_nlink != 1)):
+            raise PermissionError(errno.EACCES, 'non-private deletion tree')
+        return info
+
+    @staticmethod
+    def _open_child(fd, name, info):
+        child = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW |
+                        os.O_CLOEXEC, dir_fd=fd)
+        try:
+            actual = os.fstat(child)
+            if (actual.st_ino, actual.st_dev) != (info.st_ino, info.st_dev):
+                raise PermissionError(errno.EACCES, 'deletion tree changed')
+        except BaseException:
+            os.close(child)
+            raise
+        return child
+
+    def _tree_preflight(self, fd, depth):
+        if depth >= MAX_TREE_DEPTH:
+            raise UnsupportedOperation('deletion tree exceeds bounded depth')
+        with os.scandir(fd) as entries:
+            for entry in entries:
+                info = self._tree_info(fd, entry.name)
+                if stat.S_ISDIR(info.st_mode):
+                    child = self._open_child(fd, entry.name, info)
+                    try:
+                        self._tree_preflight(child, depth + 1)
+                    finally:
+                        os.close(child)
+
+    def _recursive_delete(self, fd, flags):
+        os.lseek(fd, 0, os.SEEK_SET)
+        count = 0
+        with os.scandir(fd) as entries:
+            for entry in entries:
+                info = self._tree_info(fd, entry.name)
+                if stat.S_ISDIR(info.st_mode):
+                    if flags & 16:
+                        child = self._open_child(fd, entry.name, info)
+                        try:
+                            count += self._recursive_delete(child, flags)
+                        finally:
+                            os.close(child)
+                    if flags & 8:
+                        os.rmdir(entry.name, dir_fd=fd)
+                        count += 1
+                elif flags & 4:
+                    os.unlink(entry.name, dir_fd=fd)
+                    count += 1
+        return count
+
+    def _xdelete(self, path, flags):
+        if not isinstance(flags, int) or not flags & 0x1c or flags & ~0x1c:
+            return -2
+        if len(self._path(path)) <= 1:
+            raise PermissionError(errno.EACCES, 'drive root deletion rejected')
+        parent, name = self._parent(path)
+        child = None
+        try:
+            info = self._tree_info(parent, name)
+            if not stat.S_ISDIR(info.st_mode):
+                return -2
+            child = self._open_child(parent, name, info)
+            self._tree_preflight(child, 0)
+            count = self._recursive_delete(child, flags)
+            if flags & 0x18 == 0x18:
+                os.rmdir(name, dir_fd=parent)
+                count += 1
+            return count
+        finally:
+            if child is not None:
+                os.close(child)
+            os.close(parent)
+
     def _cmpt(self, path, control):
         if not isinstance(control, bytes) or len(control) != 40:
             raise ValueError('CMPT_Read requires ten u32 words')
@@ -354,6 +574,12 @@ class WorkingCopy:
                 return (self._open(*args),)
             if op == 0x1005:
                 return (self._close(*args),)
+            if op == 0x1014:
+                return (self._close(*args, sync=False),)
+            if op == 0x1013:
+                return self._find_next(*args)
+            if op == 0x1018:
+                return (self._xdelete(*args),)
             if op in (0x1002, 0x1003, 0x1004, 0x1009):
                 handle, *rest = args
                 if handle not in self.handles:
@@ -421,11 +647,7 @@ class WorkingCopy:
                 return 0, struct.pack('<3Q', *(value & 0xffffffffffffffff
                                               for value in times))
             if op == 0x1012:
-                # Existing-parent matching/success is intentionally unresolved;
-                # ENOENT while opening the search directory is established.
-                parent, unused = self._parent(args[0])
-                os.close(parent)
-                raise UnsupportedOperation('FindFirst matching/result unresolved')
+                return self._find_first(*args)
             if op == 0x100c:
                 return (self._move(*args),)
             raise UnsupportedOperation('operation not implemented')
@@ -437,7 +659,7 @@ class WorkingCopy:
                 return error, 0
             if op == 0x1025:
                 return error, bytes(24)
-            if op == 0x1012:
+            if op in (0x1012, 0x1013):
                 return error, bytes(52), b''
             return (error,)
 
@@ -445,7 +667,7 @@ class WorkingCopy:
         """Revoke generation first, close/fsync every handle, return first error."""
         self.active = False
         error = 0
-        for handle in list(self.handles):
+        for handle in list(self.handles) + list(self.searches):
             result = self._close(handle)
             if not error:
                 error = result

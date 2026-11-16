@@ -7,11 +7,13 @@ import os
 from pathlib import Path
 import struct
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
 from modem_fs_backend import (ACKNOWLEDGEMENT, MARKER, MAX_HANDLES, MAX_IO,
-                              UnsupportedOperation, WorkingCopy, fs_error)
+                              MAX_TREE_DEPTH, UnsupportedOperation, WorkingCopy,
+                              fs_error)
 
 
 def path(value):
@@ -145,10 +147,10 @@ class BackendTest(unittest.TestCase):
         self.assertEqual(self.call(0x100c, path('Z:/sample'), path('Z:/new'), 0),
                          (-2,))
         self.assertEqual(self.call(0x1025, path('Z:/missing')), (-9, bytes(24)))
-        self.assertEqual(self.call(0x1012, path('R:/tls/*.*'), 0, 0, 0),
+        self.assertEqual(self.call(0x1012, path('R:/tls/*.*'), 0, 0, 64),
                          (-9, bytes(52), b''))
-        with self.assertRaises(UnsupportedOperation):
-            self.call(0x1012, path('Z:/*.*'), 0, 0, 0)
+        self.assertEqual(self.call(0x1012, path('Z:/*.*'), 0, 0, 64),
+                         (-6, bytes(52), b''))
         info = (self.root / 'Z' / 'sample').stat()
         self.assertEqual(self.call(0x1025, path('Z:/sample')),
                          (0, struct.pack('<3Q', info.st_mtime_ns // 1000000000,
@@ -186,8 +188,8 @@ class BackendTest(unittest.TestCase):
         (self.root / 'Z' / 'new').chmod(0o444)
         self.assertEqual(self.call(0x100c, source, target, 0x10001), (-45,))
         (self.root / 'Z' / 'dir').mkdir()
-        with self.assertRaises(UnsupportedOperation):
-            self.call(0x100c, source, path('Z:/dir'), 0x10001)
+        self.assertEqual(self.call(0x100c, source, path('Z:/dir'), 0x10001), (0,))
+        self.assertTrue((self.root / 'Z' / 'dir').is_file())
         self.assertEqual(self.call(0x100c, source, path('Z:/../outside'), 1), (-16,))
         (self.root / 'Z' / 'link').symlink_to(self.seed)
         self.assertEqual(self.call(0x100c, source, path('Z:/link'), 1), (-16,))
@@ -226,6 +228,147 @@ class BackendTest(unittest.TestCase):
             result = self.call(0x1022, path('Z:/sample'), control)
             self.assertEqual(result[:3], (struct.pack('<Ii', 15, -18), 256, 32))
         self.assertEqual(self.backend.handles, {})
+
+    def test_find_family_attributes_names_handles_and_end_of_search(self):
+        directory = self.root / 'Z'
+        (directory / 'one.dat').write_bytes(b'abc')
+        (directory / 'two.dat').write_bytes(b'defg')
+        (directory / 'ro.dat').write_bytes(b'r')
+        (directory / 'ro.dat').chmod(0o444)
+        (directory / 'folder.dat').mkdir()
+        handle, entry, name = self.call(0x1012, path('Z:/*.dat'), 0, 0x11, 256)
+        self.assertGreater(handle, 0)
+        self.assertEqual(len(entry), 52)
+        names = {name.decode('utf-16le').rstrip('\0')}
+        self.assertEqual(entry[11], 0)
+        self.assertEqual(entry[12], 1)
+        status, entry, name = self.call(0x1013, handle, 256)
+        self.assertEqual(status, 0)
+        names.add(name.decode('utf-16le').rstrip('\0'))
+        self.assertEqual(names, {'one.dat', 'two.dat'})
+        self.assertEqual(self.call(0x1013, handle, 256), (-6, bytes(52), b''))
+        self.assertIn(handle, self.backend.searches)
+        self.assertEqual(self.call(0x1014, handle), (0,))
+        self.assertEqual(self.call(0x1013, handle, 256), (-10, bytes(52), b''))
+        self.assertEqual(self.call(0x1014, handle), (-10,))
+        handle, entry, name = self.call(0x1012, path('Z:/*.dat'), 0x10, 0, 256)
+        self.assertEqual(name, 'folder.dat\0'.encode('utf-16le'))
+        self.assertEqual(entry[11], 0x10)
+        self.assertEqual(self.call(0x1005, handle), (0,))
+        handle, entry, name = self.call(0x1012, path('Z:/*.dat'), 1, 0, 256)
+        self.assertEqual(name, 'ro.dat\0'.encode('utf-16le'))
+        self.assertEqual(entry[11], 1)
+        self.call(0x1014, handle)
+
+    def test_find_vendor_dos_quirks_and_name_truncation(self):
+        (self.root / 'Z' / 'length.name').write_bytes(b'x' * 9)
+        fixed = time.struct_time((2024, 7, 29, 23, 58, 59, 0, 211, -1))
+        with patch('modem_fs_backend.time.localtime', return_value=fixed):
+            handle, entry, name = self.call(0x1012, path('Z:/length.name'), 0, 0, 4)
+        self.assertEqual(name, 'len\0'.encode('utf-16le'))
+        self.assertEqual(entry[12], 0)
+        self.assertEqual(struct.unpack_from('<I', entry, 14)[0], 0x59bdbf5b)
+        self.assertEqual(entry[14:18], entry[22:26])
+        self.assertEqual(struct.unpack_from('<I', entry, 28)[0], 9)
+        expected = bytearray(52)
+        struct.pack_into('<I', expected, 14, 0x59bdbf5b)
+        struct.pack_into('<I', expected, 22, 0x59bdbf5b)
+        struct.pack_into('<I', expected, 28, 9)
+        self.assertEqual(entry, bytes(expected))
+        self.call(0x1014, handle)
+        handle, entry, name = self.call(0x1012, path('Z:/length.name'), 0, 0, 1)
+        self.assertEqual(name, b'')
+        self.assertEqual(entry[12], 0)
+        self.call(0x1014, handle)
+        with self.assertRaises(ValueError):
+            self.call(0x1012, path('Z:/*'), 0, 0, 0)
+        raw = os.fsencode(self.root / 'Z') + b'/high\xff.bin'
+        fd = os.open(raw, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        os.close(fd)
+        handle, entry, name = self.call(0x1012, path('Z:/high?.bin'), 0, 0, 256)
+        self.assertEqual(name, b'h\0i\0g\0h\0\xff\0.\0b\0i\0n\0\0\0')
+        self.call(0x1014, handle)
+        self.assertTrue(self.backend._match(b'a[bc]', b'a[bc]'))
+        self.assertFalse(self.backend._match(b'a[bc]', b'ab'))
+        self.assertFalse(self.backend._match(b'*.*', b'nodot'))
+        self.assertTrue(self.backend._match(b'*a?*b', b'caZzzb'))
+
+    def test_find_private_entries_and_shared_handle_limit(self):
+        (self.root / 'Z' / 'link').symlink_to(self.seed)
+        self.assertEqual(self.call(0x1012, path('Z:/link'), 0, 0, 64),
+                         (-16, bytes(52), b''))
+        self.assertEqual(self.backend.searches, {})
+        for unused in range(MAX_HANDLES - 1):
+            self.call(0x1001, path('Z:/sample'), 0x700)
+        handle, entry, name = self.call(0x1012, path('Z:/sample'), 0, 0, 64)
+        self.assertEqual(handle, 128)
+        self.assertEqual(self.call(0x1001, path('Z:/sample'), 0x700), (-5,))
+        self.assertEqual(self.call(0x1012, path('Z:/sample'), 0, 0, 64),
+                         (-5, bytes(52), b''))
+        search_fd = self.backend.searches[handle].fd
+        self.backend.shutdown()
+        with self.assertRaises(OSError):
+            os.fstat(search_fd)
+        self.assertEqual(self.backend.searches, {})
+
+    def test_recursive_xdelete_flags_counts_and_move_directory_destination(self):
+        def tree(name):
+            target = self.root / 'Z' / name
+            (target / 'child').mkdir(parents=True)
+            (target / 'a').write_bytes(b'a')
+            (target / 'child' / 'b').write_bytes(b'b')
+            return target
+        target = tree('all')
+        self.assertEqual(self.call(0x1018, path('Z:/all'), 0x1c), (4,))
+        self.assertFalse(target.exists())
+        target = tree('files')
+        self.assertEqual(self.call(0x1018, path('Z:/files'), 0x14), (2,))
+        self.assertTrue((target / 'child').is_dir())
+        self.assertEqual(self.call(0x1018, path('Z:/files'), 0x18), (2,))
+        target = tree('top')
+        self.assertEqual(self.call(0x1018, path('Z:/top'), 4), (1,))
+        self.assertTrue((target / 'child' / 'b').exists())
+        self.assertEqual(self.call(0x1018, path('Z:/top'), 16), (0,))
+        for flags in (0, 1, 0x20):
+            self.assertEqual(self.call(0x1018, path('Z:/top'), flags), (-2,))
+        self.assertEqual(self.call(0x1018, path('Z:/sample'), 0x1c), (-2,))
+        self.assertEqual(self.call(0x1018, path('Z:/'), 0x1c), (-16,))
+        target = tree('move')
+        self.assertEqual(self.call(0x100c, path('Z:/sample'), path('Z:/move'), 0x10001), (0,))
+        self.assertEqual(target.read_bytes(), bytes(range(256)))
+        target = tree('delete_only')
+        self.assertEqual(self.call(0x100c, path('Z:/sample'), path('Z:/delete_only'),
+                                   0x10002), (4,))
+        self.assertFalse(target.exists())
+        self.assertTrue((self.root / 'Z' / 'sample').exists())
+
+    def test_recursive_delete_preflight_rejects_links_without_mutating_tree(self):
+        target = self.root / 'Z' / 'tree'
+        target.mkdir()
+        (target / 'safe').write_bytes(b'keep')
+        (target / 'outside').symlink_to(self.seed)
+        self.assertEqual(self.call(0x1018, path('Z:/tree'), 0x1c), (-16,))
+        self.assertEqual((target / 'safe').read_bytes(), b'keep')
+        self.assertEqual(self.seed.read_bytes(), bytes(range(256)))
+        (target / 'outside').unlink()
+        os.link(self.seed, target / 'hard')
+        self.assertEqual(self.call(0x1018, path('Z:/tree'), 0x1c), (-16,))
+        self.assertEqual((target / 'safe').read_bytes(), b'keep')
+        self.assertEqual(self.call(0x100c, path('Z:/tree/safe'), path('Z:/tree'),
+                                   0x10001), (-16,))
+
+    def test_recursive_depth_bound_preserves_entire_tree(self):
+        target = self.root / 'Z' / 'deep'
+        target.mkdir()
+        (target / 'safe').write_bytes(b'keep')
+        child = target
+        for unused in range(MAX_TREE_DEPTH):
+            child = child / 'child'
+            child.mkdir()
+        with self.assertRaises(UnsupportedOperation):
+            self.call(0x1018, path('Z:/deep'), 0x1c)
+        self.assertEqual((target / 'safe').read_bytes(), b'keep')
+        self.assertTrue(child.is_dir())
 
     def test_marker_is_mandatory_and_private(self):
         marker = self.root / MARKER

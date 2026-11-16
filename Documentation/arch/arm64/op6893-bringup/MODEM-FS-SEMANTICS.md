@@ -133,12 +133,14 @@ pattern and attributes for FindNext, and replies with exactly three values:
 
 1. 4-byte signed handle/status;
 2. **52-byte** entry produced by `FS_EntryLinuxToDos` at `0x12407c`;
-3. UTF-16LE basename with trailing NUL, size `2 * returned_chars + 2`.
+3. byte-widened basename with trailing NUL, size `2 * returned_chars + 2`
+   when the returned character count is nonzero, otherwise zero bytes.
 
 The byte-to-wide converter `0x12430c` copies low-byte characters and
 replaces slash with backslash. It returns original length if it fits,
 otherwise `capacity-1`, and terminates at that point. This is not proof of
-full Unicode conversion. Zero capacity needs explicit rejection in a new
+full Unicode conversion. The backend widens filesystem bytes directly;
+it does not decode them as UTF-8. Zero capacity needs explicit rejection in a new
 backend: the vendor subtraction would underflow. Long-name fit flag at
 entry offset `0x0c` is `strlen(basename) < capacity`.
 
@@ -148,7 +150,18 @@ exhaustion returns `-5`; allocation failure returns `-1`. Entry-name output
 length is explicitly reset to zero before path/open/search, so failures still
 have three response arguments, with third argument length zero. The 52-byte
 entry can contain untouched caller storage on failures: zero it explicitly
-in a new service.
+in a new service. Directory iteration retains native enumeration order,
+without sorting or snapshotting. File and search handles share 128 slots;
+index zero is reserved, not an additional usable handle.
+
+`FS_CCCI_FindNext` at `0x1211f8` takes a u32 handle and positive u32
+wide-character capacity. It resumes the stored pattern and attribute filters,
+with the same three reply arguments. Success status is **zero**, not the
+handle; exhausted search is `-6` and keeps the stream allocated until close.
+Invalid handles and file handles used as search handles return `-10`.
+`FS_CCCI_FindClose` at `0x1219c4` takes one handle and replies with one
+signed status. It can also close file handles, without Close's conditional
+fsync. Ordinary Close can close a search handle. Shutdown closes both kinds.
 
 ### The entry is not a generic FAT dirent
 
@@ -176,13 +189,51 @@ u = (u & ~(31U << 16)) | ((tm_mday & 31) << 16);
 
 Seconds are not divided by two, and bits commonly used for FAT month are
 filled from **day**, not month. Do not “correct” this into standard FAT
-encoding while claiming a byte-identical replica. The helper calls
-`localtime` twice before reading either returned pointer; whether those
-pointers share static storage depends on the actual libc, and this audit
-has not proved that both timestamp fields always differ correctly. Hence
-FindFirst successful metadata should remain an explicitly reviewed policy
-boundary until the implementation chooses and tests the required fidelity.
-The missing-directory/no-match branches can be implemented independently.
+encoding while claiming a byte-identical replica.
+
+The helper calls `localtime(atime)`, then `localtime(mtime)`, before reading
+either returned pointer. Local Android Bionic source
+`/data/src/mikuui/bionic/libc/tzcode/localtime.c:1691` returns shared static
+`struct tm` storage (including the alternate C89 configuration). Source
+SHA256: `94734ca974ae7205dccef40dfcface2c3520ae67c932fb3af7aec1fd47e35b92`.
+The prototype explicitly chooses this Bionic aliasing policy: both packed
+words use mtime. It uses the provider process's timezone; it does not read
+Android's `persist.sys.timezone` property. This source evidence is not runtime
+verification of the installed libc or of MD acceptance. A synthetic golden
+test fixes the unusual layout: local 2024-07-29 23:58:59 packs to `0x59bdbf5b`.
+
+## XDelete `0x1018` and recursive Move destination deletion
+
+`FS_CCCI_XDelete` at `0x121ea4` takes wide directory path and u32 flags,
+and emits one signed result. Flags must be a nonzero subset of `0x1c`;
+invalid flags or a regular-file target return `-2`. `FS_RecursiveDelete`
+at `0x124388` walks children and applies these bits:
+
+| Bit | Effect |
+|---|---|
+| `0x04` | Unlink regular-file children. |
+| `0x08` | Remove child directories after any recursive walk. |
+| `0x10` | Recurse into child directories. |
+
+When both `0x08` and `0x10` are set, XDelete also removes the requested
+directory itself. Success is the **count of removed files and directories**,
+not a fixed zero status. A negative child error aborts recursion. Move with
+bit 16 uses flags `0x1c` and preserves this count when bit 0 does not request
+a subsequent copy. A successful copy returns zero.
+
+The vendor follows `stat` links, treats recursive opendir failure as zero,
+continues after some child stat errors, and may attempt root rmdir after a
+recursive error. The private-copy backend deliberately fails closed instead:
+it preflights the entire tree, accepts only directories and single-link
+regular files on the working root's filesystem, and rejects symlinks,
+special files, drive-root deletion and trees reaching depth 64 before any
+deletion. Directory opens use O_NOFOLLOW and verify inode/device identity.
+Mutation repeats entry checks and stops on the first error; it is not atomic
+and does not promise rollback after an I/O error. The caller must exclude
+concurrent filesystem mutation, including by other local processes.
+Move also refuses a source contained within the destination tree it would
+delete, before deletion begins. These confinement and bounded-resource rules
+are prototype policy, not claims about vendor behavior.
 
 ## CMPT_Read `0x1022`: errors and completion masks
 
@@ -230,12 +281,12 @@ observed exact `0x1f` and continue to reject unsupported masks before I/O.
 ## Implementation implications
 
 Resolved now: Move's source-retaining copy and flag subset, GetFileDetail's
-24-byte time layout, FindFirst's exact response count/52-byte entry shape,
-missing/no-match errors, and CMPT all-five-stage failure layout. These enable
+24-byte time layout, the FindFirst/Next/Close family and 52-byte entry shape,
+XDelete's recursive flags/counts, and CMPT all-five-stage failure layout. These enable
 useful filesystem provider work without another resource-only flash.
 
 Still unproved: actual runtime Move flag census (previous traces only
 summarized paths/results), successful FindFirst response acceptance on MD,
-libc `localtime` pointer behavior, full Unicode names, and MD requirements
+installed libc `localtime` pointer behavior, full Unicode names, and MD requirements
 for otherwise-uninitialized failure fields. Synthetic filesystem tests can
 validate new provider choices; do not label them captured MD behavior.

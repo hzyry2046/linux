@@ -136,6 +136,8 @@ class WireTest(unittest.TestCase):
                    packet(0x1004, (b'', b'x', word(1))),
                    packet(0x1005, (word(1), word(2))),
                    packet(0x1009, ()), packet(0x101c, (word(0),)),
+                   packet(0x1012, (wide('Z:/*'), b'\0', b'\0', word(0))),
+                   packet(0x1013, (word(1), word(0))),
                    packet(0x1022, (wide('Z:/x'), b'\0' * 39))]
         # The structural parser must reject truncated padding and uint32 lengths.
         bad = bytearray(packet(0x1001, (b'xx', word(0))))
@@ -169,9 +171,19 @@ class WireTest(unittest.TestCase):
                                                info.st_atime_ns // 1000000000,
                                                info.st_ctime_ns // 1000000000)))
 
-    def test_existing_find_search_stays_explicitly_unsupported(self):
-        with self.assertRaises(UnsupportedOperation):
-            self.call(0x1012, wide('Z:/*.*'), b'\0', b'\0', word(64))
+    def test_find_family_and_xdelete_canonical_responses(self):
+        (self.root / 'Z' / 'one.dat').write_bytes(b'one')
+        result = self.call(0x1012, wide('Z:/*.dat'), b'\0', b'\0', word(64))
+        handle, = struct.unpack('<I', result[0])
+        self.assertEqual(len(result[1]), 52)
+        self.assertEqual(result[2], wide('one.dat'))
+        self.assertEqual(self.call(0x1013, word(handle), word(64)),
+                         (word(-6), bytes(52), b''))
+        self.assertEqual(self.call(0x1014, word(handle)), (word(0),))
+        target = self.root / 'Z' / 'tree'
+        target.mkdir()
+        (target / 'a').write_bytes(b'a')
+        self.assertEqual(self.call(0x1018, wide('Z:/tree'), word(0x1c)), (word(2),))
 
     def test_stale_and_stopped_lifecycle_never_emit_reply(self):
         request = packet(0x1001, (wide('Z:/new'), word(0x20000)))
@@ -271,7 +283,11 @@ class ActualCInteropTest(unittest.TestCase):
                             packet(0x1004, (word(1), b'\0\xff\xfe\x80', word(4))),
                             packet(0x1002, (word(1), word(-4), word(1))),
                             packet(0x1003, (word(1), word(4))),
-                            packet(0x1005, (word(1),))]
+                            packet(0x1005, (word(1),)),
+                            packet(0x1012, (wide('Z:/sample'), b'\0', b'\0', word(64))),
+                            packet(0x1013, (word(1), word(64))),
+                            packet(0x1014, (word(1),)),
+                            packet(0x1018, (wide('Z:/child'), word(0x1c)))]
                 for request in requests:
                     reply = respond(backend, 9, request)
                     for data in (request, reply):
