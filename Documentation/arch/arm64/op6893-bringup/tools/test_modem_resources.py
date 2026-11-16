@@ -145,6 +145,10 @@ typedef uint32_t u32;
 struct clk_hw { int unused; };
 struct clk_ops { int (*is_enabled)(struct clk_hw *); int (*enable)(struct clk_hw *);
  void (*disable)(struct clk_hw *); };
+struct mtk_fixed_factor { int id; const char *name; const char *parent_name;
+ int mult; int div; unsigned long flags; };
+#define FACTOR_FLAGS(_id, _name, _parent, _mult, _div, _fl) { .id = _id, \
+ .name = _name, .parent_name = _parent, .mult = _mult, .div = _div, .flags = _fl }
 struct regmap { u32 status, reg, value; unsigned writes; };
 static int regmap_read(struct regmap *m, unsigned reg, u32 *value) {
  assert(reg == 0x94); *value = m->status; return 0;
@@ -171,6 +175,11 @@ int main(void) {
  const unsigned expected_ids[] = {28, 29, 33, 35}, shifts[] = {12, 13, 23, 26};
  const u32 patterns[] = {0, ~0U, 0xaaaaaaaa, 0x55555555, BIT(0) | BIT(1)};
  assert(ARRAY_SIZE(ccif_gates) == 4);
+ assert(ARRAY_SIZE(ccif2_factors) == 2);
+ assert(ccif2_factors[0].id == CLK_IFRAO_CCIF2_AP);
+ assert(ccif2_factors[1].id == CLK_IFRAO_CCIF2_MD);
+ assert(!strcmp(ccif2_factors[0].parent_name, "mt6893_axi_observed"));
+ assert(!strcmp(ccif2_factors[1].parent_name, "mt6893_axi_observed"));
  for (unsigned i = 0; i < ARRAY_SIZE(ccif_gates); i++) {
   const struct mtk_gate *d = &ccif_gates[i];
   assert(d->id == (int)expected_ids[i] && d->shift == (int)shifts[i]);
