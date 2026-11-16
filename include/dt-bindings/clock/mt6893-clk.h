@@ -25,5 +25,7 @@
 #define CLK_IFRAO_CCIF1_MD	29
 #define CLK_IFRAO_CCIF_AP	33
 #define CLK_IFRAO_CCIF_MD	35
+#define CLK_IFRAO_CCIF2_AP	68
+#define CLK_IFRAO_CCIF2_MD	69
 
 #endif

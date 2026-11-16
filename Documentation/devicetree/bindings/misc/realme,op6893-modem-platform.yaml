@@ -21,21 +21,29 @@ description: |
   attachment from powering MD1 before the platform sequence has run.
   Optional ordinary AP/MD CCIF windows and data/exception IRQs allow the
   same owner to prepare SRAM and the validated 6297 shared-memory rings.
-  These are distinct from the SCP CCIF2 bridge.
+  Optional CCIF2 windows and inherited clock references belong to this same
+  owner. The SCP phandle leases the separate boot-lifetime SCP runtime; it
+  neither starts SCP nor establishes modem readiness at probe.
 
 properties:
   compatible:
     const: realme,op6893-modem-platform
 
   reg:
+    minItems: 2
     items:
       - description: Ordinary AP CCIF window
       - description: Ordinary MD CCIF window
+      - description: SCP bridge AP CCIF2 window
+      - description: SCP bridge MD CCIF2 window
 
   reg-names:
+    minItems: 2
     items:
       - const: ccif-ap
       - const: ccif-md
+      - const: ccif2-ap
+      - const: ccif2-md
 
   interrupts:
     items:
@@ -69,13 +77,21 @@ properties:
     description: MT6359P VPU VRFDIG
 
   clocks:
-    maxItems: 4
+    minItems: 4
+    maxItems: 6
   clock-names:
+    minItems: 4
     items:
       - const: ccif-ap
       - const: ccif-md
       - const: ccif1-ap
       - const: ccif1-md
+      - const: ccif2-ap
+      - const: ccif2-md
+
+  mediatek,scp:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Unique op6893 SCP runtime provider for a generation-scoped lease
 
   mediatek,spm:
     $ref: /schemas/types.yaml#/definitions/phandle
@@ -114,3 +130,28 @@ dependencies:
   reg-names: [reg, interrupts, interrupt-names]
   interrupts: [reg, reg-names, interrupt-names]
   interrupt-names: [reg, reg-names, interrupts]
+
+allOf:
+  - if:
+      required: ["mediatek,scp"]
+    then:
+      required: [reg, reg-names]
+      properties:
+        reg:
+          minItems: 4
+        reg-names:
+          minItems: 4
+        clocks:
+          minItems: 6
+        clock-names:
+          minItems: 6
+    else:
+      properties:
+        reg:
+          maxItems: 2
+        reg-names:
+          maxItems: 2
+        clocks:
+          maxItems: 4
+        clock-names:
+          maxItems: 4
