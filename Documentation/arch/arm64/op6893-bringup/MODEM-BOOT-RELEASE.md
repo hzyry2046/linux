@@ -86,6 +86,18 @@ RX 关闭、controller 故障、generation 变化或 SPM 单 bit 都不被接受
 
 ## 首次上机步骤（尚未执行）
 
+已离线构建测试镜像 `dist/1bf863e95714/boot.img`（release
+`7.3.0-op6893-d1-1bf863e95714+`，SHA256
+`637651f50fb4e1a378413ff5741eaa0ffd24ec2cbb54ee5d6a1d8b4ad95065f2`），
+其 kernel config 含全部新选项，board DTB 中平台节点为 okay 且带
+`mediatek,no-external-32k`。尚未刷入。
+
+目标端 runner 前提：当前 Debian rootfs 没有 python3（`debian/packages.tsv`
+与 squashfs 清单均无），而 `modem_service_backend.py` 及其依赖是 Python。
+首次放行前必须先在目标 rootfs 部署 Python 3 与这些脚本（或等价的静态
+后端）；否则 `md_boot prepare` 会在 dispatch reserve 处以未连接失败，这是
+预期安全行为，但无法进入 HS1。
+
 1. 用启用 `OP6893_CCCI_MD_BOOT` 的镜像启动；DT 打开 `modem-platform`，
    关闭互斥的 `modem-handoff`。
 2. 准备标记过的私有工作副本，启动显式 runner：

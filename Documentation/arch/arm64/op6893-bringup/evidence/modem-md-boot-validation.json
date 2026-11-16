@@ -19,11 +19,29 @@
   },
   "contracts": {
     "cache": "unique cached user-32 owner; map write-combined, clear all bytes once, read back first/last word; never re-clear on reconnect or stop; FAULT latches",
-    "gate_order": ["ccif_prepare", "nvram_cache_prepare", "runtime_bootstrap", "port_dispatch_prepare"],
-    "release_order": ["port_dispatch_start", "MTK_SIP_KERNEL_CCCI_CONTROL(6,0)"],
-    "stop_order": ["sample SPM PCM REG13 (diagnostic)", "ccif_stop while clocks held", "md_power_off with six-register OFF readback", "port_dispatch_stop(true)"],
+    "gate_order": [
+      "ccif_prepare",
+      "nvram_cache_prepare",
+      "runtime_bootstrap",
+      "port_dispatch_prepare"
+    ],
+    "release_order": [
+      "port_dispatch_start",
+      "MTK_SIP_KERNEL_CCCI_CONTROL(6,0)"
+    ],
+    "stop_order": [
+      "sample SPM PCM REG13 (diagnostic)",
+      "ccif_stop while clocks held",
+      "md_power_off with six-register OFF readback",
+      "port_dispatch_stop(true)"
+    ],
     "stop_evidence": "MD1 PWR_STATUS/PWR_ON/RESET_B/isolation/three protection ACKs; PCM bit is diagnostic only",
-    "no_software_stop_evidence": ["RX closed", "controller fault", "generation change", "SPM single bit"]
+    "no_software_stop_evidence": [
+      "RX closed",
+      "controller fault",
+      "generation change",
+      "SPM single bit"
+    ]
   },
   "rtc32k": {
     "vendor_source": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/eccci/ccci_rtc.c reads first byte of nvmem cell external-32k",
@@ -96,5 +114,19 @@
     "real user property/SAR policy and private FS working copy are operator inputs",
     "SCP/CCISM hardware state, MD HS1/HS2, DPMAIF and radio readiness unverified",
     "active unbind unsupported; cache/boot owners have no callbacks"
-  ]
+  ],
+  "prepared_image": {
+    "path": "mt6893-direct/dist/1bf863e95714/boot.img",
+    "release": "7.3.0-op6893-d1-1bf863e95714+",
+    "sha256": "637651f50fb4e1a378413ff5741eaa0ffd24ec2cbb54ee5d6a1d8b4ad95065f2",
+    "bytes": 33554432,
+    "config": "kernel.config has HANDSHAKE/CCISM/SERVICES/DISPATCH/NVRAM_CACHE/MD_BOOT=y",
+    "dtb": "modem-platform status okay and mediatek,no-external-32k present",
+    "flashed": false
+  },
+  "runner_deployment": {
+    "blocker": "current Debian rootfs has no python3; modem_service_backend.py is Python",
+    "verified": "debian/packages.tsv and debian/dist/1ed1b45c80c2/debian.squashfs listing",
+    "expected_without_runner": "md_boot prepare fails at dispatch reserve (-ENOTCONN) before CPU release"
+  }
 }
