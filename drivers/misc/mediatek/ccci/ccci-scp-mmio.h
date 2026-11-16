@@ -37,6 +37,10 @@ int ccci_scp_mmio_discard(struct ccci_scp_mmio *mmio,
 			  const struct ccci_scp_layout *layout,
 			  int (*check)(void *context), void *context, u32 *discarded);
 
+/* Owner holds READY, AP awake and serialization; exact APCCCI MD invalid only. */
+int ccci_scp_mmio_md_invalid(struct ccci_scp_mmio *mmio,
+			     const struct ccci_scp_layout *layout, u64 generation);
+
 /* Owner serialization required; report software state without register I/O. */
 ssize_t ccci_scp_mmio_status(struct ccci_scp_mmio *mmio, char *buf);
 ssize_t ccci_scp_mmio_cfg_status(struct ccci_scp_mmio *mmio, char *buf);

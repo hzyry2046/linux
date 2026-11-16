@@ -109,6 +109,13 @@ static void contained(void){assert(receive->fault && !receive->armed && receive-
 static void start(unsigned budget){assert(!ccci_scp_receive_start(receive,&layout,reset_generation,budget));assert(receive->work.pending);}
 /* Inject at final unmask gate unlock while work still runs. */
 static void irq_after_unmask(void){if(!depths[0])trigger(0);else unlock_hook=irq_after_unmask;}
+static unsigned consumer_events,consumer_errors,consumer_fail;
+static int consumer(void *context,const struct ccci_scp_event *event,int error){
+ assert(context==&consumer_events && owner.held);
+ if(error){assert(!event);consumer_errors++;return error;}
+ assert(event && event->generation==17);consumer_events++;
+ return consumer_events==consumer_fail?-EPROTO:0;
+}
 int main(void){
  struct ccci_scp_event event;char status[4096];
  setup();assert(ccci_scp_receive_status(receive,status)>0 && strstr(status,"requested=5 gic_masked=5 armed=0"));
@@ -124,6 +131,19 @@ int main(void){
  reset_model();spec_failure=-EINVAL;assert(reserve()==-EINVAL && !requested_irqs);
  reset_model();nomem=true;assert(reserve()==-ENOMEM && !requested_irqs);
  reset_model();action_failure=true;assert(reserve()==-ENOMEM && syncs==5 && cancels==1);
+ /* Persistent consumer drains every destination in the RX worker. */
+ setup();consumer_events=consumer_errors=consumer_fail=0;
+ assert(!ccci_scp_receive_consumer(receive,consumer,&consumer_events));
+ messages();start(4);run_work(&receive->work);
+ assert(consumer_events==17 && !consumer_errors && !receive->queue.count);
+ assert(ccci_scp_receive_pop(receive,17,&event)==-EBUSY);
+ assert(ccci_scp_receive_consumer(receive,NULL,NULL)==-EBUSY);
+ ccci_scp_receive_stop(receive);
+ assert(!ccci_scp_receive_consumer(receive,NULL,NULL));
+ setup();consumer_events=consumer_errors=0;consumer_fail=3;
+ assert(!ccci_scp_receive_consumer(receive,consumer,&consumer_events));
+ messages();start(4);run_work(&receive->work);contained();
+ assert(consumer_events==3 && consumer_errors==1 && receive->error==-EPROTO);
  /* Unexpected pre-start IRQ forces STOP, never starts a generation implicitly. */
  setup();trigger(0);assert(ccci_scp_receive_start(receive,&layout,17,4)==-EBUSY);run_work(&receive->work);contained();assert(!reads && !checks);
  ccci_scp_receive_stop(receive);start(4);run_work(&receive->work);assert(!receive->fault);

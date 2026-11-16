@@ -51,6 +51,7 @@ static unsigned current_box;
 static int sysfs_emit(char *buf,const char *fmt,...) {
  va_list args;va_start(args,fmt);int n=vsnprintf(buf,4096,fmt,args);va_end(args);return n;
 }
+static void usleep_range(unsigned a,unsigned b){(void)a;(void)b;}
 static unsigned hweight32(u32 x) {return __builtin_popcount(x);}
 static void memzero_explicit(void *p,size_t n) {memset(p,0,n);}
 static u64 resource_size(struct resource *r) {return r->end-r->start+1;}

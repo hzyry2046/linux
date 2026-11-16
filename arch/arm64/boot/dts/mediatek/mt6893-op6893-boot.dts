@@ -79,6 +79,7 @@
 			15 3 1 1
 			25 4 30 0>;
 		mediatek,topckgen = <&topckgen>;
+		mediatek,infracfg = <&ufs_infracfg>;
 		memory-region = <&scp_firmware_mem>, <&scp_share_mem>;
 		memory-region-names = "firmware", "share";
 		status = "disabled";

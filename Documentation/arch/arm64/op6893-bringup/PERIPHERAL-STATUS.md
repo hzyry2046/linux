@@ -1,6 +1,13 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
-2026-11-16最新接续：`949a860a1a85` 已完成 SCP 初始启动→Linux IRQ/worker/
+2026-11-16最新接续：`e8509e81dbc3` 实测 SCP 常驻约49秒，Linux RX消费
+READY1/logger/其他共3事件，无积压或异常中断；AP awake三次配对成功，
+MD-invalid一次传输完成，但没有APCCCI应用层状态回复。显式STOP后双核
+raw=0xff00、generation0、GIC五路masked。USB/Wi-Fi SSH、LVTS和tmpfs匹配
+GPU模块正常。设备保留主线，SCP已停止、MD未启动；下一步MD电源/复位与
+CCIF/CCISM。见[常驻接入实测](MODEM-SCP-RUNTIME.md)。
+
+2026-11-16历史接续：`949a860a1a85` 已完成 SCP 初始启动→Linux IRQ/worker/
 队列→READY1（channel22）→STOP/双核SET 的完整短时实验。IRQ2次、worker3次、
 无unexpected，结束 GIC 五路屏蔽、generation0、两核raw=0xff00。修复了接收层
 lazy-disable 导致软件停用但 GIC 未屏蔽的问题。USB/Wi-Fi SSH、LVTS正常；
@@ -117,7 +124,7 @@ USB/Wi-Fi SSH 和外置 rootfs 正常；MD/SCP 尚未启动。详见 [R3](MODEM-
 | 音频 / 耳机检测 | 未启用 | codec、AFE、时钟/供电和路由待实现；accdet 尚未接入 |
 | 摄像头 / ISP | 未启用 | 传感器型号、总线、供电、时钟、ISP 管线待调查 |
 | RTC / 持久时间 | 未启用 | RTC_CLASS 关闭；不能用启动日志时间作为准确实时时钟 |
-| SCP | 初始启动/接收实测 | LK镜像core0释放后经Linux IRQ/worker/队列收到READY1；STOP后双核SET、GIC五路屏蔽 | 尚未常驻，AP awake/CCCI/恢复待接入；不证明core1独立运行 | [集成启动](MODEM-SCP-INITIAL-BOOT.md) |
+| SCP | 短时常驻/awake实测 | READY1、持续CPU消费、awake三次配对、一次MD-invalid传输；STOP双核SET/GIC五路屏蔽 | 无APCCCI状态回复；未验证长期运行、core1独立运行或完整恢复 | [常驻接入](MODEM-SCP-RUNTIME.md) |
 | modem / 蜂窝 / GNSS | 未启用 | LK及供电/普通CCIF引用已验收；SCP初始启动与RX已实测，MD/CCISM待实现 |
 | NFC / 指纹 / 振动 / IMU 等传感器 | 未验证、未建立支持 | 需逐项识别本机硬件及资源，不能借用同品牌另一机型结论 |
 | UFS 写入、USB host、运行时自动挂起 | 未验证 | 目前测试策略不覆盖这些行为 |

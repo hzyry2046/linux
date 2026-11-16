@@ -18,34 +18,7 @@
 #include "ccci-scp-mmio.h"
 #include "ccci-scp-receive.h"
 
-struct ccci_scp_resource_owner {
-	struct clk *clock;
-	/* Serialize observations and the one pin with future STOP/reset handling. */
-	struct mutex lock;
-	struct ccci_scp_resource resource;
-	void __iomem *cfg;
-	void __iomem *core_tcm[3];
-	struct ccci_scp_irq *irq;
-	struct ccci_scp_mmio *mmio;
-	struct ccci_scp_receive *receive;
-	struct ccci_scp_inspect *inspect;
-#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_RESET_ASSERT)
-	struct ccci_scp_reset reset;
-	bool reset_requested;
-#endif
-	#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_INITIAL_BOOT)
-	struct ccci_scp_layout layout;
-	bool boot_requested;
-	bool boot_running;
-	u32 boot_ready_channel;
-	u32 boot_discarded;
-	u32 boot_events;
-	int boot_error;
-	int boot_cleanup_error;
-#endif
-	/* Valid only between asserted-core old-message discard and final STOP. */
-	u64 reset_generation;
-};
+#include "ccci-scp-owner.h"
 
 /* The firmware request channel belongs to all SCP clients, not each observer. */
 static DEFINE_MUTEX(ccci_scp_resource_owner_lock);
@@ -544,14 +517,18 @@ static ssize_t boot_state_show(struct device *dev, struct device_attribute *attr
 {
 	struct ccci_scp_resource_owner *owner = dev_get_drvdata(dev);
 	ssize_t length;
+	bool ready = false;
 
 	mutex_lock(&owner->lock);
+#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_RUNTIME)
+	ready = owner->runtime.ready;
+#endif
 	length = sysfs_emit(buf,
-			    "requested=%u running=%u generation=%llu discarded=%u events=%u ready_observed=%u ready_channel=%u error=%d cleanup_error=%d ready_now=0 modem_started=0\n",
+			    "requested=%u running=%u generation=%llu discarded=%u events=%u ready_observed=%u ready_channel=%u error=%d cleanup_error=%d ready_now=%u modem_started=0\n",
 			    owner->boot_requested, owner->boot_running, owner->reset_generation,
 			    owner->boot_discarded, owner->boot_events, !!owner->boot_ready_channel,
 			    owner->boot_ready_channel, owner->boot_error,
-			    owner->boot_cleanup_error);
+			    owner->boot_cleanup_error, ready);
 	mutex_unlock(&owner->lock);
 	return length;
 }
@@ -560,6 +537,10 @@ static DEVICE_ATTR_RO(boot_state);
 
 static struct attribute *ccci_scp_resource_attrs[] = {
 #if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_INITIAL_BOOT)
+#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_RUNTIME)
+	&dev_attr_runtime.attr,
+	&dev_attr_runtime_state.attr,
+#endif
 	&dev_attr_initial_boot.attr,
 	&dev_attr_boot_state.attr,
 #endif
@@ -644,6 +625,11 @@ static int ccci_scp_resource_probe(struct platform_device *pdev)
 	ret = ccci_scp_initial_layout(dev, &owner->layout);
 	if (ret)
 		return dev_err_probe(dev, ret, "SCP mailbox layout invalid\n");
+#endif
+#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_RUNTIME)
+	ret = ccci_scp_runtime_create(pdev, owner);
+	if (ret)
+		return dev_err_probe(dev, ret, "SCP runtime setup failed\n");
 #endif
 	platform_set_drvdata(pdev, owner);
 	dev_info(dev, "explicit resource query/pin only; no SMC at probe or SCP start\n");

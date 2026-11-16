@@ -26,6 +26,8 @@ struct ccci_scp_receive {
 	struct ccci_scp_drain drain;
 	int (*check)(void *context, u64 generation);
 	void *context;
+	int (*consume)(void *context, const struct ccci_scp_event *event, int error);
+	void *consumer_context;
 	int irqs[CCCI_SCP_MAX_MBOXES];
 	u32 requested;
 	/* One owned disable depth per bit, including the initial NO_AUTOEN depth. */
@@ -118,6 +120,8 @@ static void ccci_scp_receive_fault(struct ccci_scp_receive *receive, int error)
 	receive->error = error;
 	ccci_scp_queue_invalidate(&receive->queue);
 	ccci_scp_mmio_invalidate(receive->mmio);
+	if (receive->consume)
+		receive->consume(receive->consumer_context, NULL, error);
 }
 
 /* gate held; preserve the original queued token when coalescing interrupts. */
@@ -162,6 +166,7 @@ static void ccci_scp_receive_work(struct work_struct *work)
 	unsigned long flags;
 	u64 generation;
 	bool valid;
+	struct ccci_scp_event event;
 	int ret;
 
 	mutex_lock(receive->owner_lock);
@@ -177,6 +182,16 @@ static void ccci_scp_receive_work(struct work_struct *work)
 	raw_spin_lock_irqsave(&receive->gate, flags);
 	valid = !receive->fault && !receive->closing;
 	raw_spin_unlock_irqrestore(&receive->gate, flags);
+	if (!ret && valid && receive->consume) {
+		while (!(ret = ccci_scp_queue_pop(&receive->queue, generation, &event))) {
+			ret = receive->consume(receive->consumer_context, &event, 0);
+			memzero_explicit(&event, sizeof(event));
+			if (ret)
+				break;
+		}
+		if (ret == -ENODATA)
+			ret = 0;
+	}
 	if (ret || !valid)
 		ccci_scp_receive_fault(receive, ret ? ret : -ESHUTDOWN);
 	mutex_unlock(receive->owner_lock);
@@ -218,6 +233,28 @@ void ccci_scp_receive_stop(struct ccci_scp_receive *receive)
 {
 	if (receive)
 		ccci_scp_receive_quiesce(receive, false);
+}
+
+int ccci_scp_receive_consumer(struct ccci_scp_receive *receive,
+			      int (*consume)(void *context,
+					     const struct ccci_scp_event *event, int error),
+			      void *context)
+{
+	int ret = 0;
+
+	if (!receive)
+		return -EINVAL;
+	mutex_lock(&receive->control);
+	mutex_lock(receive->owner_lock);
+	if (!receive->quiesced || receive->terminal) {
+		ret = -EBUSY;
+	} else {
+		receive->consume = consume;
+		receive->consumer_context = context;
+	}
+	mutex_unlock(receive->owner_lock);
+	mutex_unlock(&receive->control);
+	return ret;
 }
 
 static void ccci_scp_receive_release(void *data)
@@ -307,6 +344,10 @@ int ccci_scp_receive_pop(struct ccci_scp_receive *receive, u64 generation,
 	if (!receive || !event)
 		return -EINVAL;
 	mutex_lock(receive->owner_lock);
+	if (receive->consume) {
+		ret = -EBUSY;
+		goto out;
+	}
 	raw_spin_lock_irqsave(&receive->gate, flags);
 	ret = generation && generation == receive->generation ? 0 : -ESTALE;
 	raw_spin_unlock_irqrestore(&receive->gate, flags);

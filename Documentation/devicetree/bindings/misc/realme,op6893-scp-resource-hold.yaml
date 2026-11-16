@@ -108,6 +108,10 @@ properties:
     $ref: /schemas/types.yaml#/definitions/phandle
     description: Existing TOPCK syscon for read-only SCP mux checks
 
+  mediatek,infracfg:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Existing infracfg syscon for the shared AP awake handshake
+
   memory-region:
     items:
       - description: This boot's no-map SCP firmware reservation

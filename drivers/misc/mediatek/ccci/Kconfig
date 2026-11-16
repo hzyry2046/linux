@@ -258,3 +258,14 @@ config OP6893_CCCI_SCP_INITIAL_BOOT
 	  Other client messages are consumed without following firmware pointers.
 	  One attempt per boot, disabled by default, no automatic start at probe.
 	  This does not restore firmware, keep SCP running or start the modem.
+
+config OP6893_CCCI_SCP_RUNTIME
+	bool "Allow explicit op6893 SCP runtime, AP awake and MD-invalid notification"
+	depends on OP6893_CCCI_SCP_INITIAL_BOOT && OP6893_CCCI_SCP_AWAKE
+	help
+	  Start one SCP generation with an IRQ-worker CPU event consumer, accept
+	  READY0/1 and test a paired AP awake lock/unlock. Keep SCP running until
+	  explicit stop or a contained receive/awake/protocol fault. Consume logger
+	  notifications without following firmware pointers. Optionally send one
+	  APCCCI MD-invalid notification; no shared-memory init or modem startup.
+	  Disabled by default. No start, handshake or notification occurs at probe.

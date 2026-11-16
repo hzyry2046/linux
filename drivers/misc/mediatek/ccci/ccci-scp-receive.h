@@ -33,6 +33,16 @@ int ccci_scp_receive_start(struct ccci_scp_receive *receive,
 			   const struct ccci_scp_layout *layout, u64 generation, u32 budget);
 void ccci_scp_receive_stop(struct ccci_scp_receive *receive);
 
+/*
+ * Process context WITHOUT owner lock, only while STOP/quiesced. Optional
+ * consumer runs under owner lock; no receive reentry or lock inversion.
+ * event=NULL reports a contained receive fault. Data is transient CPU storage.
+ */
+int ccci_scp_receive_consumer(struct ccci_scp_receive *receive,
+			      int (*consume)(void *context,
+					     const struct ccci_scp_event *event, int error),
+			      void *context);
+
 /* CPU event copy only; no client callback/export/READY transition. */
 int ccci_scp_receive_pop(struct ccci_scp_receive *receive, u64 generation,
 			 struct ccci_scp_event *event);

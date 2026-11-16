@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-16",
+  "image": "e8509e81dbc3",
+  "boot_sha256": "503817de4c1ba7522e150c8367812d713ed8c94e0bc2072d70900a23318684c6",
+  "start_rc": 0,
+  "observed_runtime_seconds_approx": 49,
+  "ready_channel": 22,
+  "events": {
+    "total": 3,
+    "logger": 1,
+    "other": 1,
+    "apccci": 0
+  },
+  "interrupts": 3,
+  "worker_runs": 4,
+  "unexpected_interrupts": 0,
+  "queued": 0,
+  "awake_pairs": 3,
+  "awake_users": 0,
+  "tx_completed": 1,
+  "application_reply_observed": false,
+  "stop": {
+    "rc": 0,
+    "repeat_rc": 0,
+    "generation": 0,
+    "gic_masked": 5,
+    "core_raw": [
+      "0x0000ff00",
+      "0x0000ff00"
+    ],
+    "error": 0,
+    "cleanup_error": 0
+  },
+  "usb_ssh": true,
+  "wifi_ssh": true,
+  "lvts_temperatures_readable": 5,
+  "matching_gpu_modules_loaded_from_tmpfs": true,
+  "modem_started": false,
+  "firmware_payload_exported": false,
+  "limitations": [
+    "short observation only",
+    "core1 independent execution not proven",
+    "no APCCCI application reply",
+    "nonzero inherited pending and fault paths model tested only",
+    "full firmware restore not implemented"
+  ],
+  "raw_logs": "/data/src/mainline/mt6893-direct/evidence/scp-runtime/"
+}

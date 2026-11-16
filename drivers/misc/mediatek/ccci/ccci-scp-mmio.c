@@ -3,6 +3,7 @@
 #include <linux/bitops.h>
 #include <linux/errno.h>
 #include <linux/io.h>
+#include <linux/delay.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
@@ -112,6 +113,55 @@ static int ccci_scp_mmio_check(struct ccci_scp_mmio_port *port)
 	if (ret)
 		ccci_scp_mmio_invalidate(mmio);
 	return ret;
+}
+
+int ccci_scp_mmio_md_invalid(struct ccci_scp_mmio *mmio,
+			     const struct ccci_scp_layout *layout, u64 generation)
+{
+	const struct ccci_scp_pin *tx, *rx;
+	struct ccci_scp_mmio_port *port;
+	u8 message[8];
+	u32 pending, i;
+	int ret;
+
+	if (!mmio || !generation || generation != mmio->generation)
+		return -ESTALE;
+	ret = ccci_scp_apccci_pins(layout, &tx, &rx);
+	if (ret)
+		return ret;
+	/* Exact same-board APCCCI_0 geometry, not a general raw TX interface. */
+	if (tx->mbox != 1 || tx->offset || tx->irq || tx->words != 2)
+		return -EPROTO;
+	port = &mmio->ports[1];
+	ret = ccci_scp_mmio_check(port);
+	if (ret)
+		return ret;
+	ret = ccci_scp_encode(message, sizeof(message), 2, CCCI_SCP_OP_MD_STATE, 0);
+	if (ret != sizeof(message))
+		return ret < 0 ? ret : -EPROTO;
+	/* Vendor has no separate send-status resource: read the SET alias itself. */
+	pending = readl(port->base + 0x100);
+	mmio->register_reads++;
+	if (pending & 1)
+		return -EBUSY;
+	writel(get_unaligned_le32(message), port->base);
+	writel(get_unaligned_le32(message + 4), port->base + 4);
+	/* Publish the complete two-word message before notifying SCP. */
+	mb();
+	writel(1, port->base + 0x100);
+	/* Complete notification before sampling its consumption. */
+	mb();
+	mmio->register_writes += 3;
+	memzero_explicit(message, sizeof(message));
+	for (i = 0; i < 100; i++) {
+		pending = readl(port->base + 0x100);
+		mmio->register_reads++;
+		if (!(pending & 1))
+			return ccci_scp_mmio_check(port);
+		usleep_range(1000, 1200);
+	}
+	/* Uncertain consumption: never retry or clear SCP's receive bit from AP. */
+	return -ETIMEDOUT;
 }
 
 static int ccci_scp_mmio_pending(void *context, u32 *mask)

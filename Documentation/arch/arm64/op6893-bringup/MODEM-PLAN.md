@@ -467,3 +467,10 @@ UFS RO/rootfs 回归通过。接续优先审计 READY0 所在 mailbox 的 RX/IRQ
 - [x] 各阶段失败、超时、错误代际及通知丢弃 ASan/UBSan 通过；不再拆资源映射或纯观测刷机。
 - [x] b74f21c0411e/949a860a1a85 两轮实测新 READY1；修复 GIC lazy-disable 后 STOP 硬件 masked=5，双核SET、generation0、USB/Wi-Fi正常。硬件旧pending均0，非零丢弃路径为模型覆盖。
 - [ ] 接持续事件消费、AP awake / APCCCI，然后进入 MD 初始化；首次启动不依赖完整备份恢复器。
+
+### R5.25 SCP 常驻、AP awake 与受限 APCCCI（2026-11-16）
+
+- [x] 常驻 RX-worker 消费、真实READY等待、共享awake get/put、受限一次MD-invalid TX及异步故障STOP/双核SET，见[常驻接入](MODEM-SCP-RUNTIME.md)。
+- [x] 实际生命周期/consumer/TX/编码定向ASan/UBSan通过；包含错误代际、超时、握手失败、旧消息拒绝与GPR恢复。
+- [x] e8509e81dbc3 实机常驻约49秒，READY1、awake三次配对、一次MD-invalid传输完成；无APCCCI应用层回复。STOP双核SET/GIC五路masked、USB/Wi-Fi及GPU/LVTS正常；未启动MD。
+- [ ] 按反馈推进MD资源、电源/复位和CCIF/CCISM，恢复器不阻塞首次通信。
