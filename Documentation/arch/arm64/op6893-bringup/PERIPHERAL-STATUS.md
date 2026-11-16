@@ -1,5 +1,11 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16 CCIF离线接续：同一MD owner新增普通CCIF窗口/屏蔽IRQ/联合WC环映射、
+6297正常/异常环CPU收发后端、CCIF0复位与SRAM初始化/读回及关电前stop。
+定向sanitizer、A/V表核对和启用内核构建通过；尚未上机，IRQ不启用、MD CPU
+不放行，不能算作CCIF通信或基带支持。下一次合并MD接管/电源/CCIF测试，见
+[CCIF状态及限制](MODEM-CCIF.md)。
+
 2026-11-16平台层接续：统一MD owner保留SMEM布局、四路供电基线/普通CCIF
 时钟，增加显式genpd接管与冷循环。当前e8509e81dbc3六个AP寄存器只读确认
 LK留下MD1 ON，故补CHECK_DONE/继承ON关断流程及unused OFF veto；新增

@@ -17,6 +17,7 @@
 #include <linux/soc/mediatek/mt6893-md.h>
 
 #include "ccci-md-platform.h"
+#include "ccci-ccif.h"
 #include "ccci-md-power.h"
 #include "ccci-smem.h"
 
@@ -37,6 +38,7 @@ struct ccci_md_platform {
 	struct clk_bulk_data clocks[4];
 	struct device *lookup;
 	struct device *domain;
+	struct ccci_ccif *ccif;
 };
 
 /* Independent hardware check also catches a genpd power-off veto/failure. */
@@ -249,14 +251,19 @@ static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 	int ret;
 
 	mutex_lock(&md->lock);
-	if (sysfs_streq(buf, "on"))
+	if (sysfs_streq(buf, "on")) {
 		ret = ccci_md_power_on(&md->power);
-	else if (sysfs_streq(buf, "takeover"))
+	} else if (sysfs_streq(buf, "takeover")) {
 		ret = ccci_md_power_takeover(&md->power);
-	else if (sysfs_streq(buf, "off"))
-		ret = ccci_md_power_off(&md->power);
-	else
+	} else if (sysfs_streq(buf, "off")) {
+		ret = 0;
+		if (md->ccif && md->power.state == CCCI_MD_POWERED)
+			ret = ccci_ccif_stop(md->ccif);
+		if (!ret)
+			ret = ccci_md_power_off(&md->power);
+	} else {
 		ret = -EINVAL;
+	}
 	if (ret)
 		dev_err(dev, "MD platform request failed at %s: %d\n", md->power.step, ret);
 	mutex_unlock(&md->lock);
@@ -264,7 +271,46 @@ static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RW(md_power);
 
-static struct attribute *md_attrs[] = { &dev_attr_md_power.attr, NULL };
+static ssize_t ccif_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	ssize_t ret;
+
+	if (!md->ccif)
+		return -EOPNOTSUPP;
+	mutex_lock(&md->lock);
+	ret = ccci_ccif_status(md->ccif, buf);
+	mutex_unlock(&md->lock);
+	return ret;
+}
+
+static ssize_t ccif_store(struct device *dev, struct device_attribute *attr,
+			  const char *buf, size_t count)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	int ret;
+
+	if (!md->ccif)
+		return -EOPNOTSUPP;
+	if (!sysfs_streq(buf, "prepare"))
+		return -EINVAL;
+	mutex_lock(&md->lock);
+	if (md->power.state != CCCI_MD_POWERED || !md->power.clocks || !md->power.domain) {
+		ret = -EHOSTDOWN;
+	} else {
+		ret = md_domain_check(md, true);
+		if (!ret)
+			ret = ccci_ccif_prepare(md->ccif);
+	}
+	mutex_unlock(&md->lock);
+	return ret ?: count;
+}
+static DEVICE_ATTR_RW(ccif);
+
+static struct attribute *md_attrs[] = {
+	&dev_attr_md_power.attr, &dev_attr_ccif.attr, NULL,
+};
+
 static const struct attribute_group md_group = { .attrs = md_attrs };
 
 static void md_lookup_release(struct device *dev)
@@ -366,6 +412,11 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 		ret = md_rails_check(md);
 	if (ret)
 		return dev_err_probe(dev, ret, "cold rail baseline unavailable/unstable\n");
+	if (IS_ENABLED(CONFIG_OP6893_CCCI_CCIF)) {
+		md->ccif = ccci_ccif_create(pdev, layout, md->infra);
+		if (IS_ERR(md->ccif))
+			return dev_err_probe(dev, PTR_ERR(md->ccif), "CCIF reservation failed\n");
+	}
 	ret = md_attach_domain(dev, md);
 	if (ret)
 		return dev_err_probe(dev, ret, "MD1 domain attachment failed\n");
@@ -390,7 +441,11 @@ void ccci_md_platform_shutdown(struct platform_device *pdev)
 	if (!md)
 		return;
 	mutex_lock(&md->lock);
-	ret = md->power.state == CCCI_MD_INHERITED ? 0 : ccci_md_power_off(&md->power);
+	ret = 0;
+	if (md->ccif && md->power.state == CCCI_MD_POWERED)
+		ret = ccci_ccif_stop(md->ccif);
+	if (!ret && md->power.state != CCCI_MD_INHERITED)
+		ret = ccci_md_power_off(&md->power);
 	if (ret)
 		dev_warn(&pdev->dev, "MD shutdown held at %s: %d\n", md->power.step, ret);
 	mutex_unlock(&md->lock);

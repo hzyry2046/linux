@@ -26,8 +26,13 @@
 	};
 
 	/* Mutually exclusive with modem-handoff; explicit cold power cycle only. */
-	modem-platform {
+	modem-platform@10209000 {
 		compatible = "realme,op6893-modem-platform";
+		reg = <0 0x10209000 0 0x1000>, <0 0x1020a000 0 0x1000>;
+		reg-names = "ccif-ap", "ccif-md";
+		interrupts = <GIC_SPI 194 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 195 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "data", "exception";
 		memory-region = <&ccci_tag>, <&md_nc_smem>, <&md_c_smem>;
 		memory-region-names = "tags", "noncached", "cached";
 		md-vmodem-supply = <&mt6315_3_vbuck1>;

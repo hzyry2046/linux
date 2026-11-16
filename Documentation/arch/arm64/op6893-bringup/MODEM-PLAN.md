@@ -482,3 +482,13 @@ UFS RO/rootfs 回归通过。接续优先审计 READY0 所在 mailbox 的 RX/IRQ
 - [x] 统一MD owner保存布局/供电基线，显式附着genpd，增加继承LK ON的CHECK_DONE/接管断电及冷循环；完成离线验证，见[平台层](MODEM-PLATFORM.md)。未实测上下电。
 - [ ] 接普通CCIF控制环；CCIF2保持单独桥归属，与SCP真实状态机整合。和MD接管/冷循环合并上机，不拆纯资源测试。
 - [ ] 准备FS/NVRAM工作副本及服务门控，再释放MD验证HS1/HS2。新子区tag解析与MD电源切换仍待下一功能组实测，本轮未刷机。
+
+
+### R7.1 普通 CCIF / 6297 环离线集成（2026-11-16）
+
+- [x] 默认关闭CCIF扩展归同一MD owner：AP/MD精确窗口、两路IRQ始终masked、ID19/20联合WC映射，probe零I/O，见[CCIF](MODEM-CCIF.md)。
+- [x] 本机A/V6297正常/异常各16槽，含零槽；实际CPU RX/TX回绕、元数据校验、成功发布指针及读写屏障。
+- [x] 一次prepare整合环格式化/读回、CCIF0复位、双SRAM与ID13 debug footer；stop先验masked，故障保留电源/时钟。
+- [x] 实际后端与抽取生命周期sanitizer、A/V表比对、平台/域/SMEM回归、启用ARM64 Image.gz/modules/modpost、默认DTB/schema和strict checkpatch通过。
+- [ ] 合并LK布局→继承ON接管→冷上电→CCIF准备→关电实测；目前没有新硬件验收，不启IRQ或MD CPU。
+- [ ] 接IRQ/worker、控制通道/异常与runtime握手；整合SCP/CCIF2/CCISM和FS/RPC/NVRAM服务后才放行MD及HS1/HS2。

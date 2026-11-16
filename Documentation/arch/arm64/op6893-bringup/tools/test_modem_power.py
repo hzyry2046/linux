@@ -249,7 +249,7 @@ for path in args.dtb:
         assert reg is not None
         if struct.unpack('>I', reg)[0] == 24:
             assert fdt.getprop(n, 'status') == b'disabled\0'
-    platform = fdt.path_offset('/modem-platform', quiet=(libfdt.NOTFOUND,))
+    platform = fdt.path_offset('/modem-platform@10209000', quiet=(libfdt.NOTFOUND,))
     if platform >= 0:
         assert fdt.getprop(platform, 'status') == b'disabled\0'
         assert fdt.getprop(platform, 'power-domains', quiet=(libfdt.NOTFOUND,)) == -libfdt.NOTFOUND

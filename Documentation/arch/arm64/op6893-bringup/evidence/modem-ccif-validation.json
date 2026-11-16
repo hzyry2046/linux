@@ -1,0 +1,64 @@
+{
+  "date": "2026-11-16",
+  "implementation_base": "daf5780b7",
+  "ai_assistance": "Codex: local vendor comparison, code, tests and documentation; no DCO certification",
+  "feature": "ordinary CCIF0 / 6297 normal and exception rings; dormant IRQs",
+  "offline_validation": {
+    "actual_ring_and_hw_asan_ubsan": true,
+    "rx_tx_wrap_offsets": 32,
+    "payload_lengths_per_offset": 217,
+    "hardware_failure_positions": 521,
+    "extracted_actual_prepare_stop_asan_ubsan": true,
+    "owner_failure_positions": 65,
+    "same_board_419_and_66_tables": true,
+    "platform_power_smem_regressions": true,
+    "enabled_arm64_image_gz_modules_modpost": true,
+    "default_board_dtb_and_binding_schema": true,
+    "strict_checkpatch_c_headers": "0 errors, 0 warnings, 0 checks",
+    "configuration_restored": true
+  },
+  "new_code_hardware_tested": false,
+  "new_image_packed_or_flashed": false,
+  "device_access_this_stage": {
+    "transport": "Wi-Fi SSH",
+    "read_only": true,
+    "kernel": "7.3.0-op6893-d1-e8509e81dbc3+",
+    "scp_active": 0,
+    "scp_generation": 0,
+    "modem_started": 0
+  },
+  "irq_enable_interface": false,
+  "md_cpu_release_issued": false,
+  "default_nodes": "MD1 and modem-platform disabled",
+  "smem_initialization": "only ID19/20 ring spans; 384-byte bank tails remain untouched",
+  "remaining": [
+    "Integrated LK handoff, takeover, cold ON, CCIF prepare, OFF hardware test",
+    "Live IRQ/worker, control channels and runtime handshake",
+    "SCP/CCIF2/CCISM bridge and FS/RPC/NVRAM working-copy service gates",
+    "MD CPU release and HS1/HS2"
+  ],
+  "external_evidence": "/data/src/mainline/mt6893-direct/evidence/modem-ccif",
+  "sources": [
+    {
+      "root": "/data/src/kernel_oddo_mt6893",
+      "path": "drivers/misc/mediatek/eccci/hif/ccci_hif_ccif.c",
+      "sha256": "26d42e99574d1d00be25d2922dca33c70c64ec0f1ad69554d53ec4364619f80e"
+    },
+    {
+      "root": "/data/src/kernel_oddo_mt6893",
+      "path": "drivers/misc/mediatek/eccci/hif/ccci_ringbuf.c",
+      "sha256": "7777c24ec3b336f7a86b7d79bde2adc8a8601b681ef38ff11e289540311f5e54"
+    },
+    {
+      "root": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6",
+      "path": "drivers/misc/mediatek/eccci/hif/ccci_hif_ccif.c",
+      "sha256": "43d145105a3827c09d330f5b3e33e7be8732389f3dc80223db52f56975812ffe"
+    },
+    {
+      "root": "/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/kernel_device_modules-6.6",
+      "path": "drivers/misc/mediatek/eccci/hif/ccci_ringbuf.c",
+      "sha256": "a17441bde821b2ef816cb808e4a4a6fc80135db4bdad92b1ecf0b8532faf8edb"
+    }
+  ],
+  "binding_commit": "1b383d302"
+}

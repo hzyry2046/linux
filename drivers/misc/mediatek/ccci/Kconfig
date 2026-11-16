@@ -33,6 +33,17 @@ config OP6893_CCCI_MD_PLATFORM
 	  Probe preserves LK's domain state. Disabled by default;
 	  cannot coexist with the metadata-only node for the same LK buffer.
 
+config OP6893_CCCI_CCIF
+	bool "Prepare op6893 ordinary CCIF hardware and 6297 rings"
+	depends on OP6893_CCCI_MD_PLATFORM && OF_IRQ
+	help
+	  Reserve AP/MD CCIF windows, two NO_AUTOEN IRQs and the adjacent normal/
+	  exception CCISM banks in the existing owner. An explicit prepare after
+	  controlled MD power-on formats both sets of 16 rings, resets CCIF0 and
+	  initializes/verifies SRAM and debug geometry. All IRQs remain masked;
+	  no MD CPU release, doorbell, live receive or FS/NVRAM access is added.
+	  Includes bounded ring receive/transmit helpers for later HIF consumers.
+
 config OP6893_CCCI_RESOURCES
 	tristate "Check op6893 modem regulator and ordinary CCIF clock references"
 	depends on ARM64_OP6893_BRINGUP && OF && REGULATOR

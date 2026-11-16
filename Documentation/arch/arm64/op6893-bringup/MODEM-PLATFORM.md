@@ -37,7 +37,8 @@ MD1，随后才走正常启动。这里据此增加明确的 `takeover` 操作�
 
 同一个 LK inspector 完成完整链和[子区校验](MODEM-SMEM.md)后，将布局复制
 给 owner；tag 快照仍及时清理，不再丢弃后续 HIF 需要的 CPU 布局信息。
-不映射或清零 SMEM/NVRAM，不导出固件或原始 tag。
+平台基础层不映射或清零 SMEM/NVRAM，不导出固件或原始 tag；后续可选
+[CCIF扩展](MODEM-CCIF.md)仅映射/格式化 ID19/20 的普通环。
 
 四路 regulator 取得真实引用，要求已启用、正电压、两次读取一致。记录本次
 启动的 RG 电压（不是 DA），执行前再次核对；不设置电压或调用 regulator
@@ -49,7 +50,8 @@ runtime-suspended，附着不调用上电。genpd 根据精确 OFF/ON 读回初�
 状态；混合状态拒绝接管。继承 ON 时，provider 拒绝 unused-domain 自动关断。
 只有持有 active runtime 引用的显式接管者才能解除这一 veto。
 
-启用实验后，`/sys/bus/platform/devices/modem-platform/md_power` 接受：
+启用实验后，`/sys/bus/platform/devices/10209000.modem-platform/md_power` 接受
+（新增CCIF资源前的旧节点名为`modem-platform`）：
 
 - `takeover`：仅适用于继承 ON。先 CHECK_DONE 与电压/域状态核对，再取得
   runtime 引用、解除继承 veto，执行 MD1 OFF→独立 OFF 读回→SRC CLK 清低
@@ -57,8 +59,8 @@ runtime-suspended，附着不调用上电。genpd 根据精确 OFF/ON 读回初�
   成功后进入 cold，允许一次新的 ON/OFF；失败的 CHECK_DONE 不执行断电。
 - `on`：仅适用于 cold。完全 OFF/电压核对→四个普通 CCIF 门→infra+0xf0c
   低字节0x21→SPM unlock/+8 bit21→SMC flight=false→runtime MD1 ON→独立
-  ON 读回。不会发出 CPU 放行命令；CCIF 尚未在本轮接入。
-- `off`：仅适用于本 owner 的 powered。runtime MD1 OFF→独立 OFF 读回→
+  ON 读回。不会发出 CPU 放行命令；可选CCIF扩展随后显式 prepare。
+- `off`：仅适用于本 owner 的 powered。可选CCIF先完成stop；runtime MD1 OFF→独立 OFF 读回→
   SRC CLK 清低字节→flight=true→释放自己的四个 CCIF 门。保留四路 regulator
   状态和 SPM bit21，与本机 vendor OFF 行为一致。成功后不能再 ON。
 
