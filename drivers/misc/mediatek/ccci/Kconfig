@@ -355,3 +355,15 @@ config OP6893_CCCI_DISPATCH
 	  stopped-MD cleanup. No automatic prepare/start, CPU release, populated
 	  RPC facts, NVRAM cache population or service-ready gate is provided.
 	  Disabled by default. Construction performs no hardware or protocol I/O.
+
+config OP6893_CCCI_NVRAM_CACHE
+	bool "Build the op6893 feature-36 NVRAM cache owner"
+	depends on OP6893_CCCI_MD_PLATFORM && OP6893_CCCI_SMEM
+	help
+	  Take the single AP ownership of the cached SMEM user-32 window that
+	  feature 36 advertises. Prepare maps it write-combined and applies the
+	  same-board first-start clear once; later reconnects and stops never
+	  re-zero a live cache. No cache image is loaded, no header is invented
+	  and no region content is exported. Construction performs no I/O.
+	  Disabled by default.
+

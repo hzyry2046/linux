@@ -27,3 +27,4 @@ obj-$(CONFIG_OP6893_CCCI_CCISM) += ccci-ccism.o ccci-ccism-session.o ccci-ccism-
 op6893-ccci-lk-$(CONFIG_OP6893_CCCI_SERVICES) += ccci-fs-protocol.o ccci-rpc-protocol.o \
 	ccci-service-router.o ccci-service-session.o ccci-service-endpoint.o ccci-rpc-provider.o ccci-rpc-op6893.o
 op6893-ccci-lk-$(CONFIG_OP6893_CCCI_DISPATCH) += ccci-port-dispatch.o
+op6893-ccci-lk-$(CONFIG_OP6893_CCCI_NVRAM_CACHE) += ccci-nvram-cache.o
