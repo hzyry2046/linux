@@ -62,7 +62,8 @@ static void bodies(void){
  for(unsigned i=0;i<sizeof(body);i++)assert(body[i]==0x5a);
  args[0].length=1;assert(ccci_fs_encode(body,15,0xffff1003U,args,1)==-ENOSPC);
  assert(body[0]==0x5a);
- assert(ccci_fs_encode(body,sizeof(body),0x1003,args,1)==-EINVAL);
+ assert(ccci_fs_encode(body,sizeof(body),0x1003,args,1)>0);
+ assert(ccci_fs_encode(body,sizeof(body),0x12341003U,args,1)==-EINVAL);
  assert(ccci_fs_encode(body,sizeof(body),0xffff1026U,args,1)==-EINVAL);
  assert(ccci_fs_encode(body,sizeof(body),0xffff1003U,args,7)==-EINVAL);
  args[0].data=NULL;assert(ccci_fs_encode(body,sizeof(body),0xffff1003U,args,1)<0);

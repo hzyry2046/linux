@@ -100,14 +100,13 @@ static int request_name(const struct ccci_rpc_arg *arg, size_t *length)
 
 	if (!n || n > CCCI_RPC_FACT_NAME)
 		return -EPROTO;
-	if (!arg->data[n - 1])
-		n--;
-	if (!n || n >= CCCI_RPC_FACT_NAME)
-		return -EPROTO;
+	/* Same-board A compares with strncmp(); a fixed field may pad zeros. */
 	for (i = 0; i < n; i++)
 		if (!arg->data[i])
-			return -EPROTO;
-	*length = n;
+			break;
+	if (!i)
+		return -EPROTO;
+	*length = i;
 	return 0;
 }
 
@@ -186,7 +185,8 @@ int ccci_rpc_provider_reply(const struct ccci_rpc_provider *provider,
 	if (ret)
 		return ret;
 	if (operation == 0x4005) {
-		if (request.args[2].size != sizeof(u32))
+		/* Same-board A reads one u32 and does not require an exact arg length. */
+		if (request.args[2].size < sizeof(u32))
 			return -EPROTO;
 		type = get_unaligned_le32(request.args[2].data);
 		result = RPC_EINT_TYPE;

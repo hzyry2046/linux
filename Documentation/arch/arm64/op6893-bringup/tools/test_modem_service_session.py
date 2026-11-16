@@ -222,6 +222,8 @@ def main():
                            'static inline void put_unaligned_le32(u32 v,void *p){'
                            'u8 *b=p;for(unsigned i=0;i<4;i++)b[i]=v>>(8*i);}\n',
         }
+        files['printk.h'] = ('#pragma once\nstatic inline void pr_err(const char *fmt, ...) { (void)fmt; }\n'
+                             'static inline void pr_info(const char *fmt, ...) { (void)fmt; }\n')
         for name in ('err.h', 'ktime.h', 'mutex.h', 'slab.h', 'spinlock.h',
                      'vmalloc.h', 'workqueue.h'):
             files[name] = ''

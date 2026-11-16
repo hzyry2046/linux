@@ -8,7 +8,11 @@
 
 static bool fs_operation(u32 operation)
 {
-	return operation >= 0xffff1001U && operation <= 0xffff1025U;
+	u32 op = operation & 0xffff;
+
+	/* Requests carry the bare opcode; replies OR it with 0xffff0000. */
+	return op >= 0x1001 && op <= 0x1025 &&
+	       (operation == op || operation == (0xffff0000U | op));
 }
 
 int ccci_fs_decode(const void *body, size_t length,

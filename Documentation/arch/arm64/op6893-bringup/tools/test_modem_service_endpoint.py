@@ -31,7 +31,6 @@ static u64 shim_clock_now(void){return now_ms;}
 #define MISC_DYNAMIC_MINOR 255
 #define PTR_ERR(p) ((int)(intptr_t)(p))
 #define READ_ONCE(x) (x)
-#define pr_err(...) ((void)0)
 typedef unsigned __poll_t;
 typedef int poll_table;
 typedef int wait_queue_head_t;

@@ -51,13 +51,16 @@ int main(void){
  args[0]=(struct ccci_rpc_arg){(const u8 *)"pi",2};n=make(0x4002,args,2);scalars(&facts,n,-5,-5,2);
  args[0]=(struct ccci_rpc_arg){(const u8 *)"adc",4};n=make(0x4003,args,2);scalars(&facts,n,9,9,2);
  n=make(0x4003,NULL,0);scalars(&facts,n,-2,-2,2);
- args[0]=(struct ccci_rpc_arg){(const u8 *)"p\0in",4};n=make(0x4002,args,2);unchanged(-EPROTO,&facts,n);
+ args[0]=(struct ccci_rpc_arg){(const u8 *)"p\0in",4};n=make(0x4002,args,2);scalars(&facts,n,-5,-5,2);
  args[0]=(struct ccci_rpc_arg){NULL,0};n=make(0x4002,args,2);unchanged(-EPROTO,&facts,n);
  u8 type[4];put_unaligned_le32(0,type);args[0]=(struct ccci_rpc_arg){(const u8 *)"sim",4};
  args[2]=(struct ccci_rpc_arg){type,4};n=make(0x4005,args,3);scalars(&facts,n,0,1,2);
  put_unaligned_le32(5,type);n=make(0x4005,args,3);scalars(&facts,n,SOURCE_EINT_NAME,SOURCE_EINT_NAME,2);
  put_unaligned_le32(7,type);n=make(0x4005,args,3);scalars(&facts,n,SOURCE_EINT_TYPE,SOURCE_EINT_TYPE,2);
  put_unaligned_le32(0,type);args[2].size=3;n=make(0x4005,args,3);unchanged(-EPROTO,&facts,n);
+ u8 type8[8]={0};put_unaligned_le32(0,type8);args[2]=(struct ccci_rpc_arg){type8,8};
+ n=make(0x4005,args,3);scalars(&facts,n,0,1,2);
+ args[2]=(struct ccci_rpc_arg){type,4};
  args[2].size=4;args[0]=(struct ccci_rpc_arg){(const u8 *)"missing",8};n=make(0x4005,args,3);scalars(&facts,n,SOURCE_EINT_NAME,SOURCE_EINT_NAME,2);
  n=make(0x4005,args,2);scalars(&facts,n,-2,-2,2);
  u8 query[66]={1,99,'c','o','n','f','i','g',0};args[0]=(struct ccci_rpc_arg){query,66};

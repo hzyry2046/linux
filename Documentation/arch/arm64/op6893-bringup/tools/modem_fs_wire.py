@@ -49,9 +49,11 @@ def decode_request(packet):
         raise MalformedRequest('invalid canonical packet size')
     data0, size, channel_sequence, slot, operation, argc = struct.unpack_from(
         '<6I', packet)
+    op16 = operation & 0xffff
     if (size != len(packet) or channel_sequence & 0xffff != RX_CHANNEL or
             data0 & MORE or slot >= 5 or
-            not 0xffff1001 <= operation <= 0xffff1025 or argc > ARGS_MAX):
+            operation not in (op16, 0xffff0000 | op16) or
+            not 0x1001 <= op16 <= 0x1025 or argc > ARGS_MAX):
         raise MalformedRequest('invalid canonical header')
     offset = 24
     args = []

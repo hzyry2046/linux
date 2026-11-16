@@ -149,6 +149,8 @@ def main():
             '#pragma once\n#include <stdint.h>\n#include <stdbool.h>\n'
             '#include <stddef.h>\ntypedef uint8_t u8;typedef uint32_t u32;typedef uint64_t u64;\n')
         (inc / 'errno.h').write_text('#include <asm-generic/errno.h>\n')
+        (inc / 'printk.h').write_text('#pragma once\nstatic inline void pr_err(const char *fmt, ...) { (void)fmt; }\nstatic inline void pr_info(const char *fmt, ...) { (void)fmt; }\n')
+        (inc / 'kernel.h').write_text('#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))\n')
         (inc / 'string.h').write_text(
             '#include <string.h>\nstatic inline void memzero_explicit(void *p,size_t n){'
             'volatile unsigned char *b=p;while(n--)*b++=0;}\n')

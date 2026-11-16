@@ -6,8 +6,11 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/string.h>
+#include <linux/printk.h>
 #include <linux/unaligned.h>
 #include <linux/vmalloc.h>
+#include <linux/printk.h>
+#include <linux/unaligned.h>
 #include <linux/workqueue.h>
 
 #include "ccci-ccif.h"
@@ -241,8 +244,45 @@ static void service_work(struct work_struct *work)
 						 event->packet, event->length);
 			break;
 		}
-		if (ret)
+		if (!ret && event->type == SERVICE_EVENT_RECEIVE &&
+		    event->length >= CCCI_FS_FRAGMENT_PREFIX &&
+		    (get_unaligned_le32(event->packet + 8) & 0xffff) == 14)
+			pr_info("ccci: fs fragment accepted: queue=%u length=%u data0=0x%x slot=%u op=0x%x body_argc=%u body_arg0=%u\n",
+				event->queue, event->length,
+				get_unaligned_le32(event->packet),
+				get_unaligned_le32(event->packet + 12),
+				get_unaligned_le32(event->packet + 16),
+				get_unaligned_le32(event->packet + 20),
+				get_unaligned_le32(event->packet + 24));
+		if (ret) {
+			if (event->type == SERVICE_EVENT_RECEIVE &&
+			    event->length >= CCCI_FS_FRAGMENT_PREFIX) {
+				const u8 *raw = event->packet;
+				u32 argc = get_unaligned_le32(raw + 20);
+				u32 end = 24, first = 0, i;
+
+				for (i = 0; i < argc && i < 6 && end + 4 <= event->length; i++) {
+					u32 size = get_unaligned_le32(raw + end);
+
+					if (!i)
+						first = size;
+					end += 4 + ((size + 3) & ~3U);
+				}
+				pr_err("ccci: service request rejected: queue=%u length=%u data0=0x%x wire_len=%u channel_seq=0x%x slot=%u op=0x%x argc=%u arg0=%u strict_end=%u wire_ok=%u chan_ok=%u slot_ok=%u argc_ok=%u op_ok=%u end_ok=%u error=%d\n",
+				       event->queue, event->length,
+				       get_unaligned_le32(raw), get_unaligned_le32(raw + 4),
+				       get_unaligned_le32(raw + 8), get_unaligned_le32(raw + 12),
+				       get_unaligned_le32(raw + 16), argc, first, end,
+				       get_unaligned_le32(raw + 4) == event->length,
+				       (get_unaligned_le32(raw + 8) & 0xffff) == 14 ||
+					       (get_unaligned_le32(raw + 8) & 0xffff) == 32,
+				       get_unaligned_le32(raw + 12) <= 2,
+				       argc <= 6,
+				       !(get_unaligned_le32(raw + 16) & 0xffff0000U),
+				       end == event->length, ret);
+			}
 			ccci_service_router_abort(&session->router, session->generation, ret);
+		}
 	}
 	ccci_service_router_tick(&session->router, session->generation, service_now());
 	if (!session->router.error) {

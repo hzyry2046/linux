@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/errno.h>
+#include <linux/printk.h>
 #include <linux/string.h>
 #include <linux/unaligned.h>
 
@@ -90,30 +91,40 @@ int ccci_service_router_receive(struct ccci_service_router *router,
 	int ret;
 
 	ret = router_check(router, generation);
-	if (ret)
+	if (ret) {
+		pr_err("ccci: router receive stage=check error=%d\n", ret);
 		return ret;
-	if (!packet || length < CCCI_FS_HEADER_SIZE)
+	}
+	if (!packet || length < CCCI_FS_HEADER_SIZE) {
+		pr_err("ccci: router receive stage=short length=%zu\n", length);
 		return router_fault(router, -EMSGSIZE);
+	}
 	if ((get_unaligned_le32((const u8 *)packet + 8) & 0xffff) == CCCI_FS_RX) {
 		kind = CCCI_SERVICE_FS;
 		ret = queue == CCCI_SERVICE_FS_QUEUE ?
 			ccci_fs_fragment_decode(packet, length, CCCI_FS_RX, &fs) : -EPROTO;
-		if (ret)
+		if (ret) {
+			pr_err("ccci: router receive stage=fs-fragment queue=%u error=%d\n", queue, ret);
 			return router_fault(router, ret);
+		}
 		index = fs.slot;
 	} else if ((get_unaligned_le32((const u8 *)packet + 8) & 0xffff) == CCCI_RPC_RX) {
 		kind = CCCI_SERVICE_RPC;
 		ret = queue == CCCI_RPC_QUEUE ?
 			ccci_rpc_decode_request(packet, length, &rpc) : -EPROTO;
-		if (ret)
+		if (ret) {
+			pr_err("ccci: router receive stage=rpc-decode queue=%u error=%d\n", queue, ret);
 			return router_fault(router, ret);
+		}
 		index = CCCI_FS_SLOTS + rpc.slot;
 	} else {
 		return -EOPNOTSUPP;
 	}
 	slot = &router->slots[index];
-	if (slot->submitted)
+	if (slot->submitted) {
+		pr_err("ccci: router receive stage=submitted index=%u\n", index);
 		return router_fault(router, -EBUSY);
+	}
 	if (!slot->occupied) {
 		if (router->next_token == ~(u64)0)
 			return router_fault(router, -EOVERFLOW);
@@ -123,8 +134,10 @@ int ccci_service_router_receive(struct ccci_service_router *router,
 	}
 	if (kind == CCCI_SERVICE_FS) {
 		ret = ccci_fs_assembly_feed(&slot->assembly, packet, length);
-		if (ret < 0)
+		if (ret < 0) {
+			pr_err("ccci: router receive stage=assembly index=%u error=%d\n", index, ret);
 			return router_fault(router, ret);
+		}
 		if (!ret)
 			return 0;
 		slot->request_length = slot->assembly.length;
@@ -136,8 +149,10 @@ int ccci_service_router_receive(struct ccci_service_router *router,
 				  kind, kind == CCCI_SERVICE_FS ? index :
 				  index - CCCI_FS_SLOTS, slot->storage.request,
 				  slot->request_length);
-	if (ret)
+	if (ret) {
+		pr_err("ccci: router receive stage=submit index=%u error=%d\n", index, ret);
 		return router_fault(router, ret);
+	}
 	slot->submitted = true;
 	return 0;
 }
@@ -169,7 +184,8 @@ int ccci_service_router_reply(struct ccci_service_router *router, u64 generation
 		    (get_unaligned_le32(bytes + 8) & 0xffff) != CCCI_FS_TX ||
 		    get_unaligned_le32(bytes + 12) != index ||
 		    (get_unaligned_le32(bytes) & CCCI_FS_MORE) ||
-		    get_unaligned_le32(bytes + 16) != slot->assembly.operation)
+		    (get_unaligned_le32(bytes + 16) & 0xffff) !=
+			    (slot->assembly.operation & 0xffff))
 			return -EPROTO;
 		ret = ccci_fs_decode(bytes + 16, length - 16, &message);
 	} else {
