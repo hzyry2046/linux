@@ -180,8 +180,9 @@ because its region exists.
 
 The codecs, normal service TX and generation/request-token router have now
 been implemented and tested offline, together with a structured private-copy
-FS prototype. They do not yet have a Linux live caller, backend wire adapter,
-worker/timer or actual RPC providers. See [current implementation and remaining
+FS prototype. A follow-through adds a Linux worker/timer, private endpoint, canonical FS wire
+adapter and explicit runner, but no active dispatcher/MD start caller, actual RPC
+providers or ready gate. See [service endpoint](MODEM-SERVICE-ENDPOINT.md). See [current implementation and remaining
 milestone](MODEM-SERVICES.md); the following integration requirements remain.
 
 ## Combined next milestone

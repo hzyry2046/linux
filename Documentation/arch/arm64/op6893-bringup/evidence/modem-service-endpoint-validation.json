@@ -1,0 +1,94 @@
+{
+  "date": "2026-11-16",
+  "implementation_base": "d8b5ad73fdb2e68692698410cb96d543c7f92504",
+  "ai_assistance": "Codex with delegated implementation, static AP ELF analysis and review; no DCO certification",
+  "feature": "Default-off Linux service session, exclusive private backend endpoint, canonical FS wire adapter, explicit FS runner and recovered file-operation schemas",
+  "validation": {
+    "actual_c_asan_ubsan": [
+      "test_modem_service_session.py",
+      "test_modem_service_endpoint.py",
+      "test_modem_service_router.py",
+      "test_modem_ccif_service_tx.py",
+      "test_modem_platform.py"
+    ],
+    "actual_c_fs_codec_wire_fixture": "test_modem_fs_wire.py",
+    "synthetic_fs_backend_tests": 13,
+    "synthetic_wire_tests": 11,
+    "synthetic_runner_tests": 10,
+    "endpoint_full_actual_source_integration": true,
+    "endpoint_short_read_and_efault_preserve_request": true,
+    "stale_and_duplicate_reply_rejected_before_enqueue": true,
+    "queued_deadline_before_backend_and_each_send_checked": true,
+    "queued_abort_admission_race_hooks": true,
+    "arm64_services_handshake_ccism_enabled_image_gz_modules": true,
+    "arm64_original_config_restored_image_gz_modules": true,
+    "final_compile_warnings": 0,
+    "initial_build_failure": "session current field collided with kernel macro; renamed dispatch and added host shim macro regression",
+    "strict_checkpatch_new_c_headers": "0 errors, 0 warnings, 0 checks",
+    "series_checkpatch": "0 errors, 1 generic new-file MAINTAINERS warning, 0 checks"
+  },
+  "linux": {
+    "ordered_private_workqueue": true,
+    "input_events": 32,
+    "record_header_bytes": 32,
+    "record_version": 1,
+    "record_endian": "little",
+    "endpoint_mode": "0600 + CAP_SYS_RAWIO + exclusive open",
+    "backend_disconnect": "sticky EPIPE and asynchronous CCIF abort",
+    "stop": "No effects with md_stopped=false. Real MD stop before worker join, endpoint revoke/join and private-buffer erase.",
+    "parent_prepare_off_shutdown_gate": true,
+    "active_remove": "Unsupported; refuse destroy and retain callback/open storage. Future integration must retain parent hardware resources too."
+  },
+  "activation": {
+    "default_disabled": true,
+    "endpoint_constructor_connected": true,
+    "session_arm_caller": false,
+    "accepted_hs1_hs2_dispatcher_connected": false,
+    "md_start_caller": false,
+    "actual_rpc_providers": false,
+    "service_ready_gate": false,
+    "runner_automatically_started": false
+  },
+  "fs_new": {
+    "move": "Proven regular-file copy, source retained, optional target deletion and vendor permission flags; whole source staged anonymously before destination truncation",
+    "detail": "24-byte u64 mtime/atime/ctime",
+    "cmpt_read": "All-five stages with 0x700 flags, actual completed bitmap/error and four arguments",
+    "findfirst": "Missing-directory failure only; success not fabricated",
+    "vendor_uninitialized_failure_fields": "zeroed explicitly"
+  },
+  "hardware": {
+    "device_access": false,
+    "real_nvram_accessed": false,
+    "boot_image_packed": false,
+    "flashed": false,
+    "md_cpu_released": false
+  },
+  "limitations": [
+    "Deterministic host locks/work/misc resources do not establish SMP scheduling or actual misc-core lifetime",
+    "No live control/port dispatcher or final MD CPU/DMA stop primitive",
+    "FindFirst success/DOS entry, recursive Move/XDelete and other unobserved FS variants remain unsupported",
+    "No actual hardware RPC providers or complete cold-boot request census",
+    "Runtime feature36 NVRAM cache population unresolved",
+    "No real HS1/HS2/CCISM or cellular acceptance"
+  ],
+  "logs_directory": "/data/src/mainline/mt6893-direct/evidence/modem-service-endpoint",
+  "log_sha256": {
+    "build-enabled-final.log": "b3ae78bd402292c3d3a1d4780bc797ead4ef50e3b312d0f33f22208f3f74b0d8",
+    "build-enabled-integrated.log": "6538c900ec3d13f30784f67382a9ca5d849c2b3cc6cbd23715b83e092fd636a5",
+    "build-enabled.log": "356216d341474730620cd0eb2eff6afad78296213e5ac49f40cb14d6829e4e0d",
+    "build-restored.log": "8980f4d95ba40871ea2776f1aa455e8532038d922892b47f524a8be61ebb2bdb",
+    "config-enabled.log": "974b137f31a3128315506938080edd8e09d5e50cf006f35fc8b9077b5f346a79",
+    "config-restored.log": "23f61d4e038442d447317d99f7999c444ef0614a09dc0af116567a98a94622f9",
+    "style-final.log": "359baea98883419078d749675052beefbd0009e9319f06f0a80036d137d53846",
+    "style-series.log": "c11fd14f21761335232b94bb42519526847e20d1323bb4906592e32a0a8dab6f",
+    "style.log": "9ae7bbeaba53d1eecbb34c8d1405437639362075d9e78125415b5709c5037157",
+    "test-ccif_service_tx.log": "61dc9db7d4e596b02c868d502f5f60797a30adf79c7348608dc7efdff463496a",
+    "test-fs_backend.log": "f41f027eb8de778295ce32988da832be6619310d72b84bd0c842ca544e1496d2",
+    "test-fs_wire.log": "41bbf35965151b4d770f9a534f92b4d899ded42483e24f2cec3ceb9bb6a30da0",
+    "test-platform.log": "59a99baf7d4b5f436465b77a3d410d4c6135d44f9ed308c565be278bd2312249",
+    "test-service_backend.log": "69d3092e799b33eb7dca64bf94a3536ab4fa9fc5969f0629675edb863629b707",
+    "test-service_endpoint.log": "17a7a43ae5dc1564a9186b32198f8e7f92e381ea5928955c66f0b2930a1818c9",
+    "test-service_router.log": "a3a2338ac3bd80d68a8de084d4aea4adf3b31ad6b97fa893fd2c5d5ceb019cc8",
+    "test-service_session.log": "7a0903801d60ba9ac558ff3f623c4eed4fdfe2a99d4db1c5be2c996d4e778230"
+  }
+}

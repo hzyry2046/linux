@@ -1,5 +1,11 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16 Linux服务入口离线接续：新增有序session、独占privileged字符端点、
+父关电/prepare门控及显式FS runner；补普通文件Move、Detail、CMPT失败应答。
+实际endpoint/session/router/codec联合sanitizer及ARM64启用/恢复构建通过。
+无活跃dispatcher/arm/MD释放caller，无真实RPC provider或服务就绪能力，本轮
+未操作设备；见[入口与剩余启动条件](MODEM-SERVICE-ENDPOINT.md)。
+
 2026-11-16 FS/RPC离线服务基础：完成FS五槽分片、RPC三槽codec、普通CCIF
 回复TX、generation/token请求路由和私有工作副本原型。实际C sanitizer、
 发送/STOP竞争及ARM64启用/恢复构建通过。没有live caller/daemon/硬件RPC

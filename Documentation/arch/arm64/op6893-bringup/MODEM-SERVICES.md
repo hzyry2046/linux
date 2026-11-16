@@ -1,10 +1,14 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 # MT6893 FS/RPC 服务基础与接续边界
 
-2026-11-16，基于 `82dbc5aa7` 完成离线实现。本轮没有设备操作、打包或刷写，
+2026-11-16，基于 `82dbc5aa7` 完成离线实现。初始轮没有设备操作、打包或刷写，
 没有新增 HS1/HS2、CCISM 或蜂窝支持验收。源格式与证据见
 [服务审计](MODEM-SERVICES-AUDIT.md)，验证见
 [evidence/modem-services-validation.json](evidence/modem-services-validation.json)。
+
+最新接续已补Linux session/端点、FS wire及显式runner，并恢复部分此前未知操作，
+见[服务入口与当前边界](MODEM-SERVICE-ENDPOINT.md)和[FS语义](MODEM-FS-SEMANTICS.md)。
+仍无活跃MD启动caller、完整provider或服务就绪门控。
 
 ## 已实现的部分
 
@@ -28,39 +32,38 @@
   不改变状态；只有真实 MD CPU/DMA 已停止才能 close(true)，擦除请求、回复
   与 scratch。代际标签、接收停止或 FAILED 状态均不能证明硬件已停止。
 
-`CONFIG_OP6893_CCCI_SERVICES` 默认关闭。当前只将 codec/router 纳入编译，
-**没有 Linux live caller、字符端点、daemon、worker/timer 适配或服务就绪门控**。
-调用者必须提供互不重叠的存储、序列化和定时 tick/pump；submit 成功前需复制
-请求，回调不得重入。现有模块不会自动接收或处理真机请求。
+`CONFIG_OP6893_CCCI_SERVICES` 默认关闭。最新实现已加入Linux有序worker/timer、
+独占字符入口和手动FS runner；submit复制、回调不重入及真实停止契约仍保留。
+尚无活跃dispatcher/MD启动caller、硬件RPC provider或服务就绪门控，详见上方接续文档。
 
 ## 私有文件工作副本原型
 
-`tools/modem_fs_backend.py` 是结构化参数后端，尚未接 wire parser/daemon。
+`tools/modem_fs_backend.py` 是结构化参数后端，现已接canonical wire adapter与显式FS runner。
 仅接受调用者预先准备的可丢弃工作副本：根目录归当前用户且权限 0700，
 确认标记为 0600 的普通单链接文件。标记只是调用者确认，不能证明副本来源。
 不提供原件导入、复制、恢复或直接挂载 Android 数据的操作。
 
 支持 Open/Seek/Read/Write/Close/CreateDir/GetFileSize、两个已观察 GetDrive
-查询、SetDiskFlag 和受限 CMPT_Read 成功路径。UTF-16LE 路径经逐层目录 fd
+查询、SetDiskFlag、普通文件Move、GetFileDetail及受限CMPT_Read成功/失败阶段。UTF-16LE 路径经逐层目录 fd
 遍历，拒绝上跳、符号链接及特殊文件；写入前检查普通文件及单链接，Close
 按已确认 flags 执行 fsync。每个请求先核对 generation，shutdown 先撤销代际
 再关闭句柄。测试只使用临时合成树，没有访问真实 NVRAM。
 
 下列项保留 UnsupportedOperation，不能序列化成猜测的 vendor errno：
 
-- Move 的第三参数以及复制/覆盖规则。
-- FindFirst 的成功布局、通配符枚举和 GetFileDetail 成功布局。
-- CMPT 非完整五步、非 0x700 flags 以及失败应答的 completed bitmap/error 规则。
-- 未观察 GetDrive 查询、其他 opcode、目录/OTP/device/ioctl 操作。
+- Move目标为目录时的递归XDelete语义。
+- FindFirst成功DOS entry及查找；缺目录失败布局已恢复。
+- CMPT非完整五步、非0x700 flags。
+- 未观察GetDrive查询、其他opcode及目录/OTP/device/ioctl操作。
 
 正常 Android 启动已有实际写入证据，因此只读原件不能替代可写私有工作副本。
 本原型不是所有 bootstrap 请求均可服务的证明。
 
 ## 下一组实现
 
-1. 完成上述 FS wire 语义与结构化后端应答编码；根据实际实现生成能力清单，
+1. 完成仍未支持的FS语义；wire与已实现操作应答编码已接，按实际实现生成能力清单，
    未知语义阻止启动，不用通用 NO_OP 或零值代答。
-2. 将有界 router 接 Linux worker/队列、普通端口 dispatcher 与后端入口，
+2. Linux worker/队列和后端入口已接，继续连普通端口dispatcher，
    关联超时/断连/HS2/STOP；按真实 provider 准备内核与用户态 RPC。
    当前缺完整冷启动 RPC census，历史 flight 查询不能代替该清单。
 3. 明确 runtime feature36 NVRAM cache 的填充策略；预留内存不是服务能力。

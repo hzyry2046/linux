@@ -553,3 +553,13 @@ R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、
 - [ ] 补Move/枚举/detail/CMPT失败应答、后端wire编码、Linux worker/端口与后端入口；当前没有live router caller或daemon。
 - [ ] 明确硬件RPC provider与冷启动请求全集、feature36 cache填充策略，按实际能力建立服务就绪门控。
 - [ ] 补唯一MD启停owner和真实CPU/DMA停止原语，再合并首次CPU释放/HS1/HS2/后置CCISM及异常停止测试。
+
+
+### R7.7 Linux异步服务入口与恢复的FS语义（2026-11-16）
+
+- [x] 私有ordered worker/32事件队列，排队时间计入60s；每次后端提交和fragment发送前检查期限/准入，BUSY续传及异步CCIF abort。
+- [x] 独占0600/CAP_SYS_RAWIO字符入口，32B LE generation/token记录，读失败保留、同步回复校验、断连失败及停止后擦除；父prepare/off/shutdown检查service offline。
+- [x] AP ELF静态恢复Move/Detail/CMPT错误/FindFirst失败格式，补canonical wire和显式FS runner，不访问原始NVRAM；见[FS语义](MODEM-FS-SEMANTICS.md)。
+- [x] 实际endpoint/session/router/codec联合ASan/UBSan、13项FS/11项wire/10项runner及ARM64启用/恢复构建；本轮完全离线，无蜂窝验收。
+- [ ] FindFirst成功/DOS entry、递归Move/XDelete及其他所需操作；RPC实际provider/census及feature36 NVRAM cache策略。
+- [ ] accepted HS1/HS2与普通端口dispatcher、真实能力清单/ready gate、唯一MD启停owner和CPU/DMA停止原语，再合并首次放行测试。当前只构造服务入口，未调用arm/start。
