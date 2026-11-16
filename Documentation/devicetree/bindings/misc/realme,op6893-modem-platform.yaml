@@ -19,10 +19,33 @@ description: |
   power-off request; probe and unused-domain work must preserve its state.
   The power-domain lives in a lookup-only child to prevent platform-bus
   attachment from powering MD1 before the platform sequence has run.
+  Optional ordinary AP/MD CCIF windows and data/exception IRQs allow the
+  same owner to prepare SRAM and the validated 6297 shared-memory rings.
+  These are distinct from the SCP CCIF2 bridge.
 
 properties:
   compatible:
     const: realme,op6893-modem-platform
+
+  reg:
+    items:
+      - description: Ordinary AP CCIF window
+      - description: Ordinary MD CCIF window
+
+  reg-names:
+    items:
+      - const: ccif-ap
+      - const: ccif-md
+
+  interrupts:
+    items:
+      - description: CCIF data notification
+      - description: CCIF exception notification
+
+  interrupt-names:
+    items:
+      - const: data
+      - const: exception
 
   memory-region:
     items:
@@ -85,3 +108,9 @@ required:
   - power
 
 additionalProperties: false
+
+dependencies:
+  reg: [reg-names, interrupts, interrupt-names]
+  reg-names: [reg, interrupts, interrupt-names]
+  interrupts: [reg, reg-names, interrupt-names]
+  interrupt-names: [reg, reg-names, interrupts]
