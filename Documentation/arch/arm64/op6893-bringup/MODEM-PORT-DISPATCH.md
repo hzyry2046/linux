@@ -31,7 +31,9 @@ controller 新增 pre-start 故障 callback；该 callback 在 controller mutex 
 
 stop(false) 无操作。只有调用者提供真实 CPU/DMA 停止证明后，stop(true) 才按
 CCIF RX/controller join → fault work join → endpoint stop/擦除 → bridge STOP/
-SCP 回复与 offline 的顺序关闭。任一步失败继续阻止父 prepare/off/shutdown；
+SCP 回复与 offline 的顺序关闭。2026-11-16 的放行 owner 受物理约束先在时钟
+仍开启时完成 CCIF stop，再证明 MD1 OFF，最后调用 stop(true)；此时 dispatcher
+内的第二次 CCIF stop 因 `prepared=false` 提前返回，见[停止顺序](MODEM-BOOT-RELEASE.md)。任一步失败继续阻止父 prepare/off/shutdown；
 允许再次 stop 收尾，但不允许重新 prepare。RX 关闭、FAILED 或 generation
 均不是硬件停止证明。主动 unbind 尚不支持；当前仅支持内建 dormant unwind，
 未来活跃移除还必须覆盖父电源、映射和回调生产者的整体生命周期。

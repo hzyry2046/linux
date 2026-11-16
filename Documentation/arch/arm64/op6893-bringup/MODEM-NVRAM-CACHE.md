@@ -172,6 +172,17 @@ and do not claim that reset retention or MD-side reconstruction is verified.
 This audit supplies no new hardware result and does not by itself certify MD
 service readiness.
 
+## Implemented owner (2026-11-16)
+
+`CONFIG_OP6893_CCCI_NVRAM_CACHE` adds `ccci-nvram-cache.c`: the single owner of
+the cached user-32 window. Construction validates the already-parsed geometry
+without mapping. `prepare` maps the AP view write-combined, clears every byte
+once, and reads back the first and last word; a mapping or read-back failure
+latches FAULT. Retries, reconnects and `stop` never clear the region again.
+The owner is stopped only after the parent proves MD1 OFF, and it exports no
+region content. See [release gate](MODEM-BOOT-RELEASE.md). No cache image,
+raw partition read or synthesized header is introduced.
+
 ## Reproduction and source hashes
 
 For a source-only cross-reference census, run `rg -n` for

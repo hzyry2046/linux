@@ -1,0 +1,100 @@
+{
+  "date": "2026-11-16",
+  "base_commit": "d99a965f6",
+  "scope": "offline cache owner, external-32k fact, ready gate and single MD CPU release entry",
+  "hardware_actions": {
+    "flashed": false,
+    "smc_issued": false,
+    "device_registers_accessed": false,
+    "device_commands": [
+      "adb shell ls /proc/device-tree (read-only, confirmed no md_ccci_rtc)",
+      "adb shell ls /proc/device-tree/mddriver (read-only, confirmed no nvmem-cell-names)",
+      "adb shell dmesg | grep ccci_rtc (no output)"
+    ],
+    "device_kernel": "5.10.0 #1 SMP PREEMPT (vendor, uname-spoofed)"
+  },
+  "new_kconfig": {
+    "OP6893_CCCI_NVRAM_CACHE": "bool, default n, depends MD_PLATFORM && SMEM",
+    "OP6893_CCCI_MD_BOOT": "bool, default n, depends DISPATCH && NVRAM_CACHE && NVMEM"
+  },
+  "contracts": {
+    "cache": "unique cached user-32 owner; map write-combined, clear all bytes once, read back first/last word; never re-clear on reconnect or stop; FAULT latches",
+    "gate_order": ["ccif_prepare", "nvram_cache_prepare", "runtime_bootstrap", "port_dispatch_prepare"],
+    "release_order": ["port_dispatch_start", "MTK_SIP_KERNEL_CCCI_CONTROL(6,0)"],
+    "stop_order": ["sample SPM PCM REG13 (diagnostic)", "ccif_stop while clocks held", "md_power_off with six-register OFF readback", "port_dispatch_stop(true)"],
+    "stop_evidence": "MD1 PWR_STATUS/PWR_ON/RESET_B/isolation/three protection ACKs; PCM bit is diagnostic only",
+    "no_software_stop_evidence": ["RX closed", "controller fault", "generation change", "SPM single bit"]
+  },
+  "rtc32k": {
+    "vendor_source": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/eccci/ccci_rtc.c reads first byte of nvmem cell external-32k",
+    "vendor_policy": "/data/src/kernel_oddo_mt6893/drivers/misc/mediatek/eccci/ccci_modem.c:1798-1814 sets feature 6 MUST when the value is zero",
+    "live_dt": "saved ACK FDT and /proc/device-tree have no md_ccci_rtc node and no external-32k cell; mddriver has no nvmem-cell-names",
+    "compile_time": "ENABLE_32K_CLK_LESS defined in mt6885/ccci_config.h and ccci_common_config.h",
+    "result": "explicit board fact mediatek,no-external-32k; absent cell and absent property returns -ENODATA",
+    "source_hashes": {
+      "eccci/ccci_rtc.c": "006513ec098cd351b1b992d497902dc2d4b141e06d5e06cb7d2ef85e95ef9945",
+      "eccci/ccci_modem.c": "850e6d9fad97525c163f5a28d8464c1867f79cf16e995a5684b7ff1ea58e4c1b",
+      "eccci/mt6885/ccci_config.h": "c38e31c1507a391d2851d498601c88f7e1401369016a8f149c1a01f3cd1962ab",
+      "eccci/ccci_common_config.h": "39abd3c81375cd4ffe3a4f3bff1eb0a71a825be7d0ee391d6b808251644d14a5",
+      "evidence/ack-live.dts": "56bc67442454700a4ac9688640a164065433dedae4edb4519e47df234f093af0"
+    }
+  },
+  "tests": {
+    "new": "tools/test_modem_md_boot.py: actual ccci-nvram-cache.c, ccci-md-boot.c and ccci-rtc32k.c with deterministic fakes; ASan/UBSan",
+    "new_coverage": [
+      "geometry rejection and overflow",
+      "one clear, no re-clear on retry/reconnect/stop",
+      "mapping and read-back fault latching",
+      "gate order and per-stage failure",
+      "release starts RX before the single SMC",
+      "SMC NOT_SUPPORTED and nonzero return",
+      "md_stopped=false performs zero actions",
+      "stop order and repeat idempotence",
+      "PCM diagnostic bit rendering"
+    ],
+    "regressions_passed": [
+      "test_modem_platform.py",
+      "test_modem_port_dispatch.py",
+      "test_modem_service_endpoint.py",
+      "test_modem_service_backend.py",
+      "test_modem_fs_backend.py",
+      "test_modem_fs_wire.py",
+      "test_modem_rpc_provider.py",
+      "test_modem_rpc_board.py",
+      "test_modem_rpc_backend.py",
+      "test_modem_handshake.py",
+      "test_modem_runtime_profile.py",
+      "test_modem_ccif.py",
+      "test_modem_ccif_rx.py",
+      "test_modem_ccif_service_tx.py",
+      "test_modem_ccif_system_tx.py",
+      "test_modem_ccism.py",
+      "test_modem_ccism_bridge.py",
+      "test_modem_ccism_session.py"
+    ],
+    "limits": "deterministic fakes; no SMP race, mapping attribute, SMC, MD firmware or hardware stop proof"
+  },
+  "builds": {
+    "enabled": {
+      "log": "mt6893-direct/evidence/modem-md-boot/build-enabled.log",
+      "sha256": "3e54559bd1a600ed8ce04eb23fe6d533cde7e749b0a5266162475ad4bfa81cef",
+      "result": "ARM64 Image.gz modules pass, 0 warnings"
+    },
+    "restored": {
+      "log": "mt6893-direct/evidence/modem-md-boot/build-restored.log",
+      "sha256": "d9f1f00ab98ffe2e87e5820b722cdc77ff18b739fd68361f933b930afa322914",
+      "result": "ARM64 Image.gz modules pass, 0 warnings"
+    },
+    "config_enabled_sha256": "d26b0ed0be3af6e004923ea2ce71abd5db2e9b686a6750020e86410b9c7ac3a9",
+    "config_original_sha256": "c7cc77e1dc501a0ca9301cdd05aa64880c28f26383d026f8f12bcbe784a29280",
+    "config_restored_sha256": "f3cf823b1280a5b7fc601b832d80b255287d4615c216cd16a5709604cfbe9679",
+    "config_restored_note": "differs from config.original only by the new default-off symbol line",
+    "binding": "dt-doc-validate pass; board DTB has no schema error for the modem-platform node"
+  },
+  "remaining": [
+    "ADC 0x4003 name-to-channel namespace unavailable",
+    "real user property/SAR policy and private FS working copy are operator inputs",
+    "SCP/CCISM hardware state, MD HS1/HS2, DPMAIF and radio readiness unverified",
+    "active unbind unsupported; cache/boot owners have no callbacks"
+  ]
+}

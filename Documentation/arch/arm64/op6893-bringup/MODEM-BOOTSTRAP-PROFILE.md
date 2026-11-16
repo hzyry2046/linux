@@ -76,7 +76,9 @@ runner 保留 generation/token/slot/record 校验、一次完整read/write、短
 原始分区loader，也不能发自造cache header。MD经FS管理cache是有来源推断，
 全局header/重建时序仍未独立证明。
 
-接续聚焦剩余实际调用路径：cache首次清零、32k事实取得、ADC单channel契约、
-真实用户策略与私有工作副本准备、CPU/DMA启停和异常停止顺序。闭合后合并首次
-MD放行/HS1/runtime/HS2/CCISM测试；无需为本轮 metadata 或纯provider单独刷机。
+接续已实现cache唯一owner/首次清零、`external-32k`事实读取（本机无cell，
+以显式DT事实声明无晶体）、ready gate与唯一一次`(6,0)`放行，停止以MD1 OFF
+读回为证据，见[放行门槛](MODEM-BOOT-RELEASE.md)。仍待ADC单channel契约、
+真实用户策略与私有工作副本准备；随后合并首次MD放行/HS1/runtime/HS2/CCISM
+测试，无需为metadata或纯provider单独刷机。
 验证记录见[evidence/modem-bootstrap-contracts-validation.json](evidence/modem-bootstrap-contracts-validation.json)。

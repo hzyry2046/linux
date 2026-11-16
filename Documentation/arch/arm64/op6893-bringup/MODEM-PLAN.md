@@ -6,8 +6,10 @@ MD继承ON接管、冷上电及普通CCIF prepare/stop/off已在8ec93b17bbb5实�
 普通CCIF接收、runtime协商/回复与有状态HS1/HS2 consumer已离线实现验证，
 见[R7.3](MODEM-RUNTIME-HANDSHAKE.md)。随后增加SCP client与后置CCISM core，
 见[R7.4](MODEM-CCISM.md)。CCIF2/system 与服务 dispatcher 已完成离线连接，
-见[R7.8](MODEM-PORT-DISPATCH.md)。本机 RPC 事实、用户应答与 typed payload 已离线接续，见 R7.9。下一组是
-cache首次清零/32k事实、实际用户策略、真实能力/ready gate 与 MD CPU 启停 owner；随后合并首次通信测试。
+见[R7.8](MODEM-PORT-DISPATCH.md)。本机 RPC 事实、用户应答与 typed payload 已离线接续，见 R7.9。
+cache owner、32k 板级事实、ready gate 与唯一 CPU 放行入口已离线接续，见
+[R7.10](MODEM-BOOT-RELEASE.md)。下一组是私有 FS 工作副本/真实用户策略准备，
+然后合并首次 MD 放行、HS1/runtime/HS2、后置 CCISM 与停止实测。
 没有 MD CPU release caller 或真实 HS1/HS2，不为 dormant 代码单独刷机。
 AI辅助源码分析与实现。
 SID3 shutdown 对照及启动电压契约见 [供电生命周期](MODEM-RAILS.md)。
@@ -588,3 +590,14 @@ R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、
 - [x] actual C sanitizer、用户RPC与混合runner合成回归、启用/恢复ARM64构建；完全离线，无新增基带实测。
 - [ ] 接唯一cache owner/首次清零、32k事实读取和ADC single-channel；准备真实用户策略和可写私有工作副本。
 - [ ] 唯一MD CPU启停与CPU/DMA停止证明、ready gate；合并首次放行/HS1/runtime/HS2/CCISM及异常停止上机。
+
+
+### R7.10 cache owner、32k事实与放行门槛（2026-11-16）
+
+- [x] 默认关闭 `NVRAM_CACHE`：唯一映射cached user-32，按A首次启动整区清零并读回首尾；重连/停止不再清零，故障锁定，见[入口](MODEM-BOOT-RELEASE.md)。
+- [x] 默认关闭 `MD_BOOT`：prepare按CCIF→cache→runtime offers→dispatch reserve顺序作为ready gate；release先开RX/握手再发唯一一次`(6,0)`。
+- [x] 32k事实：读取`external-32k` nvmem cell；本机无cell，保存ACK FDT与现场`/proc/device-tree`均无该节点，A的`ENABLE_32K_CLK_LESS`路径为静态零，故以显式DT事实`mediatek,no-external-32k`声明无晶体，未知输入不放行。
+- [x] 停止顺序：父锁内CCIF stop→MD1 OFF六寄存器读回→dispatcher/endpoint/bridge stop；SPM PCM REG13仅作诊断，软件状态不作停止证据。
+- [x] actual C cache/boot/rtc32k ASan/UBSan、既有服务回归、启用/恢复ARM64构建与binding校验；本轮完全离线，无新增蜂窝实测。
+- [ ] 首次上机：私有FS runner+policy→`md_power on`→`md_boot prepare`→`release`，观察HS1/HS2/CCISM，再按上述停止顺序收尾。
+- [ ] ADC名称→通道完整表、真实用户策略内容和SCP/CCISM真机状态仍待补齐；HS2/CCISM不等于radio READY。

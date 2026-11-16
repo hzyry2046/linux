@@ -1,5 +1,11 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16 MD放行入口离线接续：新增默认关闭的cache唯一owner（首次清零、
+重连不清零）、`external-32k`事实读取与显式板级无晶体声明、ready gate和
+唯一一次`(6,0)`放行；停止以MD1 OFF六寄存器读回为证据，PCM bit仅诊断。
+实际C sanitizer、既有服务回归及启用/恢复ARM64构建通过；未刷机、未发SMC，
+蜂窝支持状态不变。见[放行门槛与步骤](MODEM-BOOT-RELEASE.md)。
+
 2026-11-16 本机RPC/启动数据离线接续：匹配op6893的GPIO/EINT/DTSI静态事实、
 显式用户属性/SAR应答与混合runner、typed runtime builder已接；EINT错码修复。
 cache审计确认A首次清零/后续保留，撤销无证据的AP预填要求。sanitizer/合成
