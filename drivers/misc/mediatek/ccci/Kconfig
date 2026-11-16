@@ -343,3 +343,15 @@ config OP6893_CCCI_SERVICES
 	  gate is installed. No CPU release or automatic start.
 	  Disabled by default; prototype user tools operate only on caller-supplied
 	  private working copies and do not establish bootstrap service readiness.
+
+config OP6893_CCCI_DISPATCH
+	bool "Build op6893 accepted-handshake and normal-port dispatcher"
+	depends on OP6893_CCCI_SERVICES && OP6893_CCCI_CCISM
+	help
+	  Route accepted post-publication HS1 to service start, accepted HS2 to
+	  service sequence state and post-HS2 CCISM, and normal FS/RPC/system
+	  packets to their unique owners. Reserve the exact backend and SCP lease
+	  before a future MD release, with sticky deferred fault containment and
+	  stopped-MD cleanup. No automatic prepare/start, CPU release, populated
+	  RPC facts, NVRAM cache population or service-ready gate is provided.
+	  Disabled by default. Construction performs no hardware or protocol I/O.

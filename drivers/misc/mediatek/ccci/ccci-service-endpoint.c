@@ -15,6 +15,8 @@
 #include <linux/vmalloc.h>
 
 #include "ccci-service-endpoint.h"
+#include "ccci-ccif.h"
+#include "ccci-rpc-provider.h"
 
 struct endpoint_request {
 	u64 token;
@@ -34,6 +36,9 @@ struct ccci_service_endpoint {
 	spinlock_t queue_lock;
 	wait_queue_head_t wait;
 	struct ccci_service_session *session;
+	struct ccci_ccif *ccif;
+	const struct ccci_rpc_provider *rpc_provider;
+	u8 rpc_reply[CCCI_RPC_MAX_PACKET];
 	struct endpoint_request requests[CCCI_SERVICE_SLOTS];
 	u64 generation;
 	u32 pending;
@@ -41,6 +46,7 @@ struct ccci_service_endpoint {
 	int error;
 	bool connected;
 	bool armed;
+	bool reserved;
 	bool removed;
 };
 
@@ -68,11 +74,27 @@ static int endpoint_submit(void *context, u64 generation, u64 token,
 {
 	struct ccci_service_endpoint *endpoint = context;
 	struct endpoint_request *request;
+	struct ccci_rpc_message rpc;
 	unsigned long flags;
 	int index = endpoint_index(kind, slot), ret = 0;
 
 	if (index < 0 || !packet || length > CCCI_FS_MESSAGE_MAX)
 		return -EINVAL;
+	if (kind == CCCI_SERVICE_RPC) {
+		ret = ccci_rpc_decode_request(packet, length, &rpc);
+		if (ret)
+			return ret;
+		if (ccci_rpc_owner(rpc.operation) == CCCI_RPC_KERNEL) {
+			/* Immutable provider, serialized session worker, no userspace fallback. */
+			ret = ccci_rpc_provider_reply(endpoint->rpc_provider, packet, length,
+						      endpoint->rpc_reply,
+						      sizeof(endpoint->rpc_reply));
+			if (ret < 0)
+				return ret;
+			return ccci_service_session_reply(endpoint->session, generation, token,
+							 kind, slot, endpoint->rpc_reply, ret);
+		}
+	}
 	spin_lock_irqsave(&endpoint->queue_lock, flags);
 	if (endpoint->removed || !endpoint->connected || !endpoint->armed) {
 		ret = -EPIPE;
@@ -119,9 +141,11 @@ static void endpoint_closing(void *context, u64 generation)
 	mutex_lock(&endpoint->lock);
 	spin_lock_irqsave(&endpoint->queue_lock, flags);
 	endpoint->armed = false;
+	endpoint->reserved = false;
 	endpoint->error = endpoint->error ?: -ESHUTDOWN;
 	endpoint->pending = 0;
 	memzero_explicit(endpoint->requests, sizeof(endpoint->requests));
+	memzero_explicit(endpoint->rpc_reply, sizeof(endpoint->rpc_reply));
 	spin_unlock_irqrestore(&endpoint->queue_lock, flags);
 	mutex_unlock(&endpoint->lock);
 	wake_up_interruptible(&endpoint->wait);
@@ -146,7 +170,8 @@ static int endpoint_open(struct inode *inode, struct file *file)
 	spin_lock_irqsave(&endpoint->queue_lock, flags);
 	if (endpoint->removed) {
 		ret = -ENODEV;
-	} else if (endpoint->connected || endpoint->armed || endpoint->error) {
+	} else if (endpoint->connected || endpoint->reserved || endpoint->armed ||
+		   endpoint->error) {
 		ret = -EBUSY;
 	} else {
 		endpoint->connected = true;
@@ -162,19 +187,24 @@ static int endpoint_release(struct inode *inode, struct file *file)
 {
 	struct ccci_service_endpoint *endpoint = file->private_data;
 	unsigned long flags;
-	bool armed;
+	bool armed, reserved;
 	u64 generation;
 
 	mutex_lock(&endpoint->lock);
 	spin_lock_irqsave(&endpoint->queue_lock, flags);
 	endpoint->connected = false;
 	armed = endpoint->armed;
+	reserved = endpoint->reserved;
 	generation = endpoint->generation;
-	if (armed && !endpoint->error)
+	if ((armed || reserved) && !endpoint->error)
 		endpoint->error = -EPIPE;
 	spin_unlock_irqrestore(&endpoint->queue_lock, flags);
-	if (armed && !endpoint->removed)
-		ccci_service_session_abort(endpoint->session, generation, -EPIPE);
+	if (!endpoint->removed) {
+		if (armed)
+			ccci_service_session_abort(endpoint->session, generation, -EPIPE);
+		else if (reserved)
+			ccci_ccif_abort(endpoint->ccif, -EPIPE);
+	}
 	mutex_unlock(&endpoint->lock);
 	wake_up_interruptible(&endpoint->wait);
 	kref_put(&endpoint->refs, endpoint_free);
@@ -376,7 +406,9 @@ static void endpoint_remove(void *context)
 	spin_lock_irqsave(&endpoint->queue_lock, flags);
 	endpoint->removed = true;
 	spin_unlock_irqrestore(&endpoint->queue_lock, flags);
-	ret = ccci_service_session_destroy(endpoint->session);
+	ret = ccci_service_endpoint_offline(endpoint);
+	if (!ret)
+		ret = ccci_service_session_destroy(endpoint->session);
 	mutex_unlock(&endpoint->lock);
 	wake_up_interruptible(&endpoint->wait);
 	/* No active remove is supported: retain callback storage on refusal. */
@@ -409,6 +441,7 @@ ccci_service_endpoint_create(struct device *dev, struct ccci_ccif *ccif)
 	endpoint->misc.mode = 0600;
 	endpoint->misc.parent = dev;
 	endpoint->misc.fops = &endpoint_fops;
+	endpoint->ccif = ccif;
 	endpoint->session = ccci_service_session_create(dev, ccif, &endpoint_ops, endpoint);
 	if (IS_ERR(endpoint->session)) {
 		ret = PTR_ERR(endpoint->session);
@@ -428,6 +461,50 @@ put:
 	return ERR_PTR(ret);
 }
 
+/* Snapshot ownership is transferred by contract, not inferred from DT presence. */
+int ccci_service_endpoint_set_rpc(struct ccci_service_endpoint *endpoint,
+				  const struct ccci_rpc_provider *provider)
+{
+	int ret;
+
+	if (!endpoint)
+		return -EINVAL;
+	ret = ccci_rpc_provider_available(provider, 0x4002);
+	if (ret < 0)
+		return ret;
+	mutex_lock(&endpoint->lock);
+	if (endpoint->removed || endpoint->reserved || endpoint->armed) {
+		ret = -EBUSY;
+	} else {
+		endpoint->rpc_provider = provider;
+		ret = 0;
+	}
+	mutex_unlock(&endpoint->lock);
+	return ret;
+}
+
+/* Reserve the exact open backend before MD release, without starting services. */
+int ccci_service_endpoint_reserve(struct ccci_service_endpoint *endpoint, u64 generation)
+{
+	unsigned long flags;
+	int ret;
+
+	if (!endpoint || !generation)
+		return -EINVAL;
+	mutex_lock(&endpoint->lock);
+	spin_lock_irqsave(&endpoint->queue_lock, flags);
+	ret = endpoint->removed ? -ENODEV : endpoint->error;
+	if (!ret && (!endpoint->connected || endpoint->reserved || endpoint->armed))
+		ret = -EBUSY;
+	if (!ret) {
+		endpoint->generation = generation;
+		endpoint->reserved = true;
+	}
+	spin_unlock_irqrestore(&endpoint->queue_lock, flags);
+	mutex_unlock(&endpoint->lock);
+	return ret;
+}
+
 int ccci_service_endpoint_arm(struct ccci_service_endpoint *endpoint, u64 generation)
 {
 	unsigned long flags;
@@ -440,8 +517,11 @@ int ccci_service_endpoint_arm(struct ccci_service_endpoint *endpoint, u64 genera
 	ret = endpoint->removed ? -ENODEV : endpoint->error;
 	if (!ret && (!endpoint->connected || endpoint->armed))
 		ret = -EBUSY;
+	if (!ret && endpoint->reserved && generation != endpoint->generation)
+		ret = -ESTALE;
 	if (!ret) {
 		endpoint->generation = generation;
+		endpoint->reserved = true;
 		endpoint->armed = true;
 	}
 	spin_unlock_irqrestore(&endpoint->queue_lock, flags);
@@ -468,17 +548,49 @@ int ccci_service_endpoint_hs2(struct ccci_service_endpoint *endpoint, u64 genera
 int ccci_service_endpoint_abort(struct ccci_service_endpoint *endpoint,
 				u64 generation, int error)
 {
-	return ccci_service_session_abort(endpoint->session, generation, error);
+	unsigned long flags;
+	bool armed;
+
+	if (!endpoint || !generation)
+		return -EINVAL;
+	spin_lock_irqsave(&endpoint->queue_lock, flags);
+	if (generation != endpoint->generation || !endpoint->reserved) {
+		spin_unlock_irqrestore(&endpoint->queue_lock, flags);
+		return -ESTALE;
+	}
+	if (!endpoint->error)
+		endpoint->error = error < 0 ? error : -EIO;
+	armed = endpoint->armed;
+	error = endpoint->error;
+	spin_unlock_irqrestore(&endpoint->queue_lock, flags);
+	wake_up_interruptible(&endpoint->wait);
+	return armed ? ccci_service_session_abort(endpoint->session, generation, error) : error;
 }
 
 int ccci_service_endpoint_offline(struct ccci_service_endpoint *endpoint)
 {
-	return endpoint ? ccci_service_session_offline(endpoint->session) : 0;
+	unsigned long flags;
+	bool reserved;
+
+	if (!endpoint)
+		return 0;
+	spin_lock_irqsave(&endpoint->queue_lock, flags);
+	reserved = endpoint->reserved;
+	spin_unlock_irqrestore(&endpoint->queue_lock, flags);
+	return reserved ? -EBUSY : ccci_service_session_offline(endpoint->session);
 }
 
 int ccci_service_endpoint_stop(struct ccci_service_endpoint *endpoint, bool md_stopped)
 {
-	return ccci_service_session_stop(endpoint->session, md_stopped);
+	int ret;
+
+	if (!md_stopped)
+		return -EBUSY;
+	ret = ccci_service_session_stop(endpoint->session, true);
+	/* Pre-HS1 reservations have no armed session to invoke closing(). */
+	if (!ret)
+		endpoint_closing(endpoint, endpoint->generation);
+	return ret;
 }
 
 ssize_t ccci_service_endpoint_status(struct ccci_service_endpoint *endpoint, char *buf)

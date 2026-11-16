@@ -25,6 +25,9 @@ int ccci_ccif_receive_start(struct ccci_ccif *ccif, ccci_ccif_consume_fn consume
 int ccci_ccif_handshake_start(struct ccci_ccif *ccif, const struct ccci_runtime_offer *offers,
 			      ccci_ccif_consume_fn port, void *context);
 ssize_t ccci_ccif_handshake_status(struct ccci_ccif *ccif, char *buf);
+/* Pre-start only; callback may enqueue work but must not acquire mutexes. */
+int ccci_ccif_set_fault(struct ccci_ccif *ccif,
+			void (*fault)(void *context, int error), void *context);
 /*
  * Sleepable q0/channel 3 CCISM messages only (0x119/0x11b), after real HS2.
  * Caller supplies the lifecycle/HS2 gate; no parent or control lock acquired.

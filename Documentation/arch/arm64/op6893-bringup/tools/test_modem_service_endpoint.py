@@ -51,6 +51,7 @@ struct miscdevice {char *name;unsigned minor,mode;struct device *parent;const st
 static bool rawio,copy_read_fault,copy_write_fault;
 static unsigned wakeups,registered,deregistered,free_calls,reply_sends,ccif_aborts;
 static int fail_misc,fail_action;
+static u32 last_reply_length;
 static int capable(int cap){assert(cap==CAP_SYS_RAWIO);return rawio;}
 #define init_waitqueue_head(p) (*(p)=0)
 static void wake_up_interruptible(wait_queue_head_t *w){(void)w;wakeups++;}
@@ -83,10 +84,12 @@ static u64 get_unaligned_le64(const void *p){const u8 *b=p;u64 n=0;for(unsigned 
 static void put_unaligned_le64(u64 v,void *p){u8 *b=p;for(unsigned i=0;i<8;i++)b[i]=v>>(8*i);}
 #include "ccci-service-session.c"
 #include "ccci-service-endpoint.c"
+static u8 last_reply[CCCI_FS_MESSAGE_MAX];
 static struct device dev;
 static struct ccci_ccif ccif;
 static int ccci_ccif_service_send(struct ccci_ccif *c,const void *p,u32 n,bool hs2){
- (void)hs2;assert(c==&ccif&&p&&n>=21&&!spin_depth);reply_sends++;return 0;
+ (void)hs2;assert(c==&ccif&&p&&n>=21&&n<=sizeof(last_reply)&&!spin_depth);
+ memcpy(last_reply,p,n);last_reply_length=n;reply_sends++;return 0;
 }
 static void ccci_ccif_abort(struct ccci_ccif *c,int error){assert(c==&ccif&&error<0&&!spin_depth);ccif_aborts++;}
 '''
@@ -105,7 +108,7 @@ static void run(void){
  w->pending=false;w->running=true;w->fn(w);w->running=false;
 }
 static void create(bool arm){
- now_ms=100;rawio=true;copy_read_fault=copy_write_fault=false;reply_sends=ccif_aborts=0;
+ now_ms=100;rawio=true;copy_read_fault=copy_write_fault=false;reply_sends=ccif_aborts=last_reply_length=0;
  endpoint=ccci_service_endpoint_create(&dev,&ccif);assert(!IS_ERR(endpoint));
  assert(endpoint->refs.count==1&&!endpoint->connected&&!endpoint->armed);
  file=(struct file){.private_data=&endpoint->misc,.f_flags=O_NONBLOCK};
@@ -114,8 +117,9 @@ static void create(bool arm){
 }
 static void destroy(void){
  assert(!ccci_service_endpoint_stop(endpoint,true));
- assert(!endpoint->armed&&!endpoint->pending&&endpoint->error);
+ assert(!endpoint->armed&&!endpoint->reserved&&!endpoint->pending&&endpoint->error);
  for(unsigned i=0;i<sizeof(endpoint->requests);i++)assert(!((u8 *)endpoint->requests)[i]);
+ for(unsigned i=0;i<sizeof(endpoint->rpc_reply);i++)assert(!endpoint->rpc_reply[i]);
  endpoint_remove(endpoint);assert(endpoint->removed&&endpoint->refs.count==1);
  assert(!endpoint_release(NULL,&file));endpoint=NULL;
 }
@@ -240,7 +244,118 @@ static void ordering_faults(void){
  for(unsigned i=0;i<sizeof(endpoint->requests);i++)assert(!((u8 *)endpoint->requests)[i]);endpoint_remove(endpoint);endpoint=NULL;
  puts("PASS: actual pending-slot ordering, sticky poll faults, active disconnect abort and stopped-only request wipe");
 }
-int main(void){access_and_lifetime();roundtrip_and_validation();rpc_and_failed_enqueue();ordering_faults();active_remove_refusal();return 0;}
+static size_t rpc_packet(u32 operation,const struct ccci_rpc_arg *args,u32 argc){
+ size_t n=24;memset(request,0,sizeof(request));put_unaligned_le32(0x12345678,request);
+ put_unaligned_le32(32,request+8);put_unaligned_le32(2,request+12);
+ put_unaligned_le32(operation,request+16);put_unaligned_le32(argc,request+20);
+ for(unsigned i=0;i<argc;i++){
+  put_unaligned_le32(args[i].size,request+n);n+=4;
+  if(args[i].size)memcpy(request+n,args[i].data,args[i].size);n+=(args[i].size+3)&~3U;
+ }
+ put_unaligned_le32(n,request+4);return n;
+}
+static void receive_rpc(size_t n){
+ struct ccci_ccif_event event={.type=CCCI_CCIF_EVENT_RING,.queue=1,.data=request,.size=n};
+ assert(!ccci_service_endpoint_receive(endpoint,41,&event));run();
+}
+static void kernel_rpc_ownership(void){
+ /* Unknown kernel operations receive the real vendor NO_OP without a user lease. */
+ create(true);size_t n=rpc_packet(0x4018,NULL,0);receive_rpc(n);
+ assert(reply_sends==1&&!ccif_aborts&&!endpoint->pending&&!endpoint->error);
+ assert(endpoint_read(&file,(void *)record,sizeof(record),&offset)==-EAGAIN);
+ struct ccci_rpc_message rpc;assert(!ccci_rpc_decode_request(request,n,&rpc));
+ assert(!ccci_rpc_validate_reply(&rpc,last_reply,last_reply_length));
+ assert(last_reply_length==32&&get_unaligned_le32(last_reply+20)==1);
+ assert(get_unaligned_le32(last_reply+28)==0xffffffff);destroy();
+ /* Declared kernel operations with missing providers fault, never reach userspace. */
+ create(true);n=rpc_packet(0x4002,NULL,0);receive_rpc(n);
+ assert(!reply_sends&&ccif_aborts==1&&!endpoint->pending&&endpoint->error==-EOPNOTSUPP);
+ assert(endpoint_read(&file,(void *)record,sizeof(record),&offset)==-EOPNOTSUPP);
+ assert(!endpoint->requests[7].pending&&!endpoint->requests[7].delivered);destroy();
+ /* A complete audited snapshot is immutable after reserve; typed bytes reach TX. */
+ static const struct ccci_rpc_named_fact gpio[]={{{'p','i','n',0},513}};
+ static const struct ccci_rpc_provider facts={.gpio=gpio,.gpio_count=1,.gpio_present=true};
+ create(false);assert(ccci_service_endpoint_set_rpc(NULL,&facts)==-EINVAL);
+ struct ccci_rpc_provider invalid=facts;invalid.gpio_count=33;
+ assert(ccci_service_endpoint_set_rpc(endpoint,&invalid)==-EINVAL&&!endpoint->rpc_provider);
+ assert(!ccci_service_endpoint_set_rpc(endpoint,&facts)&&endpoint->rpc_provider==&facts);
+ assert(!ccci_service_endpoint_reserve(endpoint,41));
+ assert(ccci_service_endpoint_set_rpc(endpoint,NULL)==-EBUSY&&endpoint->rpc_provider==&facts);
+ assert(!ccci_service_endpoint_arm(endpoint,41));
+ assert(ccci_service_endpoint_set_rpc(endpoint,NULL)==-EBUSY&&endpoint->rpc_provider==&facts);
+ struct ccci_rpc_arg args[]={{(const u8 *)"pin",4},{NULL,0}};
+ n=rpc_packet(0x4002,args,2);receive_rpc(n);
+ assert(reply_sends==1&&!ccif_aborts&&!endpoint->pending&&!endpoint->error);
+ assert(!ccci_rpc_decode_request(request,n,&rpc));
+ assert(!ccci_rpc_validate_reply(&rpc,last_reply,last_reply_length));
+ assert(last_reply_length==40&&get_unaligned_le32(last_reply+20)==2);
+ assert(get_unaligned_le32(last_reply+28)==513&&get_unaligned_le32(last_reply+36)==513);
+ assert(endpoint_read(&file,(void *)record,sizeof(record),&offset)==-EAGAIN);
+ /* Same session retains the explicit userspace-owned 0x4010 path. */
+ n=rpc_packet(0x4010,NULL,0);receive_rpc(n);
+ assert(endpoint->pending==1&&reply_sends==1&&!endpoint->error);read_one();
+ assert(get_unaligned_le32(record+48)==0x4010);destroy();
+ puts("PASS: kernel RPC never falls back to userspace; unknown NO_OP, unavailable fault and immutable typed provider TX");
+}
+static void reservation_lifecycle(void){
+ create(false);assert(!ccci_service_endpoint_offline(endpoint));
+ assert(ccci_service_endpoint_reserve(NULL,41)==-EINVAL);
+ assert(ccci_service_endpoint_reserve(endpoint,0)==-EINVAL&&!endpoint->generation);
+ assert(!endpoint_release(NULL,&file)&&endpoint->refs.count==1);
+ assert(ccci_service_endpoint_reserve(endpoint,41)==-EBUSY&&!endpoint->generation);
+ file.private_data=&endpoint->misc;assert(!endpoint_open(NULL,&file));
+ assert(!ccci_service_endpoint_reserve(endpoint,41));
+ assert(endpoint->reserved&&endpoint->generation==41&&!endpoint->armed&&!endpoint->session->armed);
+ assert(!endpoint->session->work.work.pending&&!reply_sends&&!ccif_aborts);
+ assert(ccci_service_endpoint_offline(endpoint)==-EBUSY);
+ assert(ccci_service_endpoint_reserve(endpoint,41)==-EBUSY);
+ assert(ccci_service_endpoint_reserve(endpoint,42)==-EBUSY&&endpoint->generation==41);
+ assert(ccci_service_endpoint_arm(endpoint,42)==-ESTALE&&!endpoint->armed);
+ assert(!ccci_service_endpoint_arm(endpoint,41)&&endpoint->armed&&endpoint->session->armed);
+ destroy();
+ /* A pre-HS1 lease still retains private data until MD is actually stopped. */
+ create(false);assert(!ccci_service_endpoint_reserve(endpoint,41));
+ endpoint->requests[0].packet[0]=0xa5;
+ unsigned wakes=wakeups;struct ccci_service_session *session=endpoint->session;
+ assert(ccci_service_endpoint_stop(endpoint,false)==-EBUSY);
+ assert(endpoint->reserved&&endpoint->generation==41&&!endpoint->armed&&!endpoint->error);
+ assert(endpoint->requests[0].packet[0]==0xa5&&endpoint->session==session);
+ assert(!session->armed&&!session->work.work.pending&&!session->count);
+ assert(!reply_sends&&!ccif_aborts&&wakeups==wakes);
+ assert(!ccci_service_endpoint_stop(endpoint,true));
+ assert(!endpoint->reserved&&!endpoint->armed&&endpoint->error==-ESHUTDOWN);
+ assert(!ccci_service_endpoint_offline(endpoint)&&!endpoint->requests[0].packet[0]);
+ assert(ccci_service_endpoint_arm(endpoint,41)==-ESHUTDOWN);destroy();
+ /* Losing the reserved backend before HS1 aborts CCIF synchronously exactly once. */
+ create(false);assert(!ccci_service_endpoint_reserve(endpoint,41));
+ assert(!endpoint_release(NULL,&file));
+ assert(endpoint->refs.count==1&&!endpoint->connected&&endpoint->reserved);
+ assert(endpoint->error==-EPIPE&&ccif_aborts==1&&!reply_sends);
+ assert(!endpoint->session->armed&&!endpoint->session->work.work.pending);
+ assert(ccci_service_endpoint_offline(endpoint)==-EBUSY);
+ assert(endpoint_open(NULL,&(struct file){.private_data=&endpoint->misc})==-EBUSY);
+ assert(ccci_service_endpoint_abort(endpoint,42,-EIO)==-ESTALE&&ccif_aborts==1);
+ assert(!ccci_service_endpoint_stop(endpoint,true)&&!endpoint->reserved);
+ assert(!ccci_service_endpoint_offline(endpoint));endpoint_remove(endpoint);endpoint=NULL;
+ /* Dispatcher faults latch before session arm, without a second CCIF action. */
+ create(false);assert(!ccci_service_endpoint_reserve(endpoint,41));
+ assert(ccci_service_endpoint_abort(endpoint,40,-EIO)==-ESTALE&&!endpoint->error);
+ assert(ccci_service_endpoint_abort(endpoint,41,-EIO)==-EIO);
+ assert(ccci_service_endpoint_abort(endpoint,41,-ETIMEDOUT)==-EIO);
+ assert(endpoint->error==-EIO&&!endpoint->session->armed&&!endpoint->session->work.work.pending);
+ assert(!reply_sends&&!ccif_aborts&&ccci_service_endpoint_offline(endpoint)==-EBUSY);destroy();
+ /* Removal cannot destroy the session behind an unarmed reservation either. */
+ create(false);assert(!ccci_service_endpoint_reserve(endpoint,41));endpoint_remove(endpoint);
+ assert(endpoint->removed&&endpoint->refs.count==2&&endpoint->reserved&&!endpoint->armed);
+ assert(ccci_service_endpoint_offline(endpoint)==-EBUSY);
+ assert(endpoint_read(&file,(void *)record,sizeof(record),&offset)==-ENODEV);
+ assert(endpoint_poll(&file,NULL)==(EPOLLERR|EPOLLHUP));
+ assert(!ccci_service_endpoint_stop(endpoint,true)&&!endpoint->reserved);
+ assert(!endpoint_release(NULL,&file)&&endpoint->refs.count==1);
+ assert(!ccci_service_session_destroy(endpoint->session));kref_put(&endpoint->refs,endpoint_free);endpoint=NULL;
+ puts("PASS: reservation freezes generation/backend, pre-HS1 disconnect aborts, stop requires MD stopped, active remove retains storage");
+}
+int main(void){kernel_rpc_ownership();reservation_lifecycle();access_and_lifetime();roundtrip_and_validation();rpc_and_failed_enqueue();ordering_faults();active_remove_refusal();return 0;}
 '''
 
 
@@ -254,7 +369,7 @@ def main():
         scope = {}
         exec(textwrap.dedent(section), scope)
         for name, content in scope['files'].items():
-            (inc / name).write_text(content)
+            (inc / name).write_text(content + ('\ntypedef int32_t s32;\n' if name == 'types.h' else ''))
         for name in ('capability.h', 'device.h', 'fs.h', 'kref.h', 'miscdevice.h',
                      'poll.h', 'uaccess.h', 'kconfig.h', 'sysfs.h'):
             (inc / name).write_text('')
@@ -267,7 +382,8 @@ def main():
                         '-fsanitize=address,undefined', '-fno-sanitize-recover=all', '-no-pie',
                         '-I'+str(root), '-I'+str(source),
                         str(source/'ccci-fs-protocol.c'), str(source/'ccci-rpc-protocol.c'),
-                        str(source/'ccci-service-router.c'), str(root/'test.c'),
+                        str(source/'ccci-service-router.c'), str(source/'ccci-rpc-provider.c'),
+                        str(root/'test.c'),
                         '-o', str(root/'test')], check=True)
         subprocess.run([str(root/'test')], check=True)
 

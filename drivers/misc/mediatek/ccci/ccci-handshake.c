@@ -113,7 +113,9 @@ int ccci_handshake_consume(struct ccci_handshake *hs, const struct ccci_ccif_eve
 			return handshake_fail(hs, ret);
 		hs->state = CCCI_HANDSHAKE_WAIT_HS2;
 		hs->deadline_ms = now_ms + CCCI_HANDSHAKE_TIMEOUT_MS;
-		return 0;
+		/* Services may arm only after runtime publication entered WAIT_HS2. */
+		ret = hs->ops->port(hs->context, event);
+		return ret ? handshake_fail(hs, ret) : 0;
 	}
 	if (event->type != CCCI_CCIF_EVENT_RING)
 		return handshake_fail(hs, -EPROTO);
@@ -135,6 +137,13 @@ int ccci_handshake_consume(struct ccci_handshake *hs, const struct ccci_ccif_eve
 	}
 	ret = hs->ops->port(hs->context, event);
 	return ret ? handshake_fail(hs, ret) : 0;
+}
+
+int ccci_handshake_abort(struct ccci_handshake *hs, int error)
+{
+	if (!hs)
+		return -EINVAL;
+	return handshake_fail(hs, error);
 }
 
 void ccci_handshake_stop(struct ccci_handshake *hs)

@@ -28,6 +28,9 @@ struct ccci_ccif_controller {
 	struct ccci_runtime_offer offers[CCCI_RUNTIME_FEATURES];
 	ccci_ccif_consume_fn port;
 	void *context;
+	ccci_ccif_control_fault_fn fault;
+	void *fault_context;
+	bool fault_notified;
 	bool active;
 	bool attempted;
 };
@@ -95,6 +98,15 @@ static const struct ccci_handshake_ops control_ops = {
 	.port = control_port,
 };
 
+static void control_report(struct ccci_ccif_controller *control)
+{
+	if (!control->hs.error || control->fault_notified)
+		return;
+	control->fault_notified = true;
+	if (control->fault)
+		control->fault(control->fault_context, control->hs.error);
+}
+
 static int control_consume(void *context, const struct ccci_ccif_event *event)
 {
 	struct ccci_ccif_controller *control = context;
@@ -106,6 +118,7 @@ static int control_consume(void *context, const struct ccci_ccif_event *event)
 					     ktime_to_ms(ktime_get_boottime()));
 		if (ret)
 			control->active = false;
+		control_report(control);
 	}
 	mutex_unlock(&control->lock);
 	return ret;
@@ -119,16 +132,40 @@ static void control_timeout(struct work_struct *work)
 
 	mutex_lock(&control->lock);
 	if (control->active) {
-		ret = ccci_handshake_tick(&control->hs, ktime_to_ms(ktime_get_boottime()));
+		ret = ccci_ccif_rx_error(control->rx);
+		if (ret)
+			ret = ccci_handshake_abort(&control->hs, ret);
+		else
+			ret = ccci_handshake_tick(&control->hs, ktime_to_ms(ktime_get_boottime()));
 		if (ret)
 			control->active = false;
-		else if (control->hs.state != CCCI_HANDSHAKE_HS2_SEEN)
+		else
+			/* Keep observing transport faults after accepted HS2. */
 			mod_delayed_work(system_dfl_wq, &control->timer, msecs_to_jiffies(1000));
+		control_report(control);
 	}
 	mutex_unlock(&control->lock);
 	/* No waits under the control lock; the owner retains power until RX STOP. */
 	if (ret)
 		ccci_ccif_rx_abort(control->rx, ret);
+}
+
+int ccci_ccif_control_set_fault(struct ccci_ccif_controller *control,
+				ccci_ccif_control_fault_fn fault, void *context)
+{
+	int ret = 0;
+
+	if (!control)
+		return -EINVAL;
+	mutex_lock(&control->lock);
+	if (control->attempted || control->active) {
+		ret = -EBUSY;
+	} else {
+		control->fault = fault;
+		control->fault_context = context;
+	}
+	mutex_unlock(&control->lock);
+	return ret;
 }
 
 int ccci_ccif_control_start(struct ccci_ccif_controller *control,
@@ -166,6 +203,7 @@ int ccci_ccif_control_start(struct ccci_ccif_controller *control,
 		control->hs.error = ret;
 		control->hs.state = CCCI_HANDSHAKE_FAILED;
 		control->active = false;
+		control_report(control);
 		goto out;
 	}
 	mod_delayed_work(system_dfl_wq, &control->timer, msecs_to_jiffies(1000));

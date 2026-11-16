@@ -7,6 +7,7 @@
 #include "ccci-service-session.h"
 
 struct ccci_service_endpoint;
+struct ccci_rpc_provider;
 
 /* Private experimental record, all fields little endian; no native pointers. */
 #define CCCI_SERVICE_RECORD_VERSION 1
@@ -16,6 +17,10 @@ struct ccci_service_endpoint;
 /* Registers a root-only exclusive backend, but never starts MD or a session. */
 struct ccci_service_endpoint *
 ccci_service_endpoint_create(struct device *dev, struct ccci_ccif *ccif);
+/* Immutable provider/table storage must survive stopped cleanup and joins. */
+int ccci_service_endpoint_set_rpc(struct ccci_service_endpoint *endpoint,
+				  const struct ccci_rpc_provider *provider);
+int ccci_service_endpoint_reserve(struct ccci_service_endpoint *endpoint, u64 generation);
 /* Future MD owner only: actual WAIT_HS2, externally serialized lifecycle. */
 int ccci_service_endpoint_arm(struct ccci_service_endpoint *endpoint, u64 generation);
 int ccci_service_endpoint_receive(struct ccci_service_endpoint *endpoint, u64 generation,

@@ -20,6 +20,7 @@
 #include "ccci-ccif.h"
 #include "ccci-ccism-bridge.h"
 #include "ccci-service-endpoint.h"
+#include "ccci-port-dispatch.h"
 #include "ccci-md-power.h"
 #include "ccci-smem.h"
 
@@ -43,6 +44,7 @@ struct ccci_md_platform {
 	struct ccci_ccif *ccif;
 	struct ccci_ccism_bridge *bridge;
 	struct ccci_service_endpoint *services;
+	struct ccci_port_dispatch *dispatch;
 };
 
 /* Independent hardware check also catches a genpd power-off veto/failure. */
@@ -260,7 +262,9 @@ static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 	} else if (sysfs_streq(buf, "takeover")) {
 		ret = ccci_md_power_takeover(&md->power);
 	} else if (sysfs_streq(buf, "off")) {
-		ret = ccci_service_endpoint_offline(md->services);
+		ret = ccci_port_dispatch_offline(md->dispatch);
+		if (!ret)
+			ret = ccci_service_endpoint_offline(md->services);
 		if (!ret)
 			ret = ccci_ccism_bridge_offline(md->bridge);
 		if (!ret && md->ccif && md->power.state == CCCI_MD_POWERED)
@@ -304,7 +308,9 @@ static ssize_t ccif_store(struct device *dev, struct device_attribute *attr,
 	if (md->power.state != CCCI_MD_POWERED || !md->power.clocks || !md->power.domain) {
 		ret = -EHOSTDOWN;
 	} else {
-		ret = ccci_service_endpoint_offline(md->services);
+		ret = ccci_port_dispatch_offline(md->dispatch);
+		if (!ret)
+			ret = ccci_service_endpoint_offline(md->services);
 		if (!ret)
 			ret = ccci_ccism_bridge_offline(md->bridge);
 		if (!ret)
@@ -353,9 +359,21 @@ static ssize_t services_show(struct device *dev, struct device_attribute *attr, 
 }
 static DEVICE_ATTR_RO(services);
 
+static ssize_t dispatch_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	ssize_t ret;
+
+	mutex_lock(&md->lock);
+	ret = ccci_port_dispatch_status(md->dispatch, buf);
+	mutex_unlock(&md->lock);
+	return ret;
+}
+static DEVICE_ATTR_RO(dispatch);
+
 static struct attribute *md_attrs[] = {
 	&dev_attr_md_power.attr, &dev_attr_ccif.attr, &dev_attr_handshake.attr,
-	&dev_attr_ccism.attr, &dev_attr_services.attr, NULL,
+	&dev_attr_ccism.attr, &dev_attr_services.attr, &dev_attr_dispatch.attr, NULL,
 };
 
 static const struct attribute_group md_group = { .attrs = md_attrs };
@@ -482,6 +500,15 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 			return dev_err_probe(dev, ret, "service endpoint unavailable\n");
 		}
 	}
+	if (IS_ENABLED(CONFIG_OP6893_CCCI_DISPATCH)) {
+		md->dispatch = ccci_port_dispatch_create(dev, md->ccif, md->bridge, md->services);
+		if (IS_ERR(md->dispatch)) {
+			ret = PTR_ERR(md->dispatch);
+			dev_pm_domain_detach(md->domain, false);
+			device_unregister(md->lookup);
+			return dev_err_probe(dev, ret, "port dispatcher unavailable\n");
+		}
+	}
 	platform_set_drvdata(pdev, md);
 	ret = devm_device_add_group(dev, &md_group);
 	if (ret) {
@@ -503,7 +530,9 @@ void ccci_md_platform_shutdown(struct platform_device *pdev)
 	if (!md)
 		return;
 	mutex_lock(&md->lock);
-	ret = ccci_service_endpoint_offline(md->services);
+	ret = ccci_port_dispatch_offline(md->dispatch);
+	if (!ret)
+		ret = ccci_service_endpoint_offline(md->services);
 	if (!ret)
 		ret = ccci_ccism_bridge_offline(md->bridge);
 	if (!ret && md->ccif && md->power.state == CCCI_MD_POWERED)

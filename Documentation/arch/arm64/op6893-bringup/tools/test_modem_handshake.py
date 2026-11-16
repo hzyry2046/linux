@@ -94,7 +94,8 @@ static struct ccci_runtime_plan plan;
 static struct ccci_smem_layout smem;
 static u8 blob[2048],upload[172],negotiated[64],query[64];
 static u32 used,rejected;
-static unsigned port_calls;
+static unsigned port_calls,accepted_hs1,accepted_hs2;
+static struct ccci_handshake *port_machine;
 static int port_error;
 static void profile(void){
  memset(offers,0,sizeof(offers));offers[0].supported=true;offers[0].length=16;
@@ -202,12 +203,28 @@ static int publish(void *ctx,const void *rt,u32 n,const void *up){
  assert(get_unaligned_le32((const u8 *)rt+4)==16 && get_unaligned_le32((const u8 *)up+4)==172);
  publishes++;return publish_error;
 }
-static int ports(void *ctx,const struct ccci_ccif_event *e){assert(ctx==&dev && e);port_calls++;return port_error;}
+static int ports(void *ctx,const struct ccci_ccif_event *e){
+ assert(ctx==&dev && e);port_calls++;
+ if(e->type==CCCI_CCIF_EVENT_SRAM){
+  assert(port_machine && e->size==240 && port_machine->hs1_seen);
+  assert(port_machine->state==CCCI_HANDSHAKE_WAIT_HS2 && !port_machine->hs2_seen);
+  assert(port_machine->deadline_ms==port_machine->last_ms+60000);
+  assert(port_machine->used>=512 && (!controller || controller->hs.state!=CCCI_HANDSHAKE_PUBLISH));
+  assert(get_unaligned_le32((const u8 *)e->data+12)==CCCI_CCIF_INIT_CHECK);
+  assert(!memcmp((const u8 *)e->data+20,query,64));accepted_hs1++;
+ }else if(e->type==CCCI_CCIF_EVENT_RING && e->size==16 &&
+          !(get_unaligned_le32((const u8 *)e->data+8)&0xffff) &&
+          !get_unaligned_le32((const u8 *)e->data+4)){
+  assert(port_machine && port_machine->state==CCCI_HANDSHAKE_HS2_SEEN && port_machine->hs2_seen);
+  assert(accepted_hs1==1);accepted_hs2++;
+ }
+ return port_error;
+}
 static const struct ccci_handshake_ops hops={publish,ports};
 static u8 packet[240];
 static struct ccci_ccif_event ev;
 static void state_setup(void){
- geometry();profile();memset(&machine,0,sizeof(machine));publishes=port_calls=0;publish_error=port_error=0;
+ geometry();profile();memset(&machine,0,sizeof(machine));publishes=port_calls=accepted_hs1=accepted_hs2=0;publish_error=port_error=0;port_machine=&machine;
  assert(!ccci_handshake_begin(&machine,&hops,&dev,&plan,offers,100));
  hs1(packet);memcpy(packet+20,query,64);
  ev=(struct ccci_ccif_event){.type=CCCI_CCIF_EVENT_SRAM,.data=packet,.size=240};
@@ -215,25 +232,31 @@ static void state_setup(void){
 static void hs2_event(void){memset(packet,0,16);ev=(struct ccci_ccif_event){.type=CCCI_CCIF_EVENT_RING,.data=packet,.size=16};}
 static void failed(int error){assert(machine.state==CCCI_HANDSHAKE_FAILED && machine.error==error && !machine.hs2_seen);}
 static void state_machine(void){
- state_setup();assert(!ccci_handshake_consume(&machine,&ev,200) && publishes==1 && machine.hs1_seen);
+ state_setup();assert(!ccci_handshake_consume(&machine,&ev,200) && publishes==1 && machine.hs1_seen && port_calls==1 && accepted_hs1==1);
  assert(machine.state==CCCI_HANDSHAKE_WAIT_HS2);hs2_event();
  assert(!ccci_handshake_consume(&machine,&ev,201) && machine.state==CCCI_HANDSHAKE_HS2_SEEN && machine.hs2_seen);
  assert(!ccci_handshake_tick(&machine,1000000));ccci_handshake_stop(&machine);
  assert(machine.state==CCCI_HANDSHAKE_STOPPED && machine.hs1_seen && machine.hs2_seen);
- assert(port_calls==1);
+ assert(port_calls==2 && accepted_hs1==1 && accepted_hs2==1);
  assert(ccci_handshake_consume(&machine,&ev,1000001)==-ESHUTDOWN);
  assert(ccci_handshake_begin(&machine,&hops,&dev,&plan,offers,100)==-EALREADY);
  state_setup();assert(!ccci_handshake_consume(&machine,&ev,200));hs2_event();port_error=-ENOSPC;
- assert(ccci_handshake_consume(&machine,&ev,201)==-ENOSPC && machine.hs2_seen && port_calls==1);
+ assert(ccci_handshake_consume(&machine,&ev,201)==-ENOSPC && machine.hs2_seen && port_calls==2);
  assert(machine.state==CCCI_HANDSHAKE_FAILED && machine.error==-ENOSPC);
- state_setup();hs2_event();assert(ccci_handshake_consume(&machine,&ev,200)==-EPROTO);failed(-EPROTO);
+ state_setup();hs2_event();assert(ccci_handshake_consume(&machine,&ev,200)==-EPROTO && !port_calls);failed(-EPROTO);
  state_setup();ev.type=CCCI_CCIF_EVENT_RING;assert(ccci_handshake_consume(&machine,&ev,200)==-EPROTO);assert(!publishes);
- state_setup();assert(!ccci_handshake_consume(&machine,&ev,200));assert(ccci_handshake_consume(&machine,&ev,201)==-EPROTO);assert(publishes==1);
+ state_setup();assert(!ccci_handshake_consume(&machine,&ev,200));assert(ccci_handshake_consume(&machine,&ev,201)==-EPROTO);assert(publishes==1 && port_calls==1 && accepted_hs1==1);
  state_setup();query[44]=2;memcpy(packet+20,query,64);
  assert(ccci_handshake_consume(&machine,&ev,200)==-EOPNOTSUPP && !publishes && machine.rejected==44);
  state_setup();packet[20+27]=1;assert(ccci_handshake_consume(&machine,&ev,200)==-EOPNOTSUPP && !publishes);
- state_setup();publish_error=-EBUSY;assert(ccci_handshake_consume(&machine,&ev,200)==-EBUSY);failed(-EBUSY);
- assert(ccci_handshake_consume(&machine,&ev,201)==-EBUSY && publishes==1);
+ state_setup();publish_error=-EBUSY;assert(ccci_handshake_consume(&machine,&ev,200)==-EBUSY && !port_calls);failed(-EBUSY);
+ assert(ccci_handshake_consume(&machine,&ev,201)==-EBUSY && publishes==1 && !port_calls);
+ state_setup();port_error=-ENXIO;
+ assert(ccci_handshake_consume(&machine,&ev,200)==-ENXIO && publishes==1 && accepted_hs1==1);
+ failed(-ENXIO);assert(machine.deadline_ms==60200);hs2_event();
+ assert(ccci_handshake_consume(&machine,&ev,201)==-ENXIO && !accepted_hs2 && port_calls==1);
+ state_setup();assert(ccci_handshake_abort(&machine,-EPIPE)==-EPIPE);
+ assert(ccci_handshake_consume(&machine,&ev,200)==-EPIPE && !port_calls && !publishes);
  state_setup();assert(!ccci_handshake_tick(&machine,60099));assert(ccci_handshake_tick(&machine,60100)==-ETIMEDOUT);failed(-ETIMEDOUT);
  state_setup();assert(!ccci_handshake_consume(&machine,&ev,200));assert(ccci_handshake_tick(&machine,60200)==-ETIMEDOUT);failed(-ETIMEDOUT);
  state_setup();assert(ccci_handshake_tick(&machine,99)==-ERANGE);failed(-ERANGE);
@@ -247,12 +270,20 @@ static void state_machine(void){
  assert(!ccci_handshake_begin(&machine,&hops,&dev,&plan,offers,UINT64_MAX-60000));
  assert(ccci_handshake_consume(&machine,&ev,UINT64_MAX-1)==-ERANGE && !publishes);
 }
+static unsigned control_fault_calls;
+static int control_fault_error;
+static void control_fault(void *context,int error){
+ assert(context==&dev && controller->lock.held && error<0);
+ assert(controller->hs.state==CCCI_HANDSHAKE_FAILED && !controller->active);
+ control_fault_calls++;control_fault_error=error;
+}
 static void control_cleanup(void){if(controller && !IS_ERR(controller))ccci_ccif_control_quiesce(controller);controller=NULL;cleanup();}
 static void control_setup(void){
  control_cleanup();setup();geometry();profile();memset(rt_pages,0x5a,sizeof(rt_pages));
  rt_writes=rt_zeros=fences=doorbells=claims=maps=timer_cancels=timer_queues=port_calls=0;
- claim_fail=map_fail=false;now_ms=100;port_error=0;
- controller=ccci_ccif_control_create(&dev,page,rx,&smem);assert(!IS_ERR(controller));
+ claim_fail=map_fail=false;now_ms=100;port_error=0;control_fault_calls=0;control_fault_error=0;accepted_hs1=accepted_hs2=0;
+ controller=ccci_ccif_control_create(&dev,page,rx,&smem);assert(!IS_ERR(controller));port_machine=&controller->hs;
+ assert(!ccci_ccif_control_set_fault(controller,control_fault,&dev));
  assert(claims==1 && maps==1 && !reads && !writes && !rt_zeros && !timer_queues && !rt_writes);
 }
 static void controller_tests(void){
@@ -270,26 +301,50 @@ static void controller_tests(void){
  for(unsigned i=0;i<0x800;i++)assert(rt_pages[i]==0x5a && rt_pages[i+0x1800]==0x5a);
  hs1(page+0x100);memcpy(page+0x100+20,query,64);put_unaligned_le32(BIT(15),page+0x10);
  run_work(&rx->work);assert(controller->hs.state==CCCI_HANDSHAKE_WAIT_HS2 && doorbells==1 && rx->armed);
+ assert(port_calls==1 && accepted_hs1==1 && !accepted_hs2);
  assert(rt_writes==512 && ack_count==1 && sram_reads==60 && !ccci_ccif_control_error(controller));
  for(unsigned i=0x1000;i<0x1800;i++)assert(!rt_pages[i]);/* MD half stayed untouched after initial clear. */
  peer_packet(0,17);put_unaligned_le32(0,banks[0]+32+12);/* CCCI data[1]=message0. */
  now_ms=200;put_unaligned_le32(BIT(0),page+0x10);interrupt0();run_work(&rx->work);
  assert(controller->hs.hs2_seen && controller->hs.state==CCCI_HANDSHAKE_HS2_SEEN && doorbells==1);
- now_ms=1000000;run_work(&controller->timer.work);assert(!controller->timer.work.pending && !ccci_ccif_control_error(controller));
+ now_ms=1000000;run_work(&controller->timer.work);assert(controller->timer.work.pending && !ccci_ccif_control_error(controller));
  char status[4096];assert(ccci_ccif_control_status(controller,status)>0 && strstr(status,"hs2_seen=1"));
+ assert(!control_fault_calls && accepted_hs1==1 && accepted_hs2==1);
+ assert(ccci_ccif_control_set_fault(controller,control_fault,&dev)==-EBUSY);
+ /* Raw RX faults never call the control consumer; the timer must observe them. */
+ ccci_ccif_rx_abort(rx,-EPIPE);assert(!control_fault_calls);
+ run_work(&controller->timer.work);
+ assert(control_fault_calls==1 && control_fault_error==-EPIPE && !controller->active);
+ assert(ccci_ccif_control_error(controller)==-EPIPE && controller->hs.hs2_seen);
  ccci_ccif_control_quiesce(controller);ccci_ccif_rx_stop(rx);assert(!rx->armed && !controller->active && !controller->timer.work.pending);
- assert(controller->hs.state==CCCI_HANDSHAKE_STOPPED && controller->hs.hs2_seen);
- assert(ccci_ccif_control_start(controller,offers,ports,&dev)==-EALREADY && rt_zeros==1);
+ assert(controller->hs.state==CCCI_HANDSHAKE_FAILED && controller->hs.hs2_seen);
+ assert(ccci_ccif_control_start(controller,offers,ports,&dev)==-EIO && rt_zeros==1);
  control_setup();assert(!ccci_ccif_control_start(controller,offers,ports,&dev));run_work(&rx->work);
  now_ms=60100;run_work(&controller->timer.work);
  assert(ccci_ccif_control_error(controller)==-ETIMEDOUT && ccci_ccif_rx_error(rx)==-ETIMEDOUT);
  assert(!rx->armed && !rx->active && depths[0]==1 && depths[1]==1);
+ assert(control_fault_calls==1 && control_fault_error==-ETIMEDOUT);
+ control_timeout(&controller->timer.work);assert(control_fault_calls==1);
  control_setup();assert(!ccci_ccif_control_start(controller,offers,ports,&dev));
  hs1(page+0x100);memcpy(page+0x100+20,query,64);
  put_unaligned_le32(BIT(15),page+0x10);put_unaligned_le32(BIT(15),page+4);
  run_work(&rx->work);
  assert(ccci_ccif_control_error(controller)==-EBUSY && ccci_ccif_rx_error(rx)==-EBUSY);
- assert(!controller->active && !rx->armed && !doorbells && !rt_writes);
+ assert(!controller->active && !rx->armed && !doorbells && !rt_writes && !port_calls);
+ assert(control_fault_calls==1 && control_fault_error==-EBUSY);
+ /* Accepted HS1 callback failure contains RX after publication, with one fault notice. */
+ control_setup();assert(!ccci_ccif_control_start(controller,offers,ports,&dev));
+ port_error=-EHOSTDOWN;hs1(page+0x100);memcpy(page+0x100+20,query,64);
+ put_unaligned_le32(BIT(15),page+0x10);run_work(&rx->work);
+ assert(port_calls==1 && accepted_hs1==1 && !accepted_hs2 && doorbells==1);
+ assert(ccci_ccif_control_error(controller)==-EHOSTDOWN && ccci_ccif_rx_error(rx)==-EHOSTDOWN);
+ assert(control_fault_calls==1 && control_fault_error==-EHOSTDOWN && !controller->active);
+ control_timeout(&controller->timer.work);assert(control_fault_calls==1);
+ /* A receive fault before any control event must also reach the fault subscriber. */
+ control_setup();assert(!ccci_ccif_control_start(controller,offers,ports,&dev));
+ ccci_ccif_rx_abort(rx,-EILSEQ);assert(!control_fault_calls && !port_calls);
+ run_work(&controller->timer.work);
+ assert(control_fault_calls==1 && control_fault_error==-EILSEQ && !port_calls);
  control_setup();start();unsigned before=rt_zeros;
  assert(ccci_ccif_control_start(controller,offers,ports,&dev)==-EALREADY && rt_zeros==before);
  control_setup();offers[0].length=0;
@@ -303,7 +358,7 @@ static void controller_tests(void){
 int main(void){
  baseline_tests();codec();transmit();state_machine();controller_tests();
  puts("PASS: actual 64-slot runtime negotiation/geometry/v2.1 codec, 601 TX failure positions,");
- puts("      handshake ordering/timeout/ports and Linux control consumer with actual RX");
+ puts("      accepted HS1/HS2 callback ordering/failure, timeout and persistent RX fault reporting");
 }
 '''
 

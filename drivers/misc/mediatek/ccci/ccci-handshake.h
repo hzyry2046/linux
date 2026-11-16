@@ -19,7 +19,11 @@ enum ccci_handshake_state {
 
 struct ccci_handshake_ops {
 	int (*publish)(void *context, const void *runtime, u32 used, const void *upload);
-	/* Includes the accepted HS2 once, before subsequent system replies. */
+	/*
+	 * Accepted HS1 once, after publication/WAIT_HS2/deadline update; then
+	 * accepted HS2 once before subsequent system replies. Exact validated
+	 * events are passed through; callback failure contains the handshake.
+	 */
 	int (*port)(void *context, const struct ccci_ccif_event *event);
 };
 
@@ -48,6 +52,7 @@ int ccci_handshake_begin(struct ccci_handshake *hs, const struct ccci_handshake_
 int ccci_handshake_tick(struct ccci_handshake *hs, u64 now_ms);
 int ccci_handshake_consume(struct ccci_handshake *hs, const struct ccci_ccif_event *event,
 			   u64 now_ms);
+int ccci_handshake_abort(struct ccci_handshake *hs, int error);
 void ccci_handshake_stop(struct ccci_handshake *hs);
 
 #endif

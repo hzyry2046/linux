@@ -319,6 +319,11 @@ int ccci_ccif_receive_start(struct ccci_ccif *ccif, ccci_ccif_consume_fn consume
 	return ret;
 }
 
+int ccci_ccif_set_fault(struct ccci_ccif *ccif, ccci_ccif_control_fault_fn fault, void *context)
+{
+	return ccci_ccif_control_set_fault(ccif->control, fault, context);
+}
+
 int ccci_ccif_handshake_start(struct ccci_ccif *ccif, const struct ccci_runtime_offer *offers,
 			      ccci_ccif_consume_fn port, void *context)
 {

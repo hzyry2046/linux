@@ -205,6 +205,8 @@ static void mutex_unlock(struct mutex *m){assert(m->held);m->held=false;}
 struct regmap;
 struct ccci_ccif_controller;
 struct ccci_runtime_offer;
+typedef void (*ccci_ccif_control_fault_fn)(void *context,int error);
+int ccci_ccif_control_set_fault(struct ccci_ccif_controller *c,ccci_ccif_control_fault_fn fn,void *ctx){(void)c;(void)fn;(void)ctx;return -EOPNOTSUPP;}
 static int control_error;
 int ccci_ccif_control_error(struct ccci_ccif_controller *c){(void)c;return control_error;}
 void ccci_ccif_control_quiesce(struct ccci_ccif_controller *c){(void)c;}
