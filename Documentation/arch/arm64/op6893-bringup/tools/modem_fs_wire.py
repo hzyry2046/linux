@@ -1,0 +1,230 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-only
+"""Offline canonical FS request/reply adapter; no device or transport access.
+
+Input is the COMPLETE canonical packet emitted by ccci_fs_assembly_feed(), not
+an individual MORE fragment. Output is a complete canonical reply, not a TX
+fragment; the kernel transport must fragment it and assign HIF sequence/assert.
+Opaque header metadata is preserved here except the TX channel and total size.
+
+Unknown semantics raise UnsupportedOperation rather than a guessed reply. In
+particular recursive Move deletion and successful FindFirst results are not
+guessed. Vendor-uninitialized failure bytes are deliberately zeroed. This
+adapter does not provide request leases, duplicate suppression,
+concurrency, restart recovery, a daemon, or service-readiness certification.
+"""
+
+from dataclasses import dataclass, field
+import struct
+
+from modem_fs_backend import MAX_IO, MAX_PATH, UnsupportedOperation
+
+MESSAGE_MAX = 0x40c8
+ARGS_MAX = 6
+RX_CHANNEL = 14
+TX_CHANNEL = 15
+MORE = 0x80000000
+
+
+class MalformedRequest(ValueError):
+    """Invalid canonical envelope or argument schema; never a vendor errno."""
+
+
+class StaleGeneration(Exception):
+    """Revoked lifecycle; caller must discard the transaction without a reply."""
+
+
+@dataclass(frozen=True)
+class Request:
+    data0: int
+    channel_sequence: int
+    slot: int
+    operation: int
+    args: tuple = field(repr=False)
+
+
+def decode_request(packet):
+    """Validate all argument slices before returning immutable argument bytes."""
+    if not isinstance(packet, bytes) or not 24 <= len(packet) <= MESSAGE_MAX:
+        raise MalformedRequest('invalid canonical packet size')
+    data0, size, channel_sequence, slot, operation, argc = struct.unpack_from(
+        '<6I', packet)
+    if (size != len(packet) or channel_sequence & 0xffff != RX_CHANNEL or
+            data0 & MORE or slot >= 5 or
+            not 0xffff1001 <= operation <= 0xffff1025 or argc > ARGS_MAX):
+        raise MalformedRequest('invalid canonical header')
+    offset = 24
+    args = []
+    for unused in range(argc):
+        if len(packet) - offset < 4:
+            raise MalformedRequest('truncated argument length')
+        length, = struct.unpack_from('<I', packet, offset)
+        offset += 4
+        padded = (length + 3) & ~3
+        if padded > len(packet) - offset:
+            raise MalformedRequest('truncated argument or padding')
+        args.append(packet[offset:offset + length])
+        offset += padded
+    if offset != len(packet):
+        raise MalformedRequest('trailing canonical bytes')
+    return Request(data0, channel_sequence, slot, operation, tuple(args))
+
+
+def _u32(value):
+    if len(value) != 4:
+        raise MalformedRequest('scalar argument must contain one u32')
+    return struct.unpack('<I', value)[0]
+
+
+def _path(value):
+    # Do not normalize, convert, truncate, or log paths at the wire boundary.
+    # Full UTF-16 decoding, terminator and traversal checks belong to backend.
+    if not value or len(value) > MAX_PATH or len(value) % 2:
+        raise MalformedRequest('invalid wide path length')
+    return value
+
+
+def _count(args, count):
+    if len(args) != count:
+        raise MalformedRequest('invalid operation argument count')
+
+
+def _length(value):
+    result = _u32(value)
+    if result > MAX_IO:
+        raise MalformedRequest('operation exceeds bounded I/O size')
+    return result
+
+
+def _operation(request):
+    """Decode a known operation fully, before allowing any backend call."""
+    op = request.operation & 0xffff
+    args = request.args
+    if op == 0x1001:
+        _count(args, 2)
+        return op, (_path(args[0]), _u32(args[1]))
+    if op == 0x1002:
+        _count(args, 3)
+        handle, offset, whence = map(_u32, args)
+        if whence > 2:
+            raise MalformedRequest('invalid seek origin')
+        if offset & 0x80000000:
+            offset -= 1 << 32
+        return op, (handle, offset, whence)
+    if op == 0x1003:
+        _count(args, 2)
+        return op, (_u32(args[0]), _length(args[1]))
+    if op == 0x1004:
+        _count(args, 3)
+        handle, length = _u32(args[0]), _length(args[2])
+        if len(args[1]) != length:
+            raise MalformedRequest('write payload length mismatch')
+        return op, (handle, args[1], length)
+    if op in (0x1005, 0x1009):
+        _count(args, 1)
+        return op, (_u32(args[0]),)
+    if op == 0x1007:
+        _count(args, 1)
+        return op, (_path(args[0]),)
+    if op == 0x100c:
+        _count(args, 3)
+        return op, (_path(args[0]), _path(args[1]), _u32(args[2]))
+    if op == 0x1012:
+        _count(args, 4)
+        if len(args[1]) != 1 or len(args[2]) != 1:
+            raise MalformedRequest('FindFirst attribute/mask must contain one byte')
+        return op, (_path(args[0]), args[1][0], args[2][0], _u32(args[3]))
+    if op == 0x1025:
+        _count(args, 1)
+        return op, (_path(args[0]),)
+    if op == 0x101a:
+        _count(args, 3)
+        query = tuple(map(_u32, args))
+        if query not in ((4, 2, 12), (8, 2, 12)):
+            raise UnsupportedOperation('GetDrive query tuple unresolved')
+        return op, query
+    if op == 0x101c:
+        _count(args, 0)
+        return op, ()
+    if op == 0x1022:
+        _count(args, 2)
+        name = _path(args[0])
+        if len(args[1]) != 40:
+            raise MalformedRequest('CMPT_Read requires ten u32 words')
+        words = struct.unpack('<10I', args[1])
+        if words[0] != 0x1f or words[3] != 0x700:
+            raise UnsupportedOperation('CMPT_Read variant unresolved')
+        if words[6] > 2 or words[8] > MAX_IO:
+            raise MalformedRequest('invalid CMPT_Read seek or read size')
+        return op, (name, args[1])
+    raise UnsupportedOperation('operation reply schema unresolved')
+
+
+def _word(value):
+    if type(value) is not int or not -(1 << 31) <= value <= 0xffffffff:
+        raise ValueError('backend scalar outside wire range')
+    return struct.pack('<I', value & 0xffffffff)
+
+
+def _reply_args(op, result):
+    if not isinstance(result, tuple):
+        raise ValueError('backend response must be a tuple')
+    if op in (0x1001, 0x1002, 0x1005, 0x1007, 0x100c, 0x101a, 0x101c):
+        if len(result) != 1:
+            raise ValueError('invalid backend scalar response')
+        return (_word(result[0]),)
+    if op in (0x1004, 0x1009):
+        if len(result) != 2:
+            raise ValueError('invalid backend pair response')
+        return tuple(map(_word, result))
+    if op == 0x1003:
+        if (len(result) != 3 or not isinstance(result[2], bytes) or
+                result[1] != len(result[2]) or len(result[2]) > MAX_IO):
+            raise ValueError('invalid backend read response')
+        return _word(result[0]), _word(result[1]), result[2]
+    if op == 0x1012:
+        if (len(result) != 3 or type(result[0]) is not int or result[0] >= 0 or
+                result[1] != bytes(52) or result[2] != b''):
+            raise UnsupportedOperation('FindFirst success response unresolved')
+        return _word(result[0]), result[1], result[2]
+    if op == 0x1025:
+        if len(result) != 2 or not isinstance(result[1], bytes) or len(result[1]) != 24:
+            raise ValueError('invalid backend file detail response')
+        return _word(result[0]), result[1]
+    if op == 0x1022:
+        if (len(result) != 4 or not isinstance(result[0], bytes) or len(result[0]) != 8 or
+                not isinstance(result[3], bytes) or result[2] != len(result[3]) or
+                len(result[3]) > MAX_IO):
+            raise ValueError('invalid backend CMPT_Read response')
+        completed, error = struct.unpack('<Ii', result[0])
+        if ((error == 0 and completed != 0x1f) or error > 0 or
+                (error < 0 and completed not in (0, 1, 3, 7, 15))):
+            raise ValueError('invalid backend CMPT_Read stage/error')
+        return result[0], _word(result[1]), _word(result[2]), result[3]
+    raise UnsupportedOperation('operation reply schema unresolved')
+
+
+def respond(backend, generation, packet):
+    """Execute one complete request serially against an already-open work copy.
+
+    The caller owns generation leases, admission, duplicate suppression, and
+    stop synchronization. Lifecycle rejection never fabricates a wire response.
+    """
+    request = decode_request(packet)
+    op, args = _operation(request)
+    if not backend.active or generation != backend.generation:
+        raise StaleGeneration('working-copy generation revoked')
+    result = backend.operate(generation, op, *args)
+    values = _reply_args(op, result)
+    body = bytearray(struct.pack('<II', request.operation, len(values)))
+    for value in values:
+        body.extend(struct.pack('<I', len(value)))
+        body.extend(value)
+        body.extend(b'\0' * (-len(value) % 4))
+    total = 16 + len(body)
+    if total > MESSAGE_MAX:
+        raise ValueError('backend response exceeds canonical packet limit')
+    header = struct.pack('<4I', request.data0, total,
+                         request.channel_sequence & 0xffff0000 | TX_CHANNEL,
+                         request.slot)
+    return header + body

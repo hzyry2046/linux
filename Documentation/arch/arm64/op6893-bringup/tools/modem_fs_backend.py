@@ -6,20 +6,27 @@ Only caller-provisioned private working copies are accepted. Never point this at
 Android mounts or original backups: no import/copy/restore operation is provided.
 The marker is an explicit acknowledgement, not proof of snapshot provenance.
 No operation prints paths, payloads or file contents. Calls must be serialized.
-Move is unsupported (its third argument and copy/replace rules are unknown).
-FindFirst/GetFileDetail can report a missing path, but successful result layouts
+Move implements established regular-file copy flags, never source deletion.
+Its recursive-directory destination deletion remains unsupported.
+FindFirst can report a missing path, but its successful result layout
 and wildcard searching are unsupported. CMPT_Read accepts only all-five-step
-requests with read-only 0x700 flags; only its success result layout is known.
+requests with read-only 0x700 flags. Uninitialized vendor failure outputs are
+zeroed; GetFileDetail returns only the established three timestamp words.
 GetDrive accepts exactly the two observed query tuples, never arbitrary flags.
 All other operation codes, directory opens, OTP/device/ioctl access, restart
 recovery, copying originals and wire dispatch remain outside this prototype.
 An UnsupportedOperation is a local readiness failure, not a vendor response.
+
+Move, detail and CMPT contracts were checked against same-board ccci_mdinit
+SHA256 0740831c74b699ee802a7e7c0ccb25266a29f4105a5dc233203ef9dc2ff71a4e
+(ELF functions 0x11e420, 0x122a98 and 0x1199fc respectively).
 """
 
 import errno
 import os
 import stat
 import struct
+import tempfile
 
 MARKER = '.op6893-fs-working-copy'
 ACKNOWLEDGEMENT = b'PRIVATE DISPOSABLE MODEM FS WORKING COPY\n'
@@ -191,15 +198,110 @@ class WorkingCopy:
         if not isinstance(length, int) or not 0 <= length <= MAX_IO:
             raise ValueError('I/O limit exceeded')
 
-    def _missing_only(self, path):
-        parent, name = self._parent(path)
+    def _move_info(self, path):
         try:
-            if any(char in name for char in '*?['):
-                raise UnsupportedOperation('directory search response unresolved')
-            os.stat(name, dir_fd=parent, follow_symlinks=False)
+            parent, name = self._parent(path)
+        except FileNotFoundError:
+            return None
+        try:
+            try:
+                info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            except FileNotFoundError:
+                return None
+            if stat.S_ISLNK(info.st_mode):
+                raise PermissionError(errno.EACCES, 'symlink rejected')
+            return info
         finally:
             os.close(parent)
-        raise UnsupportedOperation('successful response schema unresolved')
+
+    @staticmethod
+    def _readonly(info):
+        # Exact FS_IsReadOnly mode test, not access(W_OK), including for root.
+        return info is not None and info.st_mode & 0xdb == 0 and info.st_mode & 0x124 != 0
+
+    def _move(self, source, destination, flags):
+        if self._path(source) == self._path(destination):
+            return -2
+        if not isinstance(flags, int) or flags & ~0x10003 or not flags & 3:
+            return -2
+        if flags & 2 and self._readonly(self._move_info(source)):
+            return -45
+        result = -18
+        if flags & 0x10000:
+            info = self._move_info(destination)
+            if self._readonly(info):
+                return -45
+            if info is not None:
+                if stat.S_ISDIR(info.st_mode):
+                    raise UnsupportedOperation('Move recursive XDelete unresolved')
+                if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                    raise PermissionError(errno.EACCES, 'non-private destination')
+                parent, name = self._parent(destination)
+                try:
+                    os.unlink(name, dir_fd=parent)
+                finally:
+                    os.close(parent)
+                result = 0
+        # Vendor bit1 only logs; it never unlinks the source (even on success).
+        if not flags & 1:
+            return result
+        source_fd = destination_fd = None
+        try:
+            parent, name = self._parent(source)
+            try:
+                info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+                if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                    raise PermissionError(errno.EACCES, 'non-private source')
+                source_fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW |
+                                    os.O_NONBLOCK | os.O_CLOEXEC, dir_fd=parent)
+            finally:
+                os.close(parent)
+            self._regular(source_fd)
+            size = os.lseek(source_fd, 0, os.SEEK_END)
+            os.lseek(source_fd, 0, os.SEEK_SET)
+            # Vendor reads the WHOLE source before creat(destination). Stage
+            # anonymously under the private root, using bounded memory. This
+            # preserves destination ordering and does not claim atomic replace.
+            with tempfile.TemporaryFile(dir=f'/proc/self/fd/{self.root}') as staging:
+                remaining = size
+                while remaining:
+                    count = min(remaining, MAX_IO)
+                    data = os.read(source_fd, count)
+                    if len(data) != count or staging.write(data) != count:
+                        return -1
+                    remaining -= count
+                staging.seek(0)
+                parent, name = self._parent(destination)
+                try:
+                    try:
+                        info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                            raise PermissionError(errno.EACCES, 'non-private destination')
+                    destination_fd = os.open(name, os.O_WRONLY | os.O_CREAT |
+                                             os.O_NOFOLLOW | os.O_NONBLOCK |
+                                             os.O_CLOEXEC, 0o777, dir_fd=parent)
+                finally:
+                    os.close(parent)
+                self._regular(destination_fd)
+                os.ftruncate(destination_fd, 0)
+                remaining = size
+                while remaining:
+                    count = min(remaining, MAX_IO)
+                    data = staging.read(count)
+                    if len(data) != count or os.write(destination_fd, data) != count:
+                        return -1
+                    remaining -= count
+            return 0
+        finally:
+            for fd in (source_fd, destination_fd):
+                if fd is not None:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
 
     def _cmpt(self, path, control):
         if not isinstance(control, bytes) or len(control) != 40:
@@ -231,12 +333,11 @@ class WorkingCopy:
         finally:
             if handle is not None and handle > 0:
                 close_error = self._close(handle)
-                if not close_error:
-                    completed |= 16
-                elif not error:
-                    error = close_error
-        if error:
-            raise UnsupportedOperation('CMPT failure response schema unresolved')
+                if not error:
+                    if not close_error:
+                        completed |= 16
+                    else:
+                        error = close_error
         return struct.pack('<Ii', completed, error), size, len(data), data
 
     def operate(self, generation, op, *args):
@@ -305,10 +406,28 @@ class WorkingCopy:
                 return (0,)
             if op == 0x1022:
                 return self._cmpt(*args)
-            if op in (0x1012, 0x1025):
-                self._missing_only(args[0])
+            if op == 0x1025:
+                path, = args
+                parent, name = self._parent(path)
+                try:
+                    info = os.stat(name, dir_fd=parent, follow_symlinks=False)
+                finally:
+                    os.close(parent)
+                if not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
+                    raise PermissionError(errno.EACCES, 'non-private file')
+                times = (info.st_mtime_ns // 1000000000,
+                         info.st_atime_ns // 1000000000,
+                         info.st_ctime_ns // 1000000000)
+                return 0, struct.pack('<3Q', *(value & 0xffffffffffffffff
+                                              for value in times))
+            if op == 0x1012:
+                # Existing-parent matching/success is intentionally unresolved;
+                # ENOENT while opening the search directory is established.
+                parent, unused = self._parent(args[0])
+                os.close(parent)
+                raise UnsupportedOperation('FindFirst matching/result unresolved')
             if op == 0x100c:
-                raise UnsupportedOperation('Move third argument unresolved')
+                return (self._move(*args),)
             raise UnsupportedOperation('operation not implemented')
         except OSError as exc:
             error = fs_error(exc)
@@ -316,6 +435,10 @@ class WorkingCopy:
                 return error, 0, b''
             if op in (0x1004, 0x1009):
                 return error, 0
+            if op == 0x1025:
+                return error, bytes(24)
+            if op == 0x1012:
+                return error, bytes(52), b''
             return (error,)
 
     def shutdown(self):

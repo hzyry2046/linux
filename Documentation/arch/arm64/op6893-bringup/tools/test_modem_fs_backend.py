@@ -128,8 +128,9 @@ class BackendTest(unittest.TestCase):
                                    struct.pack('<10I', *words))[2:],
                          (6, bytes(range(250, 256))))
         self.assertEqual(self.backend.handles, {})
-        with self.assertRaises(UnsupportedOperation):
-            self.call(0x1022, path('Z:/missing'), struct.pack('<10I', *words))
+        self.assertEqual(self.call(0x1022, path('Z:/missing'),
+                                   struct.pack('<10I', *words)),
+                         (struct.pack('<Ii', 0, -9), 0, 0, b''))
         self.assertEqual(self.backend.handles, {})
         words[0] = 0x0f
         with self.assertRaises(UnsupportedOperation):
@@ -141,14 +142,18 @@ class BackendTest(unittest.TestCase):
             self.call(0x1003, handle, MAX_IO + 1)
         with self.assertRaises(ValueError):
             self.call(0x1004, handle, b'x', 2)
-        with self.assertRaises(UnsupportedOperation):
-            self.call(0x100c, path('Z:/sample'), path('Z:/new'), 0)
-        self.assertEqual(self.call(0x1025, path('Z:/missing')), (-9,))
-        self.assertEqual(self.call(0x1012, path('R:/tls/*.*'), 0, 0, 0), (-9,))
+        self.assertEqual(self.call(0x100c, path('Z:/sample'), path('Z:/new'), 0),
+                         (-2,))
+        self.assertEqual(self.call(0x1025, path('Z:/missing')), (-9, bytes(24)))
+        self.assertEqual(self.call(0x1012, path('R:/tls/*.*'), 0, 0, 0),
+                         (-9, bytes(52), b''))
         with self.assertRaises(UnsupportedOperation):
             self.call(0x1012, path('Z:/*.*'), 0, 0, 0)
-        with self.assertRaises(UnsupportedOperation):
-            self.call(0x1025, path('Z:/sample'))
+        info = (self.root / 'Z' / 'sample').stat()
+        self.assertEqual(self.call(0x1025, path('Z:/sample')),
+                         (0, struct.pack('<3Q', info.st_mtime_ns // 1000000000,
+                                         info.st_atime_ns // 1000000000,
+                                         info.st_ctime_ns // 1000000000)))
         self.assertEqual(self.call(0x101a, 4, 2, 12), (ord('Z'),))
         self.assertEqual(self.call(0x101a, 8, 2, 12), (-2,))
         for query in ((0, 2, 12), (4, 3, 12), (4, 2, 0), (4,), ()):
@@ -157,6 +162,70 @@ class BackendTest(unittest.TestCase):
         self.assertEqual(self.call(0x101c), (0,))
         self.assertEqual(fs_error(OSError(errno.EACCES, 'synthetic')), -16)
         self.assertEqual(fs_error(OSError(errno.EMFILE, 'synthetic')), -5)
+
+    def test_move_copies_regular_file_without_deleting_source(self):
+        source, target = path('Z:/sample'), path('Z:/new')
+        for flags in (1, 3, 0x10001, 0x10003):
+            self.assertEqual(self.call(0x100c, source, target, flags), (0,))
+            self.assertEqual((self.root / 'Z' / 'new').read_bytes(), bytes(range(256)))
+            self.assertEqual((self.root / 'Z' / 'sample').read_bytes(), bytes(range(256)))
+        self.assertEqual(self.call(0x100c, source, target, 2), (-18,))
+        self.assertEqual(self.call(0x100c, source, target, 0x10002), (0,))
+        self.assertFalse((self.root / 'Z' / 'new').exists())
+        self.assertEqual(self.call(0x100c, source, target, 0x10002), (-18,))
+        for flags in (0, 4, 0x20001):
+            self.assertEqual(self.call(0x100c, source, target, flags), (-2,))
+        self.assertEqual(self.call(0x100c, source, source, 1), (-2,))
+
+    def test_move_mode_checks_and_private_paths(self):
+        source, target = path('Z:/sample'), path('Z:/new')
+        original = self.root / 'Z' / 'sample'
+        original.chmod(0o444)
+        self.assertEqual(self.call(0x100c, source, target, 3), (-45,))
+        self.assertEqual(self.call(0x100c, source, target, 1), (0,))
+        (self.root / 'Z' / 'new').chmod(0o444)
+        self.assertEqual(self.call(0x100c, source, target, 0x10001), (-45,))
+        (self.root / 'Z' / 'dir').mkdir()
+        with self.assertRaises(UnsupportedOperation):
+            self.call(0x100c, source, path('Z:/dir'), 0x10001)
+        self.assertEqual(self.call(0x100c, source, path('Z:/../outside'), 1), (-16,))
+        (self.root / 'Z' / 'link').symlink_to(self.seed)
+        self.assertEqual(self.call(0x100c, source, path('Z:/link'), 1), (-16,))
+        self.assertEqual(self.seed.read_bytes(), bytes(range(256)))
+
+    def test_move_stages_source_before_destination_truncate(self):
+        target = self.root / 'Z' / 'new'
+        target.write_bytes(b'unchanged')
+        with patch('modem_fs_backend.os.read', return_value=b''):
+            self.assertEqual(self.call(0x100c, path('Z:/sample'), path('Z:/new'), 1), (-1,))
+        self.assertEqual(target.read_bytes(), b'unchanged')
+        with patch('modem_fs_backend.os.write', return_value=0):
+            self.assertEqual(self.call(0x100c, path('Z:/sample'), path('Z:/new'), 1), (-1,))
+        self.assertEqual(target.read_bytes(), b'')
+        self.assertTrue((self.root / 'Z' / 'sample').exists())
+
+    def test_cmpt_failure_stage_masks_and_safe_zero_metadata(self):
+        control = struct.pack('<10I', 0x1f, 0, 0, 0x700, 123, 64, 1, 123, 32, 123)
+        with patch('modem_fs_backend.os.lseek', side_effect=OSError(errno.EIO, 'synthetic')):
+            self.assertEqual(self.call(0x1022, path('Z:/sample'), control),
+                             (struct.pack('<Ii', 3, -18), 256, 0, b''))
+        with patch('modem_fs_backend.os.read', side_effect=OSError(errno.EIO, 'synthetic')):
+            self.assertEqual(self.call(0x1022, path('Z:/sample'), control),
+                             (struct.pack('<Ii', 7, -18), 256, 0, b''))
+        with patch.object(self.backend, '_regular',
+                          side_effect=[(self.root / 'Z' / 'sample').stat(),
+                                       OSError(errno.EIO, 'synthetic')]):
+            self.assertEqual(self.call(0x1022, path('Z:/sample'), control),
+                             (struct.pack('<Ii', 1, -18), 0, 0, b''))
+        self.assertEqual(self.backend.handles, {})
+        real_close = self.backend._close
+        def failing_close(handle):
+            real_close(handle)
+            return -18
+        with patch.object(self.backend, '_close', side_effect=failing_close):
+            result = self.call(0x1022, path('Z:/sample'), control)
+            self.assertEqual(result[:3], (struct.pack('<Ii', 15, -18), 256, 32))
+        self.assertEqual(self.backend.handles, {})
 
     def test_marker_is_mandatory_and_private(self):
         marker = self.root / MARKER
