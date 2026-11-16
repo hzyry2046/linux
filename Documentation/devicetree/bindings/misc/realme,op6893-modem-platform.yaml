@@ -100,6 +100,13 @@ properties:
     $ref: /schemas/types.yaml#/definitions/phandle
     description: Infracfg AO syscon for MD source clocks and protection readback
 
+  mediatek,no-external-32k:
+    type: boolean
+    description: |
+      Board fact that this unit has no external 32 kHz crystal. Set only from a
+      verified live handoff or source path; an absent nvmem cell and absent
+      property mean unknown and must never be treated as "no crystal".
+
   power:
     type: object
     additionalProperties: false

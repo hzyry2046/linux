@@ -51,6 +51,13 @@
 		mediatek,scp = <&ccci_scp>;
 		mediatek,spm = <&scpsys>;
 		mediatek,infracfg = <&ufs_infracfg>;
+		/*
+		 * Saved ACK FDT has no md_ccci_rtc node or "external-32k" cell, and
+		 * the 4.19 ccci_rtc global therefore stays zero, so the vendor path
+		 * advertises RTC_32K_LESS. This is an explicit board fact, not a
+		 * default for any other op6893 unit.
+		 */
+		mediatek,no-external-32k;
 		status = "disabled";
 
 		/* Avoid automatic platform-bus power-on before rail checks. */
