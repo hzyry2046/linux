@@ -168,3 +168,9 @@ WAIT_HS2 等待，最可能停在后续 NVRAM/FS 数据（私有工作副本为�
 
 首次失败路径也已实测：无 runner 时 `prepare` 在 reserve 处 `-ENOTCONN`；
 runner generation 不匹配时 endpoint 以 `-EPIPE` 中止；这些都不放行 CPU。
+
+同一次上机随后执行了健康路径的 `off`：`ccif_stop`（时钟仍开）→ MD1
+MTCMOS OFF 六寄存器读回 → dispatcher/endpoint 停止。结果
+`off_rc=0`、`md_power state=stopped`、`dispatch state=6 (STOPPED)`、
+`services stopped=1 error=0`；SCP 保持 `active=1 ready=1`，没有被误停。
+这验证了停止顺序和硬件停止证据，不需要再为停止单独刷机。

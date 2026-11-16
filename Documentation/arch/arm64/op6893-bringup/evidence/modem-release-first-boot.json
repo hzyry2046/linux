@@ -33,8 +33,14 @@
     "HS2",
     "post-HS2 CCISM",
     "radio READY",
-    "NVRAM data exchange",
-    "healthy stop path"
+    "NVRAM data exchange"
   ],
-  "no_private_data": "runner used an empty marked private copy; no real NVRAM, identities or firmware contents were read"
+  "no_private_data": "runner used an empty marked private copy; no real NVRAM, identities or firmware contents were read",
+  "healthy_stop": {
+    "off_rc": 0,
+    "md_power": "state=stopped step=stopped error=0 clocks=0 domain=0",
+    "dispatch": "state=6 (STOPPED) error=0",
+    "services": "connected=0 stopped=1 error=0",
+    "scp": "active=1 ready=1 generation=1 error=0"
+  }
 }
