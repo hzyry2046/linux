@@ -35,6 +35,12 @@ int ccci_service_endpoint_stop(struct ccci_service_endpoint *endpoint, bool md_s
 #else
 static inline struct ccci_service_endpoint *
 ccci_service_endpoint_create(struct device *dev, struct ccci_ccif *ccif) { return NULL; }
+static inline int ccci_service_endpoint_set_rpc(struct ccci_service_endpoint *endpoint,
+						const struct ccci_rpc_provider *provider)
+{
+	return -EOPNOTSUPP;
+}
+
 static inline int ccci_service_endpoint_offline(struct ccci_service_endpoint *endpoint)
 {
 	return 0;

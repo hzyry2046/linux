@@ -381,7 +381,8 @@ def main(extra_test='', extra_units=()):
         (inc/'limits.h').write_text('#include <stdint.h>\n#define U64_MAX UINT64_MAX\n#define U32_MAX UINT32_MAX\n')
         (inc/'errno.h').write_text('#include <asm-generic/errno.h>\n')
         (inc/'string.h').write_text('#include <string.h>\n')
-        (inc/'kernel.h').write_text('#define ALIGN(n,a) (((n)+(a)-1)&~((a)-1))\n'
+        (inc/'kernel.h').write_text('#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))\n'
+                                  '#define ALIGN(n,a) (((n)+(a)-1)&~((a)-1))\n'
                                   '#define min(a,b) ((a)<(b)?(a):(b))\n')
         (inc/'bitops.h').write_text('#ifndef BIT\n#define BIT(n) (1U<<(n))\n#endif\n')
         for name in ('device.h', 'err.h', 'interrupt.h', 'io.h', 'slab.h', 'spinlock.h',

@@ -5,7 +5,7 @@ op6893-ccci-lk-$(CONFIG_OP6893_CCCI_SMEM) += ccci-smem.o
 op6893-ccci-lk-$(CONFIG_OP6893_CCCI_MD_PLATFORM) += ccci-md-power.o ccci-md-platform.o
 op6893-ccci-lk-$(CONFIG_OP6893_CCCI_CCIF) += ccci-ccif.o ccci-ccif-ring.o ccci-ccif-hw.o \
 	ccci-ccif-protocol.o ccci-ccif-rx.o
-op6893-ccci-lk-$(CONFIG_OP6893_CCCI_HANDSHAKE) += ccci-runtime.o ccci-ccif-tx.o \
+op6893-ccci-lk-$(CONFIG_OP6893_CCCI_HANDSHAKE) += ccci-runtime.o ccci-runtime-profile.o ccci-ccif-tx.o \
 	ccci-handshake.o ccci-ccif-control.o
 obj-$(CONFIG_OP6893_CCCI_RESOURCES) += ccci-resources.o
 obj-$(CONFIG_OP6893_CCCI_SCP_PROTOCOL) += ccci-scp-protocol.o
@@ -25,5 +25,5 @@ obj-$(CONFIG_OP6893_CCCI_SCP_RESET_ASSERT) += ccci-scp-reset.o
 obj-$(CONFIG_OP6893_CCCI_SCP_RUNTIME) += ccci-scp-runtime.o ccci-scp-client.o
 obj-$(CONFIG_OP6893_CCCI_CCISM) += ccci-ccism.o ccci-ccism-session.o ccci-ccism-bridge.o
 op6893-ccci-lk-$(CONFIG_OP6893_CCCI_SERVICES) += ccci-fs-protocol.o ccci-rpc-protocol.o \
-	ccci-service-router.o ccci-service-session.o ccci-service-endpoint.o ccci-rpc-provider.o
+	ccci-service-router.o ccci-service-session.o ccci-service-endpoint.o ccci-rpc-provider.o ccci-rpc-op6893.o
 op6893-ccci-lk-$(CONFIG_OP6893_CCCI_DISPATCH) += ccci-port-dispatch.o

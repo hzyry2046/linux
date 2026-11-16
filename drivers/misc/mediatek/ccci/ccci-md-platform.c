@@ -21,6 +21,7 @@
 #include "ccci-ccism-bridge.h"
 #include "ccci-service-endpoint.h"
 #include "ccci-port-dispatch.h"
+#include "ccci-rpc-op6893.h"
 #include "ccci-md-power.h"
 #include "ccci-smem.h"
 
@@ -498,6 +499,15 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 			dev_pm_domain_detach(md->domain, false);
 			device_unregister(md->lookup);
 			return dev_err_probe(dev, ret, "service endpoint unavailable\n");
+		}
+		if (of_machine_is_compatible("realme,op6893")) {
+			ret = ccci_service_endpoint_set_rpc(md->services,
+							    ccci_rpc_op6893_provider());
+			if (ret) {
+				dev_pm_domain_detach(md->domain, false);
+				device_unregister(md->lookup);
+				return dev_err_probe(dev, ret, "board RPC facts unavailable\n");
+			}
 		}
 	}
 	if (IS_ENABLED(CONFIG_OP6893_CCCI_DISPATCH)) {
