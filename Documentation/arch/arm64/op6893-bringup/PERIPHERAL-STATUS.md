@@ -1,5 +1,12 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16 runtime握手离线接续：普通CCIF owner内新增默认关闭的runtime
+映射、64槽协商、v2.1 SRAM回复/BUSY门铃和有状态HS1/HS2 consumer，含超时、
+端口错误和STOP同步。实际C sanitizer、ARM64启用构建及关闭配置检查通过。
+没有新镜像或刷机、没有MD CPU release caller或真实HS1/HS2，不能计作蜂窝
+支持；下一步CCIF2/CCISM、FS/RPC/NVRAM服务与能力表，再合并通信测试。
+见[实现与验证边界](MODEM-RUNTIME-HANDSHAKE.md)。
+
 2026-11-16 CCIF接收离线接续：同一owner已补IRQ/worker/STOP同步、正常环公平
 扫描、SRAM HS1快照/ACK及控制头解码，实际C sanitizer与ARM64构建通过。
 尚无consumer/start caller，未刷机、未启用真机CCIF IRQ或放行MD；当前

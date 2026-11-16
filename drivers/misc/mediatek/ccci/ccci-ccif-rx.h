@@ -40,6 +40,9 @@ void ccci_ccif_rx_interrupt(struct ccci_ccif_rx *rx, int irq);
 /* Caller serializes lifecycle, holds powered domain/clocks until stop returns. */
 int ccci_ccif_rx_start(struct ccci_ccif_rx *rx, ccci_ccif_consume_fn consume, void *context);
 void ccci_ccif_rx_stop(struct ccci_ccif_rx *rx);
+/* Fault closes admission without waiting; power remains held until owner STOP. */
+void ccci_ccif_rx_abort(struct ccci_ccif_rx *rx, int error);
+bool ccci_ccif_rx_started(struct ccci_ccif_rx *rx);
 int ccci_ccif_rx_error(struct ccci_ccif_rx *rx);
 bool ccci_ccif_rx_armed(struct ccci_ccif_rx *rx);
 

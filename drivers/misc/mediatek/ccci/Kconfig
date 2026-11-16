@@ -46,6 +46,17 @@ config OP6893_CCCI_CCIF
 	  HS1/header decoders. No start caller, MD CPU release, doorbell, runtime
 	  negotiation or FS/NVRAM access is added.
 
+config OP6893_CCCI_HANDSHAKE
+	bool "Build the op6893 CCIF runtime response and control consumer"
+	depends on OP6893_CCCI_CCIF
+	help
+	  Reserve/map the runtime subregion's enclosing pages in the existing
+	  owner. Add bounded 64-slot feature negotiation, the v2.1 SRAM response,
+	  BUSY/doorbell publishing and a timed HS1/HS2 control consumer. No I/O at
+	  probe; no sysfs start or CPU-release caller is installed. A future owner
+	  must provide real capabilities, SCP/CCISM and FS/NVRAM service gates.
+	  No new modem, filesystem or radio readiness is claimed by enabling this.
+
 config OP6893_CCCI_RESOURCES
 	tristate "Check op6893 modem regulator and ordinary CCIF clock references"
 	depends on ARM64_OP6893_BRINGUP && OF && REGULATOR

@@ -9,6 +9,7 @@
 #include <linux/sysfs.h>
 
 #include "ccci-ccif.h"
+#include "ccci-ccif-control.h"
 #include "ccci-ccif-hw.h"
 #include "ccci-ccif-ring.h"
 #include "ccci-ccif-rx.h"
@@ -21,6 +22,7 @@ struct ccci_ccif_bank {
 
 struct ccci_ccif {
 	struct ccci_ccif_rx *rx;
+	struct ccci_ccif_controller *control;
 	struct regmap *infra;
 	void __iomem *ap;
 	void __iomem *md;
@@ -160,7 +162,8 @@ static void ccif_irq_flags_clear(void *context)
 
 static bool ccci_ccif_faulted(struct ccci_ccif *ccif)
 {
-	return ccif->error || ccci_ccif_rx_error(ccif->rx);
+	return ccif->error || ccci_ccif_rx_error(ccif->rx) ||
+	       ccci_ccif_control_error(ccif->control);
 }
 
 static int ccif_fail(struct ccci_ccif *ccif, int ret)
@@ -232,11 +235,30 @@ int ccci_ccif_receive_start(struct ccci_ccif *ccif, ccci_ccif_consume_fn consume
 	return ret;
 }
 
+int ccci_ccif_handshake_start(struct ccci_ccif *ccif, const struct ccci_runtime_offer *offers,
+			      ccci_ccif_consume_fn port, void *context)
+{
+	int ret;
+
+	if (ccci_ccif_faulted(ccif))
+		return -EIO;
+	if (!ccif->prepared)
+		return -EAGAIN;
+	ret = ccif_irqs_masked(ccif);
+	if (ret)
+		return ret;
+	ret = ccci_ccif_control_start(ccif->control, offers, port, context);
+	if (!ret)
+		ccif->step = "handshake-started";
+	return ret;
+}
+
 int ccci_ccif_stop(struct ccci_ccif *ccif)
 {
 	int ret;
 
 	/* Consumer callbacks must never acquire the parent MD owner mutex. */
+	ccci_ccif_control_quiesce(ccif->control);
 	ccci_ccif_rx_stop(ccif->rx);
 	if (ccci_ccif_faulted(ccif))
 		return -EIO;
@@ -263,6 +285,11 @@ ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf)
 			  ccci_ccif_rx_armed(ccif->rx),
 			  ccif->layout.used[0], ccif->layout.used[1],
 			  ccif->layout.debug_md, ccif->layout.debug_size);
+}
+
+ssize_t ccci_ccif_handshake_status(struct ccci_ccif *ccif, char *buf)
+{
+	return ccci_ccif_control_status(ccif->control, buf);
 }
 
 struct ccci_ccif *ccci_ccif_create(struct platform_device *pdev,
@@ -331,6 +358,9 @@ struct ccci_ccif *ccci_ccif_create(struct platform_device *pdev,
 	ccif->rx = ccci_ccif_rx_create(dev, ccif->ap, ccif->ring[CCCI_CCIF_NORMAL], ccif->irq);
 	if (IS_ERR(ccif->rx))
 		return ERR_CAST(ccif->rx);
+	ccif->control = ccci_ccif_control_create(dev, ccif->ap, ccif->rx, smem);
+	if (IS_ERR(ccif->control))
+		return ERR_CAST(ccif->control);
 	/* Clear after devm_free_irq on failure, since actions unwind in reverse. */
 	ret = devm_add_action_or_reset(dev, ccif_irq_flags_clear, ccif);
 	if (ret)

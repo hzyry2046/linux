@@ -3,7 +3,7 @@
 
 2026-11-16，AI 辅助实现。本轮完成 IRQ/worker、正常环分发、SRAM HS1 和
 CCCI 控制头解码的离线接入。实际 C 的 ASan/UBSan、启用 ARM64 构建与
-原有 CCIF/电源/SMEM 回归通过。**尚无启动此接收层的 consumer caller，
+原有 CCIF/电源/SMEM 回归通过。**本节原始阶段尚无启动此接收层的 consumer caller，
 未刷机、未启用真机 CCIF IRQ、未收到真实 HS1/HS2，MD CPU 未放行。**
 设备仍运行 `8ec93b17bbb5`，MD1 已关电；上一轮初始化实测结论见
 [普通 CCIF](MODEM-CCIF.md)。不能把本轮模型收包计入蜂窝支持。
@@ -101,3 +101,9 @@ CCISM 与 SCP真实READY的衔接。控制FSM必须检查来源、顺序、重�
 超时，不能见到一个 message0 就宣布基带READY。FS/RPC/NVRAM工作副本和
 服务门控仍是放行MD的准备项。接好这些后安排合并通信测试，不为尚无对端
 和consumer的空 IRQ 单独刷机。
+
+
+2026-11-16后续：有状态consumer及runtime回复已离线接入，详见
+[运行时握手](MODEM-RUNTIME-HANDSHAKE.md)。新增内部handshake_start API，
+仍没有父owner启动调用者或sysfs start；STOP先关闭控制层并同步timer，再执行
+本节RX同步。旧阶段验证记录保持原义，不新增真机CCIF/HS1/HS2验收。

@@ -265,6 +265,22 @@ void ccci_ccif_rx_stop(struct ccci_ccif_rx *rx)
 	rx->context = NULL;
 }
 
+void ccci_ccif_rx_abort(struct ccci_ccif_rx *rx, int error)
+{
+	ccif_rx_fault(rx, error < 0 ? error : -EPROTO);
+}
+
+bool ccci_ccif_rx_started(struct ccci_ccif_rx *rx)
+{
+	unsigned long flags;
+	bool started;
+
+	spin_lock_irqsave(&rx->gate, flags);
+	started = rx->attempted;
+	spin_unlock_irqrestore(&rx->gate, flags);
+	return started;
+}
+
 int ccci_ccif_rx_error(struct ccci_ccif_rx *rx)
 {
 	unsigned long flags;

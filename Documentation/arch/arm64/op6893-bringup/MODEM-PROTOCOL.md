@@ -22,9 +22,9 @@ BOOT_INFO、exception、CCIF、CCISM、CCISM_EXP 和 NVRAM cache 的消费/断�
 SCP READY 替代资源。
 
 尤其保留 `SMEM_USER_MD_NVRAM_CACHE`（feature 36），不能因为名字是 cache
-就省略。现有 M0 只校验 LK 的粗粒度 SMEM/CCB 布局，没有推导或映射这个
-子区域；缓存 SMEM 总大小的 `0x80000` 差异也没有因此解决。首次启动前要
-完成整个布局计算，而不是新增一块可能与现有 SMEM 重叠的 DT reservation。
+就省略。早期 M0 仅校验粗粒度布局；后续 [SMEM](MODEM-SMEM.md) 已解析该子区、解释
+缓存 `0x80000` 差值并上机核对。布局存在仍不证明 NVRAM/FS 服务实现，
+不能新增重叠 DT reservation 或仅凭地址就宣称支持。
 
 ## 已对照源码的协议细节与报告冲突
 
@@ -73,10 +73,11 @@ V 为 `/data/src/6.6-exp/android_kernel_modules_oneplus_mt6833/kernel/` 下的
 
 ## TODO
 
-- [ ] 解决 SID3 shutdown 和启动电压生命周期，完成 MD 平台资源 consumer。
-- [ ] 实现 SCP RV、mailbox/IPI 与真实 CCISM 流程。
-- [ ] 逐子区核对 LK/V SMEM，包含 NVRAM cache 和 0x80000 差值。
-- [ ] 实现有界 runtime data 编解码，覆盖 reserved、长度、连续 id、版本降级、
-  MUST payload、0xac/0x9c 边界和错误路径，再接 CCIF/FSM。
-- [ ] 对齐 BOOT_INFO 中的通道定义与 MD 内部 HS2 变量，纠正分析中的方向歧义。
-- [ ] 确定 FS 私有工作副本和持久化方式，先构造合成请求测试，再接真实 MD。
+- [x] SID3 shutdown/启动电压生命周期与统一MD平台owner；接管/冷循环已实测。
+- [x] 逐子区解析LK SMEM，包含NVRAM cache与0x80000差值，并已实测。
+- [x] 有界runtime编解码、保留位/连续ID/版本/长度、0xac整包与v2.1结构边界，
+  接入实际CCIF TX和有状态consumer，见[实现](MODEM-RUNTIME-HANDSHAKE.md)。
+- [x] 对照BOOT_INFO控制RX0与HS2，区分AT_CHANNEL_NUM计数；尚需实际MD验证。
+- [ ] 连接已有SCP真实READY/awake与CCIF2/CCISM共享内存/MD通知生命周期。
+- [ ] FS私有工作副本、RPC/端口服务和能力表，先合成请求测试，再合并放行MD。
+- [ ] 真实HS1/HS2、异常/停止验收；当前仅离线consumer，不代表基带可用。

@@ -1,11 +1,12 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 # op6893 基带：内核对比与搭建计划
 
-更新：2026-11-16。SCP 常驻RX/READY1、awake及一次MD-invalid传输已实测，
-见[R5.25](MODEM-SCP-RUNTIME.md)。新增同板LK子区解析及统一平台owner，
-实机只读确认LK留下MD1 ON，增加显式接管断电和一次冷循环；完成离线测试/
-构建，未实际切换MD电源或放行CPU。下一步CCIF/CCISM，
-不为纯计算或资源观测单独刷机。AI辅助源码分析与实现。历史阶段记录保留。
+更新：2026-11-16。SCP常驻/READY1/awake与一次MD-invalid已实测；
+MD继承ON接管、冷上电及普通CCIF prepare/stop/off已在8ec93b17bbb5实测。
+普通CCIF接收、runtime协商/回复与有状态HS1/HS2 consumer已离线实现验证，
+见[R7.3](MODEM-RUNTIME-HANDSHAKE.md)。无MD CPU release caller，未收到
+真实HS1/HS2。下一组CCIF2/CCISM、FS/RPC/NVRAM服务门控与实际能力表，
+随后合并通信测试，不为纯资源或dormant代码单独刷机。AI辅助源码分析与实现。
 SID3 shutdown 对照及启动电压契约见 [供电生命周期](MODEM-RAILS.md)。
 图形接续事项保存在 [GRAPHICS-TODO.md](GRAPHICS-TODO.md)，先推进基带框架。
 
@@ -504,5 +505,16 @@ R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、
 - [x] 同一owner/映射/IRQ接入mask→worker→有限预算环扫描→rearm；队列token覆盖执行期，STOP关闭门后同步IRQ/worker，再允许复位和关电，见[接收层](MODEM-CCIF-RX.md)。
 - [x] 6297 SRAM240B快照/查询校验先于ACK，数据/异常分别应答且bit15只一次；CCB/异常通知、16B小端头与控制消息分类，不以分类冒充HS状态机或READY。
 - [x] 实际C ASan/UBSan覆盖65536通道、ACK后SRAM改写、公平预算、消费者/包/排队故障和迟到IRQ；原有CCIF/电源/SMEM回归、启用ARM64构建及strict checkpatch通过。
-- [ ] 接有状态consumer、runtime feature生成/SRAM上传与BUSY/doorbell；合并CCIF2/CCISM和SCP真实READY，补超时/异常处理。
+- [x] 有状态consumer、runtime编码/SRAM上传与BUSY/doorbell、超时/异常离线接入，见R7.3；CCIF2/CCISM与SCP衔接仍待实现。
 - [ ] FS/RPC/NVRAM工作副本及服务门控完成后，再合并上机放行MD验证HS1/HS2；本轮无start caller、没有刷机或启用真机CCIF IRQ，设备保留8ec93b17bbb5、MD1 OFF。
+
+
+### R7.3 runtime 回复与有状态控制 consumer（2026-11-16）
+
+- [x] 同板A/V核对64槽8B头、version0 schema、payload-free id27、48B id38及v2.1整包0xac，见[runtime握手](MODEM-RUNTIME-HANDSHAKE.md)。
+- [x] 默认关闭选项在同一owner预留runtime页；实际能力输入、两遍协商编码、AP half发布/SRAM读回、BUSY与TCHNUM发送，无probe I/O。
+- [x] HS1/HS2来源/顺序校验、两阶段超时、异常/port错误、RX gate故障和timer/IRQ/worker STOP同步；只读状态，无CPU release或sysfs start。
+- [x] 实际C ASan/UBSan、2049容量/512策略组合/601 TX失败位置、control与实际RX集成，ARM64启用构建及关闭配置检查；本轮完全离线，未新增真机支持验收。
+- [ ] CCIF2/CCISM归唯一桥owner，连接常驻SCP真实状态/共享内存初始化和MD通知生命周期。
+- [ ] FS/RPC/NVRAM私有工作副本、端口收发和服务门控；从已实现服务生成真实能力表，不把有reserved memory等同于支持。
+- [ ] 合并首次MD CPU放行、HS1→runtime回复→HS2及异常/停止实测，再分别推进AT/注册/DPMAIF；不能把HS2_SEEN当radio READY。

@@ -307,8 +307,22 @@ static ssize_t ccif_store(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RW(ccif);
 
+static ssize_t handshake_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	ssize_t ret;
+
+	if (!md->ccif)
+		return -EOPNOTSUPP;
+	mutex_lock(&md->lock);
+	ret = ccci_ccif_handshake_status(md->ccif, buf);
+	mutex_unlock(&md->lock);
+	return ret;
+}
+static DEVICE_ATTR_RO(handshake);
+
 static struct attribute *md_attrs[] = {
-	&dev_attr_md_power.attr, &dev_attr_ccif.attr, NULL,
+	&dev_attr_md_power.attr, &dev_attr_ccif.attr, &dev_attr_handshake.attr, NULL,
 };
 
 static const struct attribute_group md_group = { .attrs = md_attrs };

@@ -5,6 +5,8 @@ op6893-ccci-lk-$(CONFIG_OP6893_CCCI_SMEM) += ccci-smem.o
 op6893-ccci-lk-$(CONFIG_OP6893_CCCI_MD_PLATFORM) += ccci-md-power.o ccci-md-platform.o
 op6893-ccci-lk-$(CONFIG_OP6893_CCCI_CCIF) += ccci-ccif.o ccci-ccif-ring.o ccci-ccif-hw.o \
 	ccci-ccif-protocol.o ccci-ccif-rx.o
+op6893-ccci-lk-$(CONFIG_OP6893_CCCI_HANDSHAKE) += ccci-runtime.o ccci-ccif-tx.o \
+	ccci-handshake.o ccci-ccif-control.o
 obj-$(CONFIG_OP6893_CCCI_RESOURCES) += ccci-resources.o
 obj-$(CONFIG_OP6893_CCCI_SCP_PROTOCOL) += ccci-scp-protocol.o
 obj-$(CONFIG_OP6893_CCCI_SCP_PROTOCOL) += ccci-scp-memory.o
