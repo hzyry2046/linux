@@ -7,8 +7,8 @@
 
 #define RPC_PARAM_ERROR	(-2)
 #define RPC_FUNC_FAIL	(-5)
-#define RPC_EINT_TYPE	(-14)
-#define RPC_EINT_NAME	(-15)
+#define RPC_EINT_TYPE	(-12)
+#define RPC_EINT_NAME	(-11)
 
 bool ccci_rpc_provider_known(u32 operation)
 {

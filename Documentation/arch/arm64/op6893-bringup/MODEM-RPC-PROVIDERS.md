@@ -164,7 +164,11 @@ A `get_eint_attr_DTSVal` at `port_rpc.c:365-396` and helper case
 request needs 3..6 arguments, name at argument 0, attribute type as an exact
 4-byte argument 2. Success gives `(status=0, value)`, both 4 bytes. Invalid
 argument count gives duplicated `-2`; type outside 0..6 gives duplicated
-`-14`; missing name or a negative stored attribute gives duplicated `-15`.
+`-12`; missing name or a negative stored attribute gives duplicated `-11`.
+These follow A `port_rpc.h:221-225` and V `port_rpc.h:242-246`: the enum
+starts at `NULL_POINTER=-13`, then implicitly **increments** to
+`QUERY_TYPE=-12` and `QUERY_STRING=-11`. The source-derived enum regression
+fixture guards against incorrectly decrementing those negative constants.
 
 Attribute indices: number, debounce, polarity, sensitivity, socket type,
 dedicated enable, source pin. Snapshots contain **MD-domain results**.

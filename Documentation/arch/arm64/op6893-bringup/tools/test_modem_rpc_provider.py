@@ -14,6 +14,9 @@ TEST = r'''
 #include <string.h>
 #include <linux/unaligned.h>
 #include "ccci-rpc-provider.h"
+/* A port_rpc.h:221 / V port_rpc.h:242: implicit values INCREASE from -13. */
+enum source_eint_error { SOURCE_EINT_NULL=-13, SOURCE_EINT_TYPE, SOURCE_EINT_NAME };
+_Static_assert(SOURCE_EINT_TYPE==-12&&SOURCE_EINT_NAME==-11,"vendor enum values");
 static u8 packet[2048],reply[2048];
 static struct ccci_rpc_named_fact gp[2]={{{'p','i','n',0},513},{{'a','l','t',0},71}};
 static struct ccci_rpc_named_fact ad[1]={{{'a','d','c',0},9}};
@@ -52,10 +55,10 @@ int main(void){
  args[0]=(struct ccci_rpc_arg){NULL,0};n=make(0x4002,args,2);unchanged(-EPROTO,&facts,n);
  u8 type[4];put_unaligned_le32(0,type);args[0]=(struct ccci_rpc_arg){(const u8 *)"sim",4};
  args[2]=(struct ccci_rpc_arg){type,4};n=make(0x4005,args,3);scalars(&facts,n,0,1,2);
- put_unaligned_le32(5,type);n=make(0x4005,args,3);scalars(&facts,n,-15,-15,2);
- put_unaligned_le32(7,type);n=make(0x4005,args,3);scalars(&facts,n,-14,-14,2);
+ put_unaligned_le32(5,type);n=make(0x4005,args,3);scalars(&facts,n,SOURCE_EINT_NAME,SOURCE_EINT_NAME,2);
+ put_unaligned_le32(7,type);n=make(0x4005,args,3);scalars(&facts,n,SOURCE_EINT_TYPE,SOURCE_EINT_TYPE,2);
  put_unaligned_le32(0,type);args[2].size=3;n=make(0x4005,args,3);unchanged(-EPROTO,&facts,n);
- args[2].size=4;args[0]=(struct ccci_rpc_arg){(const u8 *)"missing",8};n=make(0x4005,args,3);scalars(&facts,n,-15,-15,2);
+ args[2].size=4;args[0]=(struct ccci_rpc_arg){(const u8 *)"missing",8};n=make(0x4005,args,3);scalars(&facts,n,SOURCE_EINT_NAME,SOURCE_EINT_NAME,2);
  n=make(0x4005,args,2);scalars(&facts,n,-2,-2,2);
  u8 query[66]={1,99,'c','o','n','f','i','g',0};args[0]=(struct ccci_rpc_arg){query,66};
  n=make(0x400e,args,1);assert(ccci_rpc_provider_reply(&facts,packet,n,reply,sizeof(reply))==104);
