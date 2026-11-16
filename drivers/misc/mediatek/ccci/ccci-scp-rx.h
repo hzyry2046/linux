@@ -67,8 +67,8 @@ int ccci_scp_rx_init(struct ccci_scp_rx *rx,
 int ccci_scp_rx_step(struct ccci_scp_rx *rx, struct ccci_scp_rx_result *result);
 void ccci_scp_rx_invalidate(struct ccci_scp_rx *rx);
 
-/* Exact READY0 payload only; success is not a generation/READY acceptance. */
-int ccci_scp_decode_ready0(const struct ccci_scp_pin *pin, const void *buffer,
-			   size_t length, u32 expected_tcm_bytes);
+/* Exact READY0/READY1 payload; success is not a generation/READY acceptance. */
+int ccci_scp_decode_ready(const struct ccci_scp_pin *pin, const void *buffer,
+			  size_t length, u32 expected_tcm_bytes);
 
 #endif

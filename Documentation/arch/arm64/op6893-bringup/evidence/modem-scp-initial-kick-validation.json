@@ -1,0 +1,82 @@
+{
+  "date": "2026-11-16",
+  "base_commit": "b705479df18f1f2afc6f6518e44c5108ac68bcb8",
+  "running_image": "248c64a7dd23",
+  "rebooted": false,
+  "flashed": false,
+  "initial_kick": {
+    "duration_ms": 2000,
+    "ap_tcm_dram_writes": 0,
+    "gpr1_gpr2_from_current_reservation": true,
+    "core0_before": "0x0000ff00",
+    "core0_released": "0x0000ff01",
+    "core1_released_sample": "0x0000ff00",
+    "final_both": "0x0000ff00",
+    "pc_changes": 64,
+    "new_pending_mailbox3": "0x00009000",
+    "ready0_observed": false,
+    "ready1_observed": true,
+    "ready1_channel": 22,
+    "ready1_irq": 15,
+    "ready1_offset_words": 30,
+    "ready1_payload_matches_tcm": true,
+    "ready1_tcm_size": 1572864,
+    "ready1_size_checked_after_assert": true,
+    "logger_pending_channel": 21,
+    "mailbox_ack_writes": 0,
+    "linux_irqs_enabled": false,
+    "generation": 0,
+    "md_started": false,
+    "formal_ready_state_established": false,
+    "old_pending_remains": true,
+    "original_gpr1_gpr2_restored": true,
+    "direct_devmem_access_not_in_kernel_counters": true
+  },
+  "conclusion": "SET assertions read active-low bit0=0; previous EIO predicate was inverted. CLR initial kick produced PC changes and fresh READY1 with matching TCM size.",
+  "fixes": [
+    "Active-low SET readback and raw register reporting",
+    "Decode both channel9 READY0 and channel22 READY1"
+  ],
+  "checks": {
+    "reset_owner_asan_ubsan": "pass",
+    "rx_asan_ubsan": "pass",
+    "kernel_strict_checkpatch": "0 errors, 0 warnings, 0 checks",
+    "enabled_arm64_subtree_build": "pass",
+    "enabled_arm64_image": "pass",
+    "standalone_aarch64_static_tool": "pass",
+    "usb_ssh": true,
+    "wifi_ssh": true,
+    "fault_scan_matches": 0,
+    "default_matrix_repeated": false
+  },
+  "built_image": {
+    "id": "41b233803695",
+    "boot_sha256": "68f571f85929bfbb29ece0e5d4f509890ad3a1f426d206c6231724951284d1fc",
+    "flashed": false,
+    "automatic_scp_start_caller": false
+  },
+  "experiment_source": {
+    "executed_snapshot": "/data/src/mainline/mt6893-direct/evidence/scp-reset-access/scp-initial-kick-tested.c",
+    "executed_sha256": "b99f316f857a362bdb31f1534fd96e12fe752d512760eab8817263ed55466fee",
+    "repository_tool_later_extended": true,
+    "extended_tool_reexecuted": false
+  },
+  "evidence_directory": "/data/src/mainline/mt6893-direct/evidence/scp-reset-access",
+  "log_sha256": {
+    "after-usb.log": "9cb07a60c9c217089a9c2426029249a3a4e388ed47af0c1a1d26ea4dc894ffdd",
+    "after-wifi.log": "81f957b56f693ddab33c3441dfe0d34ce2e769a309f47833bba1e8a1068493d6",
+    "build.log": "37d2c9ea64a6825535f0b55b0eb42bbedb260f63c827586ea810beca7dbfc9b4",
+    "checkpatch-kernel.log": "9cdfce75446c911c07fe5a3e744c9e8a81f2ed1de6c15041d7d05fba7ad96332",
+    "clock-read.log": "377879eb476ce1e4db79449f8999a1b06655fdc7fad6e7394e275c925e3c7572",
+    "core-read.log": "57ffdb9bb2410fac01bb88141b2274896dc01f7865fab561be02049200f49fdd",
+    "direct-set.log": "aa3d0775945e65758d404621bf5a23c9b0f758025c33aac28c5f46052fcc26b9",
+    "fixed-build.log": "41862fe29aa5ffef08dcfd0e1f93950c99e2cff89261b4451330de26072a5371",
+    "image-wrapper.log": "3fcd83d190818c16240608784bffabe323210986901a94b32eb6e93d4f1f5fcd",
+    "initial-kick.log": "167baf827e31d51dd8f3dbb2c1ce9251625c585f3ca686769cd825f3349c4d42",
+    "ready1-after-set.log": "46d8231296fcab727135167224760e4f0ba4d6d7b8462c521274b66231890f4c",
+    "test-reset-fixed.log": "d85fb56b5f92f341fd49ed91c851453c32cd54711f55f21f2d5b84d14d591184",
+    "test-rx.log": "46fba66d9f40f32829c1fff944e97b3146a6863aea5635e6565158bb4e76a0a5",
+    "transfer.log": "ddc7e1a434bcdd722b78356d6c63ac530fd637dae344ef722c00d053ebd712f0"
+  },
+  "ai_assistance": "Codex assisted source analysis, implementation, experiment, validation and documentation; no DCO certification."
+}

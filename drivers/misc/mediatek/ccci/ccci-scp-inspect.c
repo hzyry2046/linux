@@ -24,6 +24,7 @@ struct ccci_scp_inspect {
 	struct ccci_scp_span firmware;
 	struct ccci_scp_span share;
 	u64 core_reads;
+	u64 core_writes;
 	u64 header_reads;
 };
 
@@ -48,6 +49,19 @@ static int ccci_scp_inspect_check(struct ccci_scp_inspect *inspect)
 		return ret;
 	return mux & (GENMASK(18, 16) | BIT(23)) ? -EAGAIN : 0;
 }
+
+#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_RESET_ASSERT)
+int ccci_scp_inspect_reset_check(void *context)
+{
+	return ccci_scp_inspect_check(context);
+}
+
+void ccci_scp_inspect_record_reset(struct ccci_scp_inspect *inspect, u32 writes)
+{
+	lockdep_assert_held(inspect->lock);
+	inspect->core_writes += writes;
+}
+#endif
 
 static void ccci_scp_inspect_pair(struct ccci_scp_inspect *inspect,
 				  struct ccci_scp_inspect_sample samples[2])
@@ -125,8 +139,8 @@ ssize_t ccci_scp_inspect_status(struct ccci_scp_inspect *inspect, char *buf)
 	lockdep_assert_held(inspect->lock);
 	/* Counters include failed observations; this attribute performs no MMIO. */
 	return sysfs_emit(buf,
-		"mapped=3 bytes=1581056 nonposted=1 register_reads=%llu register_writes=0 tcm_reads=%llu tcm_writes=0 reset_supported=0 ready_known=0\n",
-		inspect->core_reads, inspect->header_reads);
+		"mapped=3 bytes=1581056 nonposted=1 register_reads=%llu register_writes=%llu tcm_reads=%llu tcm_writes=0 reset_supported=0 ready_known=0\n",
+		inspect->core_reads, inspect->core_writes, inspect->header_reads);
 }
 
 ssize_t ccci_scp_inspect_cores(struct ccci_scp_inspect *inspect, char *buf)

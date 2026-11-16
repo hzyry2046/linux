@@ -123,10 +123,12 @@ fault:
 	return ret;
 }
 
-int ccci_scp_decode_ready0(const struct ccci_scp_pin *pin, const void *buffer,
-			   size_t length, u32 expected_tcm_bytes)
+int ccci_scp_decode_ready(const struct ccci_scp_pin *pin, const void *buffer,
+			  size_t length, u32 expected_tcm_bytes)
 {
-	if (!pin || pin->channel != 9 || pin->words != 1 || pin->response)
+	/* A/V register the same READY handler for channels 9 and 22. */
+	if (!pin || (pin->channel != 9 && pin->channel != 22) ||
+	    pin->words != 1 || pin->response)
 		return -EPROTONOSUPPORT;
 	if (!buffer || length != sizeof(u32))
 		return -EMSGSIZE;

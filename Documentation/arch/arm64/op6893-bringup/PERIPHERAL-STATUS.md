@@ -1,5 +1,19 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16接续：当前248c64a7dd23上已用一次2秒初始释放实验观测到SCP PC
+变化及READY1（channel22、size0x180000），结束重新SET双核。确认SET读回
+bit0=0为assert，上一轮EIO判据写反；源码已修正，运行镜像仍旧版。
+正式接收/READY状态机、logger客户端及基带尚未启用；旧mailbox pending保留。
+见[首次运行证据](MODEM-SCP-INITIAL-KICK.md)，以下初次SET结论为历史判读。
+
+2026-11-16当前设备运行`248c64a7dd23`，本轮实际执行双核SCP SET，但两核
+读回0、返回EIO，复位效果未确认，SCP/基带尚未启动。USB/Wi-Fi SSH正常，
+LVTS五个温度接口可读；已构建并从tmpfs加载匹配的GPU模块，Panfrost probe
+成功。保留近期MFGPLL、GPU OPP/供电耦合和LVTS/cooling更新，本轮未验收
+DVFS或图形压力测试；cache内旧GPU模块仍需后续更新，重启不会保留tmpfs模块。
+详见 [SCP SET实测及接续重点](MODEM-SCP-RESET-ASSERT.md)。以下基线编号及
+各行实验限制按其历史记录理解，不能当作本轮镜像已完成全部重测。
+
 更新基线：attempt106（Wi-Fi、Bluetooth 和 BlueZ 扫描实测可用，见
 [CONNECTIVITY-STATUS](CONNECTIVITY-STATUS.md)）。当前实机镜像是 `24c0e33d5597`，内核
 `7.3.0-op6893-d1-24c0e33d5597+`；外置 Debian 镜像 `debian-1ed1b45c80c2`。

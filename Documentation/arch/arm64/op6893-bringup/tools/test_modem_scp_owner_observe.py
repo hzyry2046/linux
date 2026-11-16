@@ -27,6 +27,7 @@ prefix = r'''
 typedef uint8_t u8;
 typedef uint32_t u32;
 typedef unsigned long long u64;
+#define IS_ENABLED(x) 0
 #define __iomem
 #define U32_MAX UINT32_MAX
 #define U64_MAX UINT64_MAX

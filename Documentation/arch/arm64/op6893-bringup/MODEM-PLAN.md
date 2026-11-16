@@ -1,7 +1,8 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 # op6893 基带：内核对比与搭建计划
 
-更新：2026-11-15。AI 辅助源码分析与实现。M0 的真实 LK metadata 解析已在
+更新：2026-11-16。首次释放实验已观测PC变化和匹配TCM大小的READY1；SET读回
+判据已更正，见[R5.23](MODEM-SCP-INITIAL-KICK.md)。AI 辅助源码分析与实现。M0 的真实 LK metadata 解析已在
 主线实机验收，R1/R2 已实现默认关闭的供电/普通 CCIF 描述和引用检查，R3
 已实现 MD1 电源序列并完成主机验证。尚未启动主线基带，SCP transport 与控制栈待移植。
 已完成 [R5.1 mailbox 布局与协议基础](MODEM-SCP.md) 的主机验证和 ARM64 编译，
@@ -442,3 +443,20 @@ UFS RO/rootfs 回归通过。接续优先审计 READY0 所在 mailbox 的 RX/IRQ
 - [x] cebf84a7d29e实机：未pin两入口EAGAIN且零读；pin后两核受限值稳定0，header68、geometry valid1；USB/Wi-Fi各三轮计数精确，core/TCM最终252/252，所有写入与IRQ/worker事件0，已有功能和boot回读通过。
 - [ ] 下一步建立双核assert-only的停止证据/超时契约和mailbox/GIC/CPU队列旧消息隔离；本轮样本不证明stopped，不加reset写或新generation。
 - [ ] loader/backup来源及一致性仍待证明；无restore、IRQ enable、receive start或SCP/MD启动。
+
+### R5.22 双核强制SET实测（2026-11-16）
+
+- [x] 复核并保留GPU OPP/供电耦合、MFGPLL及LVTS/cooling更新。
+- [x] 默认关闭assert接口：显式pin检查、锁外STOP、双核SET→DSB→读回；一次请求、不自动重试，见 [SET实测](MODEM-SCP-RESET-ASSERT.md)。
+- [x] 实际后端/owner定向sanitizer、启用ARM64构建、strict checkpatch通过；减少无关回归及重复刷机。
+- [x] 248c64a7dd23实际两次SET写；两核bit0仍0、EIO，不能验收reset成功；USB/Wi-Fi正常、IRQ全masked、TCM未写、generation0；匹配GPU模块临时加载成功，LVTS可读。
+- [ ] 优先核对SCP内部时钟、供电/DRAM请求、AP访问权限及SET可读语义；合并相关修正和有效性验证，不拆多个纯观测刷机。
+- [ ] reset有效后整合mailbox旧消息丢弃、generation/READY与恢复/释放；本次结果不足以直接进入restore/release。
+
+### R5.23 初始释放与READY1（2026-11-16）
+
+- [x] 不刷机，用当前主线完成一次2秒GPR1/2→core0 CLR实验；PC变化64次，新mailbox3通知0x9000，channel22 READY1的size=0x180000。结束重新SET双核，见[首次运行](MODEM-SCP-INITIAL-KICK.md)。
+- [x] 实测CLR后bit0=1、SET后bit0=0；修正上一轮反向判据、保留raw读回，补channel9/22共同READY decoder；定向sanitizer/ARM64构建通过。
+- [x] USB/Wi-Fi正常，IRQ仍masked、generation0；旧pending保留，未ACK，未启动MD。没有添加猜测的SMC或内部时钟写入。
+- [ ] 合并一次初始启动owner：STOP/旧通知丢弃、代际、全RX队列与READY0/1、GPR1/2/CLR和最小logger策略；作为一个功能里程碑测试，不拆纯观测刷机。
+- [ ] 正式READY后接AP awake/CCCI，再推进MD；完整restore不作为LK已载入镜像首次释放的前置项目。

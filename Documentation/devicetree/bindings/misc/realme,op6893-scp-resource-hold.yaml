@@ -14,7 +14,7 @@ description: |
   its low-power resource-manager bookkeeping. Explicit queries report only
   SCP membership. A separately requested 26 MHz pin is additive and lasts
   for the boot. The owner does not release inherited SCP resources, change
-  parent clocks, reset SCP or establish READY. An
+  parent clocks or establish READY by default. An
   additional opt-in reserves the complete SCP cfg window in this owner,
   without reading or writing it. No completion operation is exposed.
   An additional IRQ opt-in requests all five dedicated mailbox interrupts
@@ -33,6 +33,10 @@ description: |
   under the same owner lock, with explicit pin and before/after clock/mux
   checks. Only bounded metadata and CPU recovery geometry are reported.
   Probe still performs no register/TCM reads or SMC queries.
+
+  An explicit optional reset experiment stops the receive adapter, then
+  writes SET on both cores and records active-low reset readbacks. It does
+  not release reset, copy firmware or establish message isolation or READY.
 
 properties:
   compatible:

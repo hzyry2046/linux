@@ -118,7 +118,7 @@ config OP6893_CCCI_SCP_RX
 	depends on OP6893_CCCI_SCP_PROTOCOL
 	help
 	  Build an ordered copy/ack/deliver backend over caller-supplied
-	  operations, with sticky failures and exact READY0 payload validation.
+	  operations, with sticky failures and exact READY0/READY1 validation.
 	  A future provider must own clocks, IRQ containment and reset generation.
 	  This registers no device or IRQ, performs no automatic hardware access
 	  and cannot start SCP/MD or establish READY by itself.
@@ -234,3 +234,14 @@ config OP6893_CCCI_SCP_OWNER_OBSERVE
 	  checks under the owner mutex. Report only bounded metadata and CPU
 	  recovery geometry. No register/TCM read or resource query is made at
 	  probe. No reset, copying, IRQ enable, start or READY claim is added.
+
+config OP6893_CCCI_SCP_RESET_ASSERT
+	bool "Allow one explicit vendor-style op6893 SCP dual-core reset assertion"
+	depends on OP6893_CCCI_SCP_OWNER_OBSERVE
+	help
+	  Stop and synchronize the receive adapter, then perform the same-board
+	  non-secure vendor forced-reset sequence: SET bit0 on both cores and
+	  DSB SY, followed by SET readbacks. Requires the explicit 26 MHz pin
+	  and valid TOPCK. One request per boot; no CLR, restore, pending ACK,
+	  IRQ enable or SCP/MD start. SET readback does not prove all DMA or
+	  old messages isolated. Disabled by default, no operation at probe.

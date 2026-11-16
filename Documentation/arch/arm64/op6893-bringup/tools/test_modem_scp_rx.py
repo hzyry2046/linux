@@ -154,17 +154,21 @@ int main(void) {
  assert(ccci_scp_rx_step(&receiver,NULL)==-EINVAL);
  reset(1,0);ready=&layout.rx[4];assert(ready->channel==9);
  u8 payload[6];put_unaligned_le32(0x180000,payload+1);
- assert(!ccci_scp_decode_ready0(ready,payload+1,4,0x180000));
- for(unsigned n=0;n<6;n++)if(n!=4)assert(ccci_scp_decode_ready0(ready,payload+1,n,0x180000)==-EMSGSIZE);
- assert(ccci_scp_decode_ready0(ready,NULL,4,0x180000)==-EMSGSIZE);
- assert(ccci_scp_decode_ready0(ready,payload+1,4,0x170000)==-EPROTO);
- assert(ccci_scp_decode_ready0(ready,payload+1,4,0)==-EINVAL);
- assert(ccci_scp_decode_ready0(NULL,payload+1,4,0x180000)==-EPROTONOSUPPORT);
+ assert(!ccci_scp_decode_ready(ready,payload+1,4,0x180000));
+ for(unsigned n=0;n<6;n++)if(n!=4)assert(ccci_scp_decode_ready(ready,payload+1,n,0x180000)==-EMSGSIZE);
+ assert(ccci_scp_decode_ready(ready,NULL,4,0x180000)==-EMSGSIZE);
+ assert(ccci_scp_decode_ready(ready,payload+1,4,0x170000)==-EPROTO);
+ assert(ccci_scp_decode_ready(ready,payload+1,4,0)==-EINVAL);
+ assert(ccci_scp_decode_ready(NULL,payload+1,4,0x180000)==-EPROTONOSUPPORT);
  struct ccci_scp_pin wrong=*ready;wrong.response=1;
- assert(ccci_scp_decode_ready0(&wrong,payload+1,4,0x180000)==-EPROTONOSUPPORT);
+ assert(ccci_scp_decode_ready(&wrong,payload+1,4,0x180000)==-EPROTONOSUPPORT);
+ /* Real firmware emits READY1; both channel IDs use the same size contract. */
  wrong=*ready;wrong.channel=22;
- assert(ccci_scp_decode_ready0(&wrong,payload+1,4,0x180000)==-EPROTONOSUPPORT);
- puts("PASS: full-board randomized RX, exact copy/post/ack/delivery, overwrite at ack, all operation failures, unknown/TX/unregistered bits, sticky invalidation, bit31/full mailbox, READY0 payload");
+ assert(!ccci_scp_decode_ready(&wrong,payload+1,4,0x180000));
+ assert(ccci_scp_decode_ready(&wrong,payload+1,4,0x170000)==-EPROTO);
+ wrong.channel=21;
+ assert(ccci_scp_decode_ready(&wrong,payload+1,4,0x180000)==-EPROTONOSUPPORT);
+ puts("PASS: full-board randomized RX, exact copy/post/ack/delivery, overwrite at ack, all operation failures, unknown/TX/unregistered bits, sticky invalidation, bit31/full mailbox, READY0/READY1 payload");
 }
 '''.replace('@TX@', ','.join(map(str, tx))).replace('@RX@', ','.join(map(str, rx)))
 code = preamble + '\n'.join(source(n) for n in (

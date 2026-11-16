@@ -19,4 +19,8 @@ ssize_t ccci_scp_inspect_status(struct ccci_scp_inspect *inspect, char *buf);
 ssize_t ccci_scp_inspect_cores(struct ccci_scp_inspect *inspect, char *buf);
 ssize_t ccci_scp_inspect_header(struct ccci_scp_inspect *inspect, char *buf);
 
+/* Same owner lock; no generation/READY requirement for forced assertion. */
+int ccci_scp_inspect_reset_check(void *context);
+void ccci_scp_inspect_record_reset(struct ccci_scp_inspect *inspect, u32 writes);
+
 #endif

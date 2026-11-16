@@ -10,6 +10,7 @@
 #include <linux/sysfs.h>
 
 #include "ccci-scp-inspect.h"
+#include "ccci-scp-reset.h"
 #include "ccci-scp-resource.h"
 #include "ccci-scp-irq.h"
 #include "ccci-scp-mmio.h"
@@ -26,6 +27,10 @@ struct ccci_scp_resource_owner {
 	struct ccci_scp_mmio *mmio;
 	struct ccci_scp_receive *receive;
 	struct ccci_scp_inspect *inspect;
+#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_RESET_ASSERT)
+	struct ccci_scp_reset reset;
+	bool reset_requested;
+#endif
 	/* Zero until a future reset owner establishes actual old-message isolation. */
 	u64 reset_generation;
 };
@@ -303,6 +308,58 @@ static ssize_t header_show(struct device *dev, struct device_attribute *attr, ch
 static DEVICE_ATTR_RO(header);
 #endif
 
+#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_RESET_ASSERT)
+static ssize_t reset_assert_store(struct device *dev, struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	struct ccci_scp_resource_owner *owner = dev_get_drvdata(dev);
+	int ret;
+
+	if (!sysfs_streq(buf, "assert"))
+		return -EINVAL;
+	mutex_lock(&owner->lock);
+	if (owner->reset_requested) {
+		ret = -EALREADY;
+	} else {
+		ret = ccci_scp_inspect_reset_check(owner->inspect);
+		if (!ret)
+			owner->reset_requested = true;
+	}
+	mutex_unlock(&owner->lock);
+	if (ret)
+		return ret;
+	/* STOP waits for IRQ/work which can take owner->lock. Never hold it here. */
+	ccci_scp_receive_stop(owner->receive);
+	mutex_lock(&owner->lock);
+	ret = ccci_scp_reset_assert(&owner->reset, owner->core_tcm,
+				    ccci_scp_inspect_reset_check, owner->inspect);
+	ccci_scp_inspect_record_reset(owner->inspect, owner->reset.writes);
+	owner->reset.error = ret;
+	mutex_unlock(&owner->lock);
+	if (ret)
+		return ret;
+	return count;
+}
+static DEVICE_ATTR_WO(reset_assert);
+
+static ssize_t reset_state_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_scp_resource_owner *owner = dev_get_drvdata(dev);
+	struct ccci_scp_reset *reset = &owner->reset;
+	ssize_t length;
+
+	mutex_lock(&owner->lock);
+	length = sysfs_emit(buf,
+			    "requested=%u attempted=%u writes=%u reads=%u core0_set=%u core1_set=%u core0_raw=0x%08x core1_raw=0x%08x latched=%u error=%d release_supported=0 isolation_known=0 ready_known=0\n",
+			    owner->reset_requested, reset->attempted, reset->writes, reset->reads,
+			    reset->set[0], reset->set[1], reset->raw[0], reset->raw[1],
+			    reset->latched, reset->error);
+	mutex_unlock(&owner->lock);
+	return length;
+}
+static DEVICE_ATTR_RO(reset_state);
+#endif
+
 static struct attribute *ccci_scp_resource_attrs[] = {
 	&dev_attr_state.attr,
 	&dev_attr_pin.attr,
@@ -310,6 +367,10 @@ static struct attribute *ccci_scp_resource_attrs[] = {
 	&dev_attr_irq.attr,
 	&dev_attr_mmio.attr,
 	&dev_attr_core_tcm.attr,
+#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_RESET_ASSERT)
+	&dev_attr_reset_assert.attr,
+	&dev_attr_reset_state.attr,
+#endif
 #if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_OWNER_OBSERVE)
 	&dev_attr_cores.attr,
 	&dev_attr_header.attr,

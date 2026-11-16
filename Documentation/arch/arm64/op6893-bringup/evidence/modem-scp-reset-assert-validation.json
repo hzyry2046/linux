@@ -1,0 +1,58 @@
+{
+  "date": "2026-11-16",
+  "base_commit": "b705479df18f1f2afc6f6518e44c5108ac68bcb8",
+  "image": "248c64a7dd23",
+  "release": "7.3.0-op6893-d1-248c64a7dd23+",
+  "boot_sha256": "156c27830976e3c980e7e63c7765cd8bbe2e9941c4fbdeda7181d87be9f87c40",
+  "ai_assistance": "Implementation, source comparison, testing and documentation assisted by Codex.",
+  "runtime": {
+    "pin_verified": true,
+    "set_writes": 2,
+    "set_reads": 2,
+    "core_set_bit0": [
+      0,
+      0
+    ],
+    "latched": false,
+    "error": -5,
+    "reset_effect_confirmed": false,
+    "tcm_writes": 0,
+    "irq_masked": 5,
+    "irq_events": 0,
+    "generation": 0,
+    "scp_started": false,
+    "modem_started": false,
+    "usb_ssh": true,
+    "wifi_ssh": true,
+    "lvts_temperatures_readable": true,
+    "matching_gpu_modules_loaded_to_tmpfs": true,
+    "cache_modules_updated": false
+  },
+  "checks": {
+    "focused_reset_owner_asan_ubsan": "pass",
+    "enabled_arm64_image": "pass",
+    "modules": "pass",
+    "targeted_strict_checkpatch": "pass",
+    "default_rebuild_this_round": false,
+    "full_regression_matrix_this_round": false
+  },
+  "remaining": [
+    "SET/CLR read semantics and internal SCP access prerequisites",
+    "mailbox old-message discard and generation/READY integration",
+    "restore sources and reset release"
+  ],
+  "logs": {
+    "assert.log": "e03f93a9fac73140d7ed4b02a6cf2c2932aa0b3a08dc2d608780cf3ed5c7cfaa",
+    "before.log": "f174199598f31e62e9f41e754047a03c688b0f91f93ae30f1591b513a28ea3a1",
+    "build.log": "bfe97cf23e13133d674b6150139a045dadc44e7a0c4d8720f9f2f9365d10d846",
+    "checkpatch.log": "62f7f3223a69345cdb1f00676bc45aaec1a012f51e2a448a110957cdc42ffb59",
+    "flash.log": "8f5a88895cd5d2d8c5aadecee05d9a9a8894e86897212cbdd87c7bc9ead04f83",
+    "health-usb.log": "7d2ee3594788a72ff22efbd7b56acf3c3c8bbc5d92545c198e7c2118139e5554",
+    "health-wifi.log": "2644bffdc298cb87ace15d88694d98e80f9a612d786aa686704a966e2d4fb0ef",
+    "modules-build.log": "c98e1c570a8d402f3bf0df78739d014e6287766e663381dee22df432a8539d85",
+    "modules-runtime.log": "562642b7a64c626f7ce1785e738d01dffc695d123499fd27e5c75e9380c1ece0",
+    "reboot.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "test-reset.log": "d85fb56b5f92f341fd49ed91c851453c32cd54711f55f21f2d5b84d14d591184"
+  },
+  "evidence_directory": "/data/src/mainline/mt6893-direct/evidence/scp-reset-assert"
+}
