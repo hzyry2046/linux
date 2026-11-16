@@ -197,9 +197,13 @@ OWNER = r'''
 #include "ccci-ccif-ring.h"
 #include "ccci-ccif-hw.h"
 #define __iomem
+#include "ccci-ccif-rx.h"
 struct regmap;
-typedef int atomic_t;
-static int atomic_read(const atomic_t *v){return *v;}
+static int rx_error;
+static unsigned rx_stops;
+int ccci_ccif_rx_error(struct ccci_ccif_rx *rx){(void)rx;return rx_error;}
+void ccci_ccif_rx_stop(struct ccci_ccif_rx *rx){(void)rx;rx_stops++;}
+int ccci_ccif_rx_start(struct ccci_ccif_rx *rx,ccci_ccif_consume_fn fn,void *ctx){(void)rx;(void)fn;(void)ctx;return 0;}
 #define IRQCHIP_STATE_MASKED 1
 static unsigned calls,fail,mask_fail;
 static bool masked=true;
@@ -217,7 +221,7 @@ int ccci_ccif_hw_reset(const struct ccci_ccif_hw_ops *o,void *c,
 OWNER_MAIN = r'''
 static void setup(struct ccci_ccif *c){
  memset(c,0,sizeof(*c));c->irq[0]=11;c->irq[1]=12;c->step="reserved";
- calls=fail=mask_fail=0;masked=true;
+ calls=fail=mask_fail=rx_stops=0;rx_error=0;masked=true;
 }
 int main(void){
  struct ccci_ccif c;
@@ -240,10 +244,14 @@ int main(void){
  setup(&c);assert(!ccci_ccif_prepare(&c));fail=66;
  assert(ccci_ccif_stop(&c)==-EACCES && c.prepared && calls==66);
  assert(ccci_ccif_stop(&c)==-EIO && calls==66);
- setup(&c);c.unexpected=1;
+ setup(&c);rx_error=-EIO;
  assert(ccci_ccif_prepare(&c)==-EIO && ccci_ccif_stop(&c)==-EIO && !calls);
+ setup(&c);assert(ccci_ccif_receive_start(&c,NULL,NULL)==-EAGAIN);
+ assert(!ccci_ccif_prepare(&c));rx_error=-EPROTO;
+ assert(ccci_ccif_receive_start(&c,NULL,NULL)==-EIO);
+ assert(ccci_ccif_stop(&c)==-EIO && rx_stops==1 && calls==65 && c.prepared);
  puts("PASS: extracted actual CCIF prepare/stop: IRQ mask gates, 65 failure positions,");
- puts("      one-shot preparation, unexpected IRQ containment and stop fault retention");
+ puts("      one-shot preparation, RX fault containment and stop fault retention");
 }
 '''
 

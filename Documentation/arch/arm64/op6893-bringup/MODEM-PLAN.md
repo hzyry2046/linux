@@ -497,3 +497,12 @@ UFS RO/rootfs 回归通过。接续优先审计 READY0 所在 mailbox 的 RX/IRQ
 R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、冷上电和
 32环格式化/校验。SRAM写入完成后因双视图共享footer而误判EIO；共享模型
 复现旧C失败并修正；8ec93b17bbb5完整prepare/stop/off复测通过，未绕过fault重试。
+
+
+### R7.2 普通 CCIF 接收与控制包解码（2026-11-16）
+
+- [x] 同一owner/映射/IRQ接入mask→worker→有限预算环扫描→rearm；队列token覆盖执行期，STOP关闭门后同步IRQ/worker，再允许复位和关电，见[接收层](MODEM-CCIF-RX.md)。
+- [x] 6297 SRAM240B快照/查询校验先于ACK，数据/异常分别应答且bit15只一次；CCB/异常通知、16B小端头与控制消息分类，不以分类冒充HS状态机或READY。
+- [x] 实际C ASan/UBSan覆盖65536通道、ACK后SRAM改写、公平预算、消费者/包/排队故障和迟到IRQ；原有CCIF/电源/SMEM回归、启用ARM64构建及strict checkpatch通过。
+- [ ] 接有状态consumer、runtime feature生成/SRAM上传与BUSY/doorbell；合并CCIF2/CCISM和SCP真实READY，补超时/异常处理。
+- [ ] FS/RPC/NVRAM工作副本及服务门控完成后，再合并上机放行MD验证HS1/HS2；本轮无start caller、没有刷机或启用真机CCIF IRQ，设备保留8ec93b17bbb5、MD1 OFF。

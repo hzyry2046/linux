@@ -12,8 +12,9 @@ MD CPU未放行。仅验收初始化及一次冷电源循环，尚无现场CCIF�
 `modem-platform@10209000` 与 MD1 默认 disabled；probe 不操作 CCIF 寄存器
 或 SMEM，不触发电源切换。LK 布局通过完整 tag/SMEM 校验后，owner 独占
 AP `0x10209000`、MD `0x1020a000` 两个 4K 窗口及 SPI194/195。
-IRQ 注册 `IRQF_NO_AUTOEN`、`IRQ_DISABLE_UNLAZY`，当前没有 enable 接口。
-意外 handler 只锁存故障并屏蔽 IRQ，不在可能关电的域中访问 MMIO。
+IRQ 注册 `IRQF_NO_AUTOEN`、`IRQ_DISABLE_UNLAZY`。接收层已增加内部
+consumer/start API，目前没有caller或sysfs使能入口；handler只排worker，
+不在可能关电的域中访问MMIO。见[接收层离线接续](MODEM-CCIF-RX.md)。
 
 正常与异常环使用 SMEM ID19/20；本机两个子区相邻且共享边界页，因此独占
 申请联合物理范围，仅建一个 WC 映射，避免同页重复映射。所有环 I/O 都检查
@@ -64,8 +65,9 @@ CPU RX/TX 后端实现 `aabbaabb`、有效载荷长度、8B对齐及双字 `ccdd
 时被改写，但生产指针不变；调用者必须处理故障后再决定生命周期。对端指针
 采样后使用读屏障，AP指针发布前使用完整屏障，同时约束WC读取与写入。
 
-当前后端没有现场收发 caller。IRQ/worker、channel 路由、exception FSM、
-CCB/SRAM runtime handshake、doorbell/BUSY/ACK 和 FS/RPC 服务仍待接入。
+当前后端没有现场收发 caller。IRQ/worker、ACK和SRAM HS1/控制头解码
+已离线接入，见[接收层](MODEM-CCIF-RX.md)；channel服务、exception FSM、
+CCB/runtime握手回复、doorbell/BUSY和FS/RPC服务仍待接入。
 不能将纯 CPU 包测试视作硬件握手。IRQ低16位数据与高位异常的 ACK 契约必须
 分别遵循本机 vendor，不能简单合并为一次全位 ACK。
 

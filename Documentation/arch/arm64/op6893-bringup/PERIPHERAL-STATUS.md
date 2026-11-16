@@ -1,5 +1,11 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16 CCIF接收离线接续：同一owner已补IRQ/worker/STOP同步、正常环公平
+扫描、SRAM HS1快照/ACK及控制头解码，实际C sanitizer与ARM64构建通过。
+尚无consumer/start caller，未刷机、未启用真机CCIF IRQ或放行MD；当前
+8ec93b17bbb5的MD1仍为OFF。下一组接runtime回复/有状态控制层与CCISM，
+再做合并通信测试，见[接收层及限制](MODEM-CCIF-RX.md)。
+
 2026-11-16最新CCIF实测：修正版8ec93b17bbb5完成LK布局→继承ON接管关电→
 冷上电→32环/共享SRAM初始化和读回→stop→MD1关电。最终两路GIC IRQ均
 masked/计数0，clocks/domain均0，USB/Wi-Fi、8核、RO存储与boot哈希通过。
@@ -153,7 +159,7 @@ USB/Wi-Fi SSH 和外置 rootfs 正常；MD/SCP 尚未启动。详见 [R3](MODEM-
 | 摄像头 / ISP | 未启用 | 传感器型号、总线、供电、时钟、ISP 管线待调查 |
 | RTC / 持久时间 | 未启用 | RTC_CLASS 关闭；不能用启动日志时间作为准确实时时钟 |
 | SCP | 短时常驻/awake实测 | READY1、持续CPU消费、awake三次配对、一次MD-invalid传输；STOP双核SET/GIC五路屏蔽 | 无APCCCI状态回复；未验证长期运行、core1独立运行或完整恢复 | [常驻接入](MODEM-SCP-RUNTIME.md) |
-| MD平台与普通CCIF初始化 | 部分，实测 | LK接管、一次冷上电/关电、32环格式化和双视图SRAM校验、停止后GIC屏蔽 | 不含IRQ/门铃/现场包、热重启、CCISM或MD CPU启动 | [CCIF](MODEM-CCIF.md) |
+| MD平台与普通CCIF初始化 | 部分，实测 | LK接管、一次冷上电/关电、32环格式化和双视图SRAM校验、停止后GIC屏蔽 | IRQ/worker/HS1解码仅离线验证；无门铃/现场包、热重启、CCISM或MD CPU启动 | [CCIF](MODEM-CCIF.md) |
 | modem / 蜂窝 / GNSS | 未启用 | MD平台和CCIF初始化已实测，SCP初始启动与RX已实测 | 控制FSM、CCISM、服务门控及CPU放行/HS1/HS2待实现 | [计划](MODEM-PLAN.md) |
 | NFC / 指纹 / 振动 / IMU 等传感器 | 未验证、未建立支持 | 需逐项识别本机硬件及资源，不能借用同品牌另一机型结论 |
 | UFS 写入、USB host、运行时自动挂起 | 未验证 | 目前测试策略不覆盖这些行为 |

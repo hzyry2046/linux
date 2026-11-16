@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Ordinary CCIF owner: bounded mappings, dormant IRQs and explicit preparation. */
-#include <linux/atomic.h>
+/* Ordinary CCIF owner: bounded mappings, preparation and explicit receive lifecycle. */
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irq.h>
@@ -12,6 +11,7 @@
 #include "ccci-ccif.h"
 #include "ccci-ccif-hw.h"
 #include "ccci-ccif-ring.h"
+#include "ccci-ccif-rx.h"
 #include "ccci-smem.h"
 
 struct ccci_ccif_bank {
@@ -20,6 +20,7 @@ struct ccci_ccif_bank {
 };
 
 struct ccci_ccif {
+	struct ccci_ccif_rx *rx;
 	struct regmap *infra;
 	void __iomem *ap;
 	void __iomem *md;
@@ -27,7 +28,6 @@ struct ccci_ccif {
 	struct ccci_ccif_layout layout;
 	struct ccci_ccif_ring ring[CCCI_CCIF_BANKS][CCCI_CCIF_QUEUES];
 	int irq[2];
-	atomic_t unexpected;
 	const char *step;
 	int error;
 	bool prepared;
@@ -142,13 +142,11 @@ static const struct ccci_ccif_hw_ops ccif_hw_ops = {
 	.fence = ccif_hw_barrier,
 };
 
-static irqreturn_t ccif_unexpected_irq(int irq, void *context)
+static irqreturn_t ccif_irq(int irq, void *context)
 {
 	struct ccci_ccif *ccif = context;
 
-	/* No MMIO while the domain may be off; IRQs have no arm interface yet. */
-	atomic_set(&ccif->unexpected, 1);
-	disable_irq_nosync(irq);
+	ccci_ccif_rx_interrupt(ccif->rx, irq);
 	return IRQ_HANDLED;
 }
 
@@ -162,7 +160,7 @@ static void ccif_irq_flags_clear(void *context)
 
 static bool ccci_ccif_faulted(struct ccci_ccif *ccif)
 {
-	return ccif->error || atomic_read(&ccif->unexpected);
+	return ccif->error || ccci_ccif_rx_error(ccif->rx);
 }
 
 static int ccif_fail(struct ccci_ccif *ccif, int ret)
@@ -217,10 +215,29 @@ int ccci_ccif_prepare(struct ccci_ccif *ccif)
 	return 0;
 }
 
+int ccci_ccif_receive_start(struct ccci_ccif *ccif, ccci_ccif_consume_fn consume, void *context)
+{
+	int ret;
+
+	if (ccci_ccif_faulted(ccif))
+		return -EIO;
+	if (!ccif->prepared)
+		return -EAGAIN;
+	ret = ccif_irqs_masked(ccif);
+	if (ret)
+		return ret;
+	ret = ccci_ccif_rx_start(ccif->rx, consume, context);
+	if (!ret)
+		ccif->step = "receive-started";
+	return ret;
+}
+
 int ccci_ccif_stop(struct ccci_ccif *ccif)
 {
 	int ret;
 
+	/* Consumer callbacks must never acquire the parent MD owner mutex. */
+	ccci_ccif_rx_stop(ccif->rx);
 	if (ccci_ccif_faulted(ccif))
 		return -EIO;
 	if (!ccif->prepared)
@@ -240,9 +257,10 @@ int ccci_ccif_stop(struct ccci_ccif *ccif)
 ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf)
 {
 	return sysfs_emit(buf,
-			  "step=%s error=%d attempted=%u prepared=%u unexpected=%d irq_armed=0 normal_bytes=%u exception_bytes=%u debug_md=%#x debug_size=%u cpu_release_issued=0\n",
+			  "step=%s error=%d attempted=%u prepared=%u rx_error=%d irq_armed=%u normal_bytes=%u exception_bytes=%u debug_md=%#x debug_size=%u cpu_release_issued=0\n",
 			  ccif->step, ccif->error, ccif->attempted, ccif->prepared,
-			  atomic_read(&ccif->unexpected),
+			  ccci_ccif_rx_error(ccif->rx),
+			  ccci_ccif_rx_armed(ccif->rx),
 			  ccif->layout.used[0], ccif->layout.used[1],
 			  ccif->layout.debug_md, ccif->layout.debug_size);
 }
@@ -264,7 +282,6 @@ struct ccci_ccif *ccci_ccif_create(struct platform_device *pdev,
 		return ERR_PTR(-ENOMEM);
 	ccif->infra = infra;
 	ccif->step = "reserved";
-	atomic_set(&ccif->unexpected, 0);
 	ret = ccci_ccif_plan(smem, &ccif->layout);
 	if (ret)
 		return ERR_PTR(ret);
@@ -290,17 +307,6 @@ struct ccci_ccif *ccci_ccif_create(struct platform_device *pdev,
 		    irqd_to_hwirq(irq_get_irq_data(ccif->irq[i])) != 226 + i)
 			return ERR_PTR(-EINVAL);
 	}
-	/* Clear after devm_free_irq on failure, since actions unwind in reverse. */
-	ret = devm_add_action_or_reset(dev, ccif_irq_flags_clear, ccif);
-	if (ret)
-		return ERR_PTR(ret);
-	for (u32 i = 0; i < 2; i++) {
-		irq_set_status_flags(ccif->irq[i], IRQ_DISABLE_UNLAZY);
-		ret = devm_request_irq(dev, ccif->irq[i], ccif_unexpected_irq, IRQF_NO_AUTOEN,
-				       names[i], ccif);
-		if (ret)
-			return ERR_PTR(ret);
-	}
 	/* These adjacent unaligned subregions share a page: map them together WC. */
 	if (normal->ap + normal->size != exception->ap ||
 	    (u64)normal->size + exception->size > U32_MAX)
@@ -321,6 +327,20 @@ struct ccci_ccif *ccci_ccif_create(struct platform_device *pdev,
 			if (ret)
 				return ERR_PTR(ret);
 		}
+	}
+	ccif->rx = ccci_ccif_rx_create(dev, ccif->ap, ccif->ring[CCCI_CCIF_NORMAL], ccif->irq);
+	if (IS_ERR(ccif->rx))
+		return ERR_CAST(ccif->rx);
+	/* Clear after devm_free_irq on failure, since actions unwind in reverse. */
+	ret = devm_add_action_or_reset(dev, ccif_irq_flags_clear, ccif);
+	if (ret)
+		return ERR_PTR(ret);
+	for (u32 i = 0; i < 2; i++) {
+		irq_set_status_flags(ccif->irq[i], IRQ_DISABLE_UNLAZY);
+		ret = devm_request_irq(dev, ccif->irq[i], ccif_irq, IRQF_NO_AUTOEN,
+				       names[i], ccif);
+		if (ret)
+			return ERR_PTR(ret);
 	}
 	return ccif;
 }

@@ -1,0 +1,70 @@
+{
+  "date": "2026-11-16",
+  "implementation_base": "2e363b2e0fd42ab55af5361a855704fe17eb732f",
+  "ai_assistance": "Codex: same-board source comparison, implementation, tests and documentation; no DCO certification",
+  "feature": "Ordinary CCIF one-shot IRQ/work receiver and 6297 SRAM/CCCI control decoding",
+  "validation": {
+    "actual_protocol_rx_ring_c_asan_ubsan": true,
+    "channel_numbers": 65536,
+    "sram_word_reads_before_ack": 60,
+    "ack_then_peer_overwrite_preserves_cpu_snapshot": true,
+    "separate_ack_masks": [
+      "0x0000ffff",
+      "0x7fff0000"
+    ],
+    "fair_drain_test": {
+      "queues": [
+        0,
+        1,
+        6,
+        8
+      ],
+      "packets_per_queue": 20,
+      "budget": 32
+    },
+    "irq_token_coalescing_and_final_rearm_interleaving": true,
+    "stop_late_irq_mask_depth_and_queue_failure_model": true,
+    "consumer_errors_and_bad_packets_contained": true,
+    "constructor_allocation_failures": 2,
+    "existing_ring_hw_and_owner_regressions": true,
+    "same_board_419_and_working_66_ring_tables": true,
+    "platform_power_and_smem_regressions": true,
+    "ccif_disabled_owner_stub_arm64_build": true,
+    "enabled_config_restored": true,
+    "strict_checkpatch_c_headers": "0 errors, 0 warnings, 0 checks",
+    "enabled_arm64_image_gz_modules_modpost": true,
+    "build_warnings": 0,
+    "exception_notification_precedes_simultaneous_hs1": true,
+    "full_patch_checkpatch": "0 errors, 1 FILE_PATH_CHANGES warning for new files, 0 checks; generic misc maintainers unchanged"
+  },
+  "model_limitations": "Deterministic IRQ/work/MMIO/peer interleavings do not prove Linux SMP, GIC or firmware behavior.",
+  "hardware": {
+    "new_code_tested": false,
+    "boot_image_packed": false,
+    "flashed": false,
+    "access": "read-only Wi-Fi SSH status check",
+    "running_kernel": "7.3.0-op6893-d1-8ec93b17bbb5+",
+    "md1_state": "stopped",
+    "md1_clocks": 0,
+    "md1_domain": 0,
+    "md_cpu_released": false,
+    "ccif_prepared": false,
+    "ccif_irqs_armed": false
+  },
+  "activation": {
+    "default_config_and_dt_unchanged": true,
+    "internal_start_api": true,
+    "consumer_installed": false,
+    "start_caller": false,
+    "sysfs_start": false
+  },
+  "remaining": [
+    "Stateful consumer and HS1/runtime reply/HS2 sequencing",
+    "Runtime feature generation, SRAM upload and BUSY/doorbell TX",
+    "CCIF2/CCISM and real SCP READY integration",
+    "FS/RPC/NVRAM working-copy service gates before MD CPU release",
+    "Combined real IRQ and handshake test"
+  ],
+  "local_evidence_directory": "/data/src/mainline/mt6893-direct/evidence",
+  "local_evidence_prefix": "modem-ccif-rx-"
+}

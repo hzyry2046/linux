@@ -40,9 +40,11 @@ config OP6893_CCCI_CCIF
 	  Reserve AP/MD CCIF windows, two NO_AUTOEN IRQs and the adjacent normal/
 	  exception CCISM banks in the existing owner. An explicit prepare after
 	  controlled MD power-on formats both sets of 16 rings, resets CCIF0 and
-	  initializes/verifies SRAM and debug geometry. All IRQs remain masked;
-	  no MD CPU release, doorbell, live receive or FS/NVRAM access is added.
-	  Includes bounded ring receive/transmit helpers for later HIF consumers.
+	  initializes/verifies SRAM and debug geometry. IRQs stay masked until
+	  a future owner installs a receive consumer and explicitly starts RX.
+	  Includes bounded ring helpers, IRQ/work/STOP synchronization and SRAM
+	  HS1/header decoders. No start caller, MD CPU release, doorbell, runtime
+	  negotiation or FS/NVRAM access is added.
 
 config OP6893_CCCI_RESOURCES
 	tristate "Check op6893 modem regulator and ordinary CCIF clock references"
