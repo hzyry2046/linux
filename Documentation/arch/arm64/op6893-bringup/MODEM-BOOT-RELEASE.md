@@ -136,3 +136,35 @@ runner 用法：
 - 真实用户 property/SAR 策略与私有工作副本内容需操作者准备，内核不猜。
 - SCP/CCISM 真机状态、MD 固件 HS1/HS2、DPMAIF 与 radio 能力全部未验证。
 - 活动 unbind 仍不支持；cache/boot 无回调，devres 清理直接释放。
+
+## 首次上机结果（2026-11-16，镜像 de66138efb8e）
+
+设备从 Android 经 watchdog 重启、拦截 fastboot 后刷入
+`dist/de66138efb8e/boot.img`（SHA256
+`5cf1a29073d07cdab40e94683b8f8f186185ac49eec8271d1db39757231938c8`），
+rootfs 为 `debian-5f8741f4101a`。流程：
+
+1. `pin=26m`、`runtime=start`：SCP `active=1 ready=1 generation=1`，
+   READY1、awake 配对、无错误。
+2. `md_power takeover` → `cold`，`on` → `powered-cpu-not-released`。
+3. runner（generation 4676）连接端点后 `prepare 4676` 成功：
+   cache 首次清零、runtime offers、dispatch reserve 全部通过。
+4. `release`：SMC `(6,0)` 返回 `boot_ret=0`，MD CPU 首次放行。
+5. HS1 到达并被接受（`bytes=584 rejected=64`），runtime 发布后 endpoint arm；
+   MD 随后发出第一个 FS Open（queue 4、80 字节、op 0x1001、argc 2），
+   runner 收到并回包；一次 EX_ACK（0x10000）被接受。
+6. 结束时状态：`md_boot=released`、`dispatch state=3 (WAIT_HS2) error=0`、
+   `handshake state=3 error=0 active=1 hs2_seen=0`、
+   `services connected=1 armed=1 accepting=1 error=0`。
+
+**HS2 尚未到达**，因此没有 CCISM 后置协议、没有 radio READY。MD 在
+WAIT_HS2 等待，最可能停在后续 NVRAM/FS 数据（私有工作副本为空）。
+
+硬件暴露并修正了三处离线模型与真实 wire 的差异：
+
+- FS 请求的 operation 是裸 `0x1001`，不是 reply 形式的 `0xffff1001`；
+- RPC `0x4005` 的 type 参数可长于 4 字节，name 字段可带零填充；
+- CCIF EX_ACK（bit16）是已被 RX scanner ACK 的已知通知，不是未知包。
+
+首次失败路径也已实测：无 runner 时 `prepare` 在 reserve 处 `-ENOTCONN`；
+runner generation 不匹配时 endpoint 以 `-EPIPE` 中止；这些都不放行 CPU。

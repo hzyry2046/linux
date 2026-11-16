@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-16",
+  "image": {
+    "path": "mt6893-direct/dist/de66138efb8e/boot.img",
+    "release": "7.3.0-op6893-d1-de66138efb8e+",
+    "sha256": "5cf1a29073d07cdab40e94683b8f8f186185ac49eec8271d1db39757231938c8"
+  },
+  "rootfs": {
+    "id": "debian-5f8741f4101a",
+    "sha256": "e8887c17ca596999697220c5dce17b37dfd8d0b807d997c3ac1ee894c76587aa",
+    "python3": "3.13.5"
+  },
+  "device": {
+    "serial": "IF7HHUAUVSHIGMJR",
+    "mainline": "7.3.0-op6893-d1-de66138efb8e+"
+  },
+  "sequence": [
+    "scp pin=26m runtime=start -> active=1 ready=1 generation=1 error=0",
+    "md_power takeover -> cold; on -> powered-cpu-not-released",
+    "runner generation 4676 connected; md_boot prepare 4676 -> prepared",
+    "md_boot release -> SMC(6,0) boot_ret=0; released=1",
+    "HS1 accepted bytes=584 rejected=64; runtime published; endpoint armed",
+    "FS Open queue=4 length=80 op=0x1001 argc=2 accepted and served by runner",
+    "EX_ACK notification 0x10000 accepted",
+    "final dispatch state=3 error=0, handshake state=3 error=0 hs2_seen=0, services connected=1 accepting=1"
+  ],
+  "observed_failures_fixed": [
+    "FS request operation is bare 0x1001, not 0xffff1001",
+    "RPC 0x4005 type argument may exceed 4 bytes and name may be zero padded",
+    "CCIF EX_ACK bit16 is a known scanner-acknowledged notification"
+  ],
+  "not_reached": [
+    "HS2",
+    "post-HS2 CCISM",
+    "radio READY",
+    "NVRAM data exchange",
+    "healthy stop path"
+  ],
+  "no_private_data": "runner used an empty marked private copy; no real NVRAM, identities or firmware contents were read"
+}
