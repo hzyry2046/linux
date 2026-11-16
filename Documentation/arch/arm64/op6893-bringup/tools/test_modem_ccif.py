@@ -198,6 +198,10 @@ OWNER = r'''
 #include "ccci-ccif-hw.h"
 #define __iomem
 #include "ccci-ccif-rx.h"
+struct mutex { bool held; };
+static void mutex_lock(struct mutex *m){assert(!m->held);m->held=true;}
+static void mutex_unlock(struct mutex *m){assert(m->held);m->held=false;}
+#define READ_ONCE(x) (x)
 struct regmap;
 struct ccci_ccif_controller;
 struct ccci_runtime_offer;
@@ -307,7 +311,9 @@ def main():
                                 owner_code.index('static int ccif_bank_read(')]
         lifecycle = owner_code[owner_code.index('static bool ccci_ccif_faulted('):
                                owner_code.index('ssize_t ccci_ccif_status(')]
-        (root/'owner.c').write_text(OWNER+structures+lifecycle+OWNER_MAIN)
+        gate = owner_code[owner_code.index('static void ccif_tx_gate('):
+                          owner_code.index('void ccci_ccif_abort(')]
+        (root/'owner.c').write_text(OWNER+structures+gate+lifecycle+OWNER_MAIN)
         subprocess.run(['cc', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
                         '-Wno-misleading-indentation', '-fsanitize=address,undefined',
                         '-fno-sanitize-recover=all', '-no-pie', '-I'+str(root),

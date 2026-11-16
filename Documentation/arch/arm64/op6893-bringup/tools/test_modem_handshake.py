@@ -220,8 +220,12 @@ static void state_machine(void){
  assert(!ccci_handshake_consume(&machine,&ev,201) && machine.state==CCCI_HANDSHAKE_HS2_SEEN && machine.hs2_seen);
  assert(!ccci_handshake_tick(&machine,1000000));ccci_handshake_stop(&machine);
  assert(machine.state==CCCI_HANDSHAKE_STOPPED && machine.hs1_seen && machine.hs2_seen);
+ assert(port_calls==1);
  assert(ccci_handshake_consume(&machine,&ev,1000001)==-ESHUTDOWN);
  assert(ccci_handshake_begin(&machine,&hops,&dev,&plan,offers,100)==-EALREADY);
+ state_setup();assert(!ccci_handshake_consume(&machine,&ev,200));hs2_event();port_error=-ENOSPC;
+ assert(ccci_handshake_consume(&machine,&ev,201)==-ENOSPC && machine.hs2_seen && port_calls==1);
+ assert(machine.state==CCCI_HANDSHAKE_FAILED && machine.error==-ENOSPC);
  state_setup();hs2_event();assert(ccci_handshake_consume(&machine,&ev,200)==-EPROTO);failed(-EPROTO);
  state_setup();ev.type=CCCI_CCIF_EVENT_RING;assert(ccci_handshake_consume(&machine,&ev,200)==-EPROTO);assert(!publishes);
  state_setup();assert(!ccci_handshake_consume(&machine,&ev,200));assert(ccci_handshake_consume(&machine,&ev,201)==-EPROTO);assert(publishes==1);

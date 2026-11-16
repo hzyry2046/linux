@@ -530,3 +530,15 @@ R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、
 - [ ] 唯一CCIF2寄存器/时钟owner、SMC13与ID16精确WC映射；正常system q0发送/序号/门铃及接收路由。
 - [ ] 将SCP标量通知接有界consumer队列、worker/timer和此core；关闭顺序覆盖MD、普通CCIF和SCP fault/STOP，禁止跨owner回调重入。
 - [ ] FS/RPC/NVRAM私有工作副本和能力表就绪后，合并首次MD CPU释放与HS1/HS2、后置CCISM、异常/停止实测。HS2或CCISM完成均不代表radio READY。
+
+
+### R7.5 CCIF2桥、system TX与异步CCISM session（2026-11-16）
+
+- [x] 唯一bridge预留两CCIF2窗、页对齐ID16 WC与SCP phandle；构造无I/O/lease。父prepare/off/shutdown先检查offline，禁止绕过活跃会话。
+- [x] 核对两代dummy clock语义，新增继承1:1 alias；未实现或声称真实CCIF2 gate控制。后端接SMC13、精确clear及双ACK/引用释放。
+- [x] 普通system q0 TX的sequence/assert、ring publication/doorbell、独立TX/STOP gate；controller验证HS2后才排bridge事件。
+- [x] 32槽标量/header队列、独立worker/timer、lease-arm竞态、溢出/超时/故障收发containment、SCP STOP等待和资源保留；重复STOP保留已排队回复。
+- [x] 实际C ASan/UBSan（含sender/STOP pthread竞争）、完整ARM64启用/恢复配置构建与binding检查；见[CCISM](MODEM-CCISM.md)。没有上机或新增基带支持验收。
+- [ ] 接续优先：FS/RPC/NVRAM私有工作副本协议、端口dispatcher与真实能力表。先核对已到的userspace/modem分析，不访问或导出真实NVRAM内容。
+- [ ] 实现唯一上层MD启动/停止owner：持parent锁调用bridge arm，路由accepted HS2/system回复；补MD CPU/DMA停止证明后才可放行CPU，禁止将RX关闭/FAILED当停止。
+- [ ] 合并上机验证首次MD释放、HS1/runtime/HS2、后置CCISM、异常与停止；随后分别推进AT/注册与数据面。当前无arm/start caller。

@@ -1,11 +1,14 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 # CCISM 后置握手与 SCP 客户端
 
-2026-11-16，AI 辅助实现。本轮完成默认关闭的 CCISM 协议状态机，以及现有
-常驻 SCP 的真实 APCCCI 客户端接口。实际 C sanitizer 和 ARM64 构建验证见
-[evidence/modem-ccism-validation.json](evidence/modem-ccism-validation.json)。
-**未连接最终 MD owner 启动路径，未新增 CCIF2 映射/时钟 owner、系统端口 TX
-或 CCISM 内存映射，也没有上机、刷写、放行 MD CPU 或真实 CCISM 验收。**
+2026-11-16，AI 辅助实现。默认关闭的 CCISM core 已接入唯一 CCIF2 桥、
+普通 system q0 TX，以及独立有界 session worker/timer。MD platform 在启用
+`CONFIG_OP6893_CCCI_CCISM` 后构造 dormant bridge，预留资源并提供只读状态。
+**仍无 arm/start 调用者、基带 CPU 释放入口或 FS/RPC/NVRAM 服务。本轮未操作
+设备，未新增真实 CCISM、HS1/HS2 或蜂窝支持验收。**
+
+本轮验证见 [bridge evidence](evidence/modem-ccism-bridge-validation.json)，
+前一轮 core/client 验证见 [core evidence](evidence/modem-ccism-validation.json)。
 
 ## 修正启动顺序
 
@@ -46,8 +49,8 @@ ID16须在NC bank内、至少32KiB、可映射且AP/MD转换匹配；AP地址/�
 - 只在有效ACK后清整个plan范围，再发SHM_INIT；清零失败不通知SCP。
 - RBREADY仅在WAIT_RBREADY接受，必须来自当前generation；SCP重启BOOTING、
   未请求的STOP、重复RBREADY或MD DONE顺序错误都锁存失败。
-- 三个等待阶段各60秒，时间倒退/溢出失败。caller必须定期调用tick并在事件
-  到达时处理；core本身没有Linux timer/work，不能宣称有已运行的超时worker。
+- 三个等待阶段各60秒，时间倒退/溢出失败。core仍由caller驱动tick；新增session在arm后由独立worker处理事件，并以
+  最长1秒间隔及剩余deadline驱动超时。未arm时不调度工作。
 - 每个前向副作用失败即停止后续动作，不回滚或自动重试；保留已触及桥资源，
   等待owner诊断与实际停止。不会在失败时猜测SCP或MD已停止。
 - `stop(md_stopped=false)` 返回EBUSY，零清理。owner确认MD CPU/DMA停止后，
@@ -55,16 +58,16 @@ ID16须在NC bank内、至少32KiB、可映射且AP/MD转换匹配；AP地址/�
   后者必须先ACK两个CCIF2视图，再关钟。STOP最多尝试一次，3秒超时保留桥。
   原始error和cleanup_error分开保留；正常完成后的迟到事件返回ESHUTDOWN。
 
-回调所需的CCIF2 clocks/SMC13、精确WC clear和系统端口TX仍待Linux owner实现，
-core当前没有硬件调用者或自动开始入口。不能把模型中的callback当成已经
-接好硬件后端。SCP transport回调可使用下述客户端API。
+回调已由下述Linux bridge实现，但没有上层arm或MD启动调用者。后端经过
+实际C离线测试及ARM64编译；没有真实固件协议验收。
 
 ## 真实 SCP 客户端与锁
 
-`ccci-scp-client.c` 通过未来consumer的 `mediatek,scp` phandle查找既有
+`ccci-scp-client.c` 通过bridge consumer的 `mediatek,scp` phandle查找既有
 boot-lifetime SCP provider，取得device引用和managed device link；create
-只分配和建立生命周期关联，没有MMIO/SMC/awake或SCP启动。当前DT没有添加
-该属性，也没有构造调用者；device-link/OF构造路径经过ARM64编译，未作真机验收。
+只分配和建立生命周期关联，没有MMIO/SMC/awake或SCP启动。当前默认disabled的MD platform节点已添加
+该属性及CCIF2资源。启用CCISM构建时构造bridge/client，仍无lease/start caller；
+device-link/OF构造路径经过ARM64编译，未作真机验收。
 
 `acquire` 需要实际active/READY、非零generation、无既有fault/cleanup错误。
 每代仅允许一个client和一次lease，拒绝已有lease及继承的RBREADY，不能用
@@ -86,8 +89,9 @@ work，等当前锁释放后才join RX/双核SET。手动STOP保护的EBUSY不�
 在owner.lock下执行，**只能向consumer独立队列排标量事件，不能调用client
 API、CCISM FSM或取得MD生命周期锁**。否则会与发送或STOP形成等待环。
 owner先停止MD，再release关闭通知入口，最后join已排队consumer工作，才能
-释放context；device link不替代该停止契约。后续Linux桥必须实现有界事件
-队列/worker/timer，并把SCP错误传到MD停止流程，不能直接在notify里发送IPI。
+释放context；device link不替代该停止契约。Linux桥通过下述有界事件
+队列/worker/timer接收通知；故障关闭普通CCIF TX/RX并保留资源。实际MD停止原语
+仍待实现，不能直接在notify里发送IPI或把RX关闭当成MD CPU/DMA已经停止。
 
 ## 离线验证和接续
 
@@ -102,7 +106,69 @@ owner先停止MD，再release关闭通知入口，最后join已排队consumer工
   peer私有数据或固件binary。
 
 确定性模型不证明SMP、device link实际拆卸顺序、CCIF2时钟/SMC效果或固件状态。
-下一组实现唯一CCIF2 owner、SMEM映射和system-port TX/RX，将标量队列/worker/
-定时器连接到此core和SCP client；同时准备真实能力表及FS/RPC/NVRAM服务。
-首次MD释放前验证这些准备条件，HS2后执行CCISM。合并通信测试，不为尚无
-完整对端的callback core单独刷机。
+
+## Linux bridge、系统端口与异步 session
+
+`ccci-ccism-bridge.{c,h}` 是现有MD platform的唯一子owner，精确预留AP
+`0x1023c000/0x1000`、MD `0x1023d000/0x1000`，以及解析所得ID16。要求ID16
+AP地址和size整页对齐，独占WC映射，不扩大到相邻runtime/SMEM用户。constructor
+只建立映射、时钟引用和SCP device link，不读写CCIF2、不清SMEM、不发SMC、
+不取得SCP lease、不启动工作或处理器。
+
+`arm`取得一次真实SCP lease和generation，随后arm session。acquire→arm窗口的
+provider通知不会丢失：预arm通知锁存错误，arm前后检查，禁止遗失故障后继续启动。
+未来调用者必须持parent生命周期锁，确认MD供电/时钟与CPU/DMA停止；本轮没有
+调用者。只在controller已验证并接受的HS2回调中排MD_READY，不能由状态字符串
+或任意system包触发。HS2先入队，随后同一RX工作流排ACK/DONE，避免回调重入。
+其余端口必须由未来服务dispatcher路由，bridge本身返回EOPNOTSUPP。
+
+`ccci-ccif.c`新增普通q0/channel3、精确16B的INIT/DONE发送：独立TX mutex和
+停止门，15bit sequence/assert，BUSY或满环在发布前拒绝；partial publication
+不重试并锁存fault。先完成WC ring publication，再BUSY/TCHNUM；STOP先关闭
+发送门并等待在途sender，再quiesce controller/RX。发送不取controller/MD锁。
+
+**CCIF2时钟是继承语义，不是已验证的硬件gate。** Android4.19与本机可用6.6
+均使用dummy ops+IGNORE_UNUSED，未切换bank4。主线新增的两个1:1 clock alias
+保持到observed AXI parent的逻辑引用，不写`0xc0/0xc4/0xc8`，不证明实际
+bit16/17或桥时钟可控。当前头文件沿用4.19索引68/69；6.6同名宏为72/73，
+不能跨树硬抄编号。进入协议时取得引用，然后只发一次CCCI SMC13，其他参数全零。
+vendor仅打印a0，没有完整返回契约；本实现保守地仅接受a0=0，-1视为不支持，
+其他非零失败并保留引用。此策略仍须真机验证，不声称已证明固件返回语义。
+
+`ccci-ccism-session.{c,h}`在32槽固定队列复制标量和16B包，由一个delayed_work
+在独立mutex下串行驱动core/硬件回调。provider回调只持队列spinlock复制，不调
+client/FSM、不取MD或session mutex。溢出锁存错误、废弃不完整历史并关闭MD
+收发，不自动重试。worker从事件处理后的实际单调时间驱动60秒阶段超时和3秒
+STOP超时；首次故障调用普通CCIF abort，保留MD域和桥引用等待明确停止。
+
+父驱动prepare、off、shutdown先检查bridge offline：任何已arm且未STOPPED的
+会话都返回EBUSY，不能用FAILED或RX停止代替MD停机证明。未来真实停止流程是：
+持parent锁确认MD CPU/DMA停止→session STOP→发MD-invalid→同代SCP STOP→
+两个CCIF2视图ACK+0x14写0xffff→屏障→释放逻辑时钟引用→quiesce session→
+release SCP lease→普通CCIF停止/复位→MD断电。STOP等待异步完成，不在父锁下
+等待需要父锁的工作。重复STOP不清空已排队的STOP回复、不延长deadline。
+未完成、超时或provider失败均保留资源并阻止断电。当前没有MD CPU停止原语，
+因此尚不能把这套生命周期称为真机热停止支持。
+
+session停止会丢弃尚未执行的前向事件，避免MD已停止后队列里的MD_READY才打开
+bridge。quiesce在桥引用未清除时拒绝销毁，继续保留STOP接收。当前是built-in、
+suppress_bind_attrs、无arm caller的boot-lifetime owner；devres仅用于dormant
+probe失败回滚，顺序为client release→session destroy→clocks/maps释放。
+未来增加remove/unbind必须先实现真实stop/join，WARN_ON不能阻止devres释放，
+不能照搬现有失败probe路径处理活跃会话。
+
+## 本轮验证与接续
+
+- `test_modem_ccif_system_tx.py`：实际sender/ring的ASan/UBSan，BUSY/满环、
+  序号回绕、所有ring失败位置和发布后错误；pthread sender/STOP竞争。
+- `test_modem_ccism_session.py`：实际session/core及既有handshake/RX，复制后包
+  生命周期、队列溢出、预arm故障竞态、代际/期限/STOP、重复STOP回复保留。
+- `test_modem_ccism_bridge.py`：实际完整bridge、plan/protocol，假的底层client/
+  session/clock/SMC；13类constructor失败无硬件I/O、精确ID16、SMC13参数、
+  双ACK和屏障顺序、lease保留、offline拒绝、路由及故障通知。
+- 原有CCIF/core/client/platform回归及启用/恢复原配置的ARM64构建。host模型不
+  证明真实SMP调度、SMC效果、CCIF2可访问性或固件响应；未打包/刷写测试镜像。
+
+下一组准备FS/RPC/NVRAM私有工作副本、端口dispatcher和真实能力表，再连接唯一
+上层启动/停止owner。必须补足MD CPU/DMA停止证明后才能启用真实释放入口。
+合并首次CPU释放、HS1/runtime/HS2、CCISM与停止测试，不为单纯资源预留刷机。

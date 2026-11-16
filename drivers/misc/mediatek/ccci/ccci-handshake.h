@@ -19,6 +19,7 @@ enum ccci_handshake_state {
 
 struct ccci_handshake_ops {
 	int (*publish)(void *context, const void *runtime, u32 used, const void *upload);
+	/* Includes the accepted HS2 once, before subsequent system replies. */
 	int (*port)(void *context, const struct ccci_ccif_event *event);
 };
 

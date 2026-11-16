@@ -1,0 +1,99 @@
+{
+  "date": "2026-11-16",
+  "implementation_base": "24a6048404f60fc6961caf3759b803f2e70c03b8",
+  "ai_assistance": "Codex with delegated implementation/review; no DCO certification",
+  "feature": "Unique dormant CCIF2 bridge, ordinary CCISM system TX, asynchronous bounded CCISM session and parent power/reset gates",
+  "validation": {
+    "actual_c_asan_ubsan": [
+      "test_modem_ccif.py",
+      "test_modem_ccif_system_tx.py",
+      "test_modem_ccism.py",
+      "test_modem_ccism_session.py",
+      "test_modem_ccism_bridge.py",
+      "test_modem_platform.py",
+      "test_modem_scp_client.py"
+    ],
+    "sender_stop_pthread_race": true,
+    "repeat_stop_preserves_queued_stop_reply": true,
+    "handshake_acceptance_before_hs2_port_callback": true,
+    "constructor_failure_variants": 13,
+    "arm64_enabled_image_gz_modules_dtb": true,
+    "arm64_original_config_restored_image_gz_modules": true,
+    "new_compile_warnings": 0,
+    "dt_doc_validate": true,
+    "dtb_targeted_schema_validate": true,
+    "strict_checkpatch_ccci_c_headers": "0 errors, 0 warnings, 0 checks",
+    "targeted_make_dt_binding_check": true,
+    "series_checkpatch": "Bindings, clock provider, driver and DTS separated; only generic new-file MAINTAINERS warning expected"
+  },
+  "activation": {
+    "default_disabled_dt_node_retained": true,
+    "defconfig_unchanged": true,
+    "new_disabled_dt_resources": [
+      "ccif2-ap",
+      "ccif2-md",
+      "mediatek,scp"
+    ],
+    "bridge_constructor_connected_to_md_platform": true,
+    "bridge_arm_caller": false,
+    "md_cpu_release_caller": false,
+    "fs_rpc_nvram_service": false
+  },
+  "clock_semantics": {
+    "implementation": "Inherited 1:1 aliases to observed AXI, CLK_IGNORE_UNUSED; mirrors vendor dummy gate lifecycle only",
+    "real_gate_writes": false,
+    "real_gate_state_verified": false,
+    "current_header_ids": [
+      68,
+      69
+    ],
+    "working_6_6_ids": [
+      72,
+      73
+    ]
+  },
+  "smc13_policy": "Exact CCCI subop13, all other args zero, one attempt; conservatively accept only a0==0; vendor source logs but does not define complete return contract; unverified on device",
+  "lifecycle": "Parent lock serializes future arm/stop and current offline. Armed&&!STOPPED blocks parent prepare/off/shutdown. CPU/DMA stop proof is external, not inferred. Fault closes ordinary TX/RX and retains bridge/domain refs. Dormant-only devres teardown; future active remove requires real stop/join.",
+  "hardware": {
+    "device_access": false,
+    "boot_image_packed": false,
+    "flashed": false,
+    "md_cpu_released": false,
+    "real_ccism_tested": false
+  },
+  "limitations": [
+    "Deterministic fake IRQ/work/client/session/device resources do not prove full SMP or hardware ordering",
+    "Only sender/STOP gate has a pthread contention test",
+    "CCIF2 clock aliases do not control hardware gates",
+    "SMC13 return policy and firmware protocol unverified",
+    "No final MD start/stop caller or CPU/DMA stop primitive",
+    "No new cellular support acceptance"
+  ],
+  "remaining": [
+    "FS/RPC/NVRAM private working-copy services and port dispatcher",
+    "Real implemented-capability offers",
+    "Unique parent MD start/stop integration with CPU/DMA stop proof",
+    "Combined first CPU release, HS1/runtime/HS2, CCISM and exception/STOP hardware test"
+  ],
+  "logs_directory": "/data/src/mainline/mt6893-direct/evidence/modem-ccism-bridge",
+  "log_sha256": {
+    "test-bridge.log": "79cdd19626445aaf6ad9e1d995340439a97a69fd6e9339abb69f650720d85939",
+    "test-ccif.log": "72cfc66f1214f9315fc6954d783b11753e203320538c8b177ce5424ea3c9d809",
+    "test-client.log": "28b11b7df6e8f3f52adc57c42afc35c7aff25c35a0df299c35eca4d01bf6240b",
+    "test-core.log": "3a58dfee54dbc3a16d7d3755e22ae4b5cb1da96434cf87943249f480f003da06",
+    "test-platform.log": "59a99baf7d4b5f436465b77a3d410d4c6135d44f9ed308c565be278bd2312249",
+    "test-session.log": "d2edb3f59da310010f93c21c94160f0449aecf931dfbfdc8b0f9a4e6bcb11c9e",
+    "test-system-tx.log": "a9d69b29b8b346844e71872834b2a35e704923c66c55fbd2863d8dc84488d9fa",
+    "olddefconfig.log": "974b137f31a3128315506938080edd8e09d5e50cf006f35fc8b9077b5f346a79",
+    "build-enabled.log": "d5b30a39411a2ff35bad4f302a877b4ce0a79686797a5b3746e4f22a3f822ac8",
+    "style-bridge.log": "1fa7b3d7eb7335d826ea4be42d70bfc2ebbb2e64886fed0230c872f305cd92f5",
+    "build-enabled-final.log": "a0b65b8266d4d54ffdd3e49db784295a2ca2968df286f4d486b5d6adecd534c8",
+    "binding.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "restore-olddefconfig.log": "23f61d4e038442d447317d99f7999c444ef0614a09dc0af116567a98a94622f9",
+    "style-ccci.log": "8a2dadf010d210cce7a9200a4d48f53370f2c53785944922d83eb6c5568215a5",
+    "build-restored.log": "53a15cf42ea799014fb8c36458a17c35f03390ff4769a33b69504be7df206c8d",
+    "dtb-schema.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "build-restored-final.log": "4b9e41217a36707b9324ef63ad6174fdf80ad44051b91705530d425d1be70ae9",
+    "dt-binding-check.log": "84cff3143643d4d0720793495da0ae14edb0b3978f5013792f97bf1a8955f39d"
+  }
+}

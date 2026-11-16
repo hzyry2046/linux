@@ -1,5 +1,12 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-16 CCIF2/CCISM离线整合：新增唯一桥owner、普通system TX与异步
+session队列/worker/timer，连接真实SCP client API；父prepare/off/shutdown加入
+活跃桥阻断。CCIF2时钟保留vendor dummy语义的逻辑引用，不控制真实gate。
+启用构建和实际C sanitizer通过；没有arm/start或CPU释放caller，没有刷机、
+真实CCISM或蜂窝运行证据。下一步FS/RPC/NVRAM服务与能力表、真实MD停止原语，
+再合并通信测试。见[CCISM当前边界](MODEM-CCISM.md)。
+
 2026-11-16 CCISM离线接续：实现后置INIT/ACK/SHM_INIT/RBREADY/DONE core及
 同代SCP client，含共享awake、真实APCCCI传输、状态/首故障通知、STOP保护。
 实际C sanitizer及ARM64构建通过；CCIF2硬件owner、system端口和Linux事件
@@ -173,7 +180,7 @@ USB/Wi-Fi SSH 和外置 rootfs 正常；MD/SCP 尚未启动。详见 [R3](MODEM-
 | RTC / 持久时间 | 未启用 | RTC_CLASS 关闭；不能用启动日志时间作为准确实时时钟 |
 | SCP | 短时常驻/awake实测 | READY1、持续CPU消费、awake三次配对、一次MD-invalid传输；STOP双核SET/GIC五路屏蔽 | 无APCCCI状态回复；未验证长期运行、core1独立运行或完整恢复 | [常驻接入](MODEM-SCP-RUNTIME.md) |
 | MD平台与普通CCIF初始化 | 部分，实测 | LK接管、一次冷上电/关电、32环格式化和双视图SRAM校验、停止后GIC屏蔽 | IRQ/worker/HS1解码仅离线验证；无门铃/现场包、热重启、CCISM或MD CPU启动 | [CCIF](MODEM-CCIF.md) |
-| modem / 蜂窝 / GNSS | 未启用 | MD平台和CCIF初始化已实测，SCP初始启动与RX已实测 | 控制FSM、CCISM、服务门控及CPU放行/HS1/HS2待实现 | [计划](MODEM-PLAN.md) |
+| modem / 蜂窝 / GNSS | 未启用 | MD平台和CCIF初始化已实测，SCP初始启动与RX已实测 | FSM/CCISM后端仅离线验证；服务门控、MD启停与HS1/HS2真机待完成 | [计划](MODEM-PLAN.md) |
 | NFC / 指纹 / 振动 / IMU 等传感器 | 未验证、未建立支持 | 需逐项识别本机硬件及资源，不能借用同品牌另一机型结论 |
 | UFS 写入、USB host、运行时自动挂起 | 未验证 | 目前测试策略不覆盖这些行为 |
 | pstore 故障恢复链路 | 历史不可靠，非保证能力 | 用户指出 fastboot oem peek 可读保留内存；不能把无 pstore 当作内核未执行的证明 |

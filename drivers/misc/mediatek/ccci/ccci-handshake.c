@@ -126,7 +126,9 @@ int ccci_handshake_consume(struct ccci_handshake *hs, const struct ccci_ccif_eve
 				return handshake_fail(hs, -EPROTO);
 			hs->hs2_seen = true;
 			hs->state = CCCI_HANDSHAKE_HS2_SEEN;
-			return 0;
+			/* Queue post-HS2 services only after this exact wire validation. */
+			ret = hs->ops->port(hs->context, event);
+			return ret ? handshake_fail(hs, ret) : 0;
 		}
 		if (kind != CCCI_CCIF_CONTROL_OTHER)
 			return handshake_fail(hs, -EREMOTEIO);

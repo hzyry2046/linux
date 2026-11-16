@@ -25,6 +25,14 @@ int ccci_ccif_receive_start(struct ccci_ccif *ccif, ccci_ccif_consume_fn consume
 int ccci_ccif_handshake_start(struct ccci_ccif *ccif, const struct ccci_runtime_offer *offers,
 			      ccci_ccif_consume_fn port, void *context);
 ssize_t ccci_ccif_handshake_status(struct ccci_ccif *ccif, char *buf);
+/*
+ * Sleepable q0/channel 3 CCISM messages only (0x119/0x11b), after real HS2.
+ * Caller supplies the lifecycle/HS2 gate; no parent or control lock acquired.
+ * EBUSY/ENOSPC publish nothing; other transport failures poison this owner.
+ */
+int ccci_ccif_system_send(struct ccci_ccif *ccif, u32 message, u32 reserved);
+/* Sleepable: close TX/RX admission without waiting on consumer or parent lock. */
+void ccci_ccif_abort(struct ccci_ccif *ccif, int error);
 int ccci_ccif_stop(struct ccci_ccif *ccif);
 ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf);
 #else
@@ -53,6 +61,13 @@ static inline ssize_t ccci_ccif_handshake_status(struct ccci_ccif *ccif, char *b
 {
 	return -EOPNOTSUPP;
 }
+
+static inline int ccci_ccif_system_send(struct ccci_ccif *ccif, u32 message, u32 reserved)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline void ccci_ccif_abort(struct ccci_ccif *ccif, int error) { }
 
 static inline int ccci_ccif_stop(struct ccci_ccif *ccif) { return -EOPNOTSUPP; }
 static inline ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf)

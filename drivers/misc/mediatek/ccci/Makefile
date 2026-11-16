@@ -23,4 +23,4 @@ obj-$(CONFIG_OP6893_CCCI_SCP_RECEIVE) += ccci-scp-receive.o
 obj-$(CONFIG_OP6893_CCCI_SCP_OWNER_OBSERVE) += ccci-scp-inspect.o
 obj-$(CONFIG_OP6893_CCCI_SCP_RESET_ASSERT) += ccci-scp-reset.o
 obj-$(CONFIG_OP6893_CCCI_SCP_RUNTIME) += ccci-scp-runtime.o ccci-scp-client.o
-obj-$(CONFIG_OP6893_CCCI_CCISM) += ccci-ccism.o
+obj-$(CONFIG_OP6893_CCCI_CCISM) += ccci-ccism.o ccci-ccism-session.o ccci-ccism-bridge.o

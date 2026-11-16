@@ -3,10 +3,12 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irq.h>
+#include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
+#include <linux/unaligned.h>
 
 #include "ccci-ccif.h"
 #include "ccci-ccif-control.h"
@@ -21,6 +23,11 @@ struct ccci_ccif_bank {
 };
 
 struct ccci_ccif {
+	/* Never acquire the control or parent MD lock while holding this mutex. */
+	struct mutex tx_lock;
+	bool tx_active;
+	u16 tx_sequence;
+	int tx_error;
 	struct ccci_ccif_rx *rx;
 	struct ccci_ccif_controller *control;
 	struct regmap *infra;
@@ -160,9 +167,82 @@ static void ccif_irq_flags_clear(void *context)
 		irq_clear_status_flags(ccif->irq[i], IRQ_DISABLE_UNLAZY);
 }
 
+static void ccif_tx_gate(struct ccci_ccif *ccif, bool active)
+{
+	mutex_lock(&ccif->tx_lock);
+	ccif->tx_active = active && !ccif->tx_error;
+	mutex_unlock(&ccif->tx_lock);
+}
+
+void ccci_ccif_abort(struct ccci_ccif *ccif, int error)
+{
+	if (!ccif)
+		return;
+	if (error >= 0)
+		error = -EIO;
+	mutex_lock(&ccif->tx_lock);
+	ccif->tx_active = false;
+	if (!ccif->tx_error)
+		WRITE_ONCE(ccif->tx_error, error);
+	error = ccif->tx_error;
+	mutex_unlock(&ccif->tx_lock);
+	ccci_ccif_rx_abort(ccif->rx, error);
+}
+
+/* No parent or control mutex: this can be called from the RX port callback. */
+int ccci_ccif_system_send(struct ccci_ccif *ccif, u32 message, u32 reserved)
+{
+	u8 packet[CCCI_CCIF_HEADER_SIZE];
+	int ret;
+
+	if (!ccif || (message != 0x119 && message != 0x11b))
+		return -EINVAL;
+	mutex_lock(&ccif->tx_lock);
+	if (ccif->tx_error) {
+		ret = ccif->tx_error;
+		goto out;
+	}
+	if (!ccif->tx_active) {
+		ret = -ESHUTDOWN;
+		goto out;
+	}
+	ret = ccci_ccif_rx_error(ccif->rx);
+	if (ret)
+		goto out;
+	/* Check before publishing: a busy queue can be retried without duplication. */
+	if (readl(ccif->ap + 4) & BIT(0)) {
+		ret = -EBUSY;
+		goto out;
+	}
+	put_unaligned_le32(0xffffffff, packet);
+	put_unaligned_le32(message, packet + 4);
+	put_unaligned_le32(3 | ((u32)ccif->tx_sequence << 16) | BIT(31), packet + 8);
+	put_unaligned_le32(reserved, packet + 12);
+	ret = ccci_ccif_ring_transmit(&ccif->ring[CCCI_CCIF_NORMAL][0], packet,
+				      sizeof(packet));
+	if (ret == -ENOSPC)
+		goto out;
+	if (ret) {
+		/* A partial write/publication has no safe implicit retry or rollback. */
+		WRITE_ONCE(ccif->tx_error, ret);
+		ccif->tx_active = false;
+		ccci_ccif_rx_abort(ccif->rx, ret);
+		goto out;
+	}
+	ccif->tx_sequence = (ccif->tx_sequence + 1) & 0x7fff;
+	/* Publish WC packet and producer pointer before ringing ordinary queue 0. */
+	mb();
+	writel(BIT(0), ccif->ap + 4);
+	writel(0, ccif->ap + 0xc);
+	ret = 0;
+out:
+	mutex_unlock(&ccif->tx_lock);
+	return ret;
+}
+
 static bool ccci_ccif_faulted(struct ccci_ccif *ccif)
 {
-	return ccif->error || ccci_ccif_rx_error(ccif->rx) ||
+	return ccif->error || READ_ONCE(ccif->tx_error) || ccci_ccif_rx_error(ccif->rx) ||
 	       ccci_ccif_control_error(ccif->control);
 }
 
@@ -229,7 +309,10 @@ int ccci_ccif_receive_start(struct ccci_ccif *ccif, ccci_ccif_consume_fn consume
 	ret = ccif_irqs_masked(ccif);
 	if (ret)
 		return ret;
+	ccif_tx_gate(ccif, true);
 	ret = ccci_ccif_rx_start(ccif->rx, consume, context);
+	if (ret)
+		ccif_tx_gate(ccif, false);
 	if (!ret)
 		ccif->step = "receive-started";
 	return ret;
@@ -247,7 +330,10 @@ int ccci_ccif_handshake_start(struct ccci_ccif *ccif, const struct ccci_runtime_
 	ret = ccif_irqs_masked(ccif);
 	if (ret)
 		return ret;
+	ccif_tx_gate(ccif, true);
 	ret = ccci_ccif_control_start(ccif->control, offers, port, context);
+	if (ret)
+		ccif_tx_gate(ccif, false);
 	if (!ret)
 		ccif->step = "handshake-started";
 	return ret;
@@ -257,6 +343,8 @@ int ccci_ccif_stop(struct ccci_ccif *ccif)
 {
 	int ret;
 
+	/* Drain any sender before closing consumers or resetting/powering off. */
+	ccif_tx_gate(ccif, false);
 	/* Consumer callbacks must never acquire the parent MD owner mutex. */
 	ccci_ccif_control_quiesce(ccif->control);
 	ccci_ccif_rx_stop(ccif->rx);
@@ -279,10 +367,11 @@ int ccci_ccif_stop(struct ccci_ccif *ccif)
 ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf)
 {
 	return sysfs_emit(buf,
-			  "step=%s error=%d attempted=%u prepared=%u rx_error=%d irq_armed=%u normal_bytes=%u exception_bytes=%u debug_md=%#x debug_size=%u cpu_release_issued=0\n",
+			  "step=%s error=%d attempted=%u prepared=%u rx_error=%d irq_armed=%u tx_error=%d tx_sequence=%u normal_bytes=%u exception_bytes=%u debug_md=%#x debug_size=%u cpu_release_issued=0\n",
 			  ccif->step, ccif->error, ccif->attempted, ccif->prepared,
 			  ccci_ccif_rx_error(ccif->rx),
-			  ccci_ccif_rx_armed(ccif->rx),
+			  ccci_ccif_rx_armed(ccif->rx), READ_ONCE(ccif->tx_error),
+			  READ_ONCE(ccif->tx_sequence),
 			  ccif->layout.used[0], ccif->layout.used[1],
 			  ccif->layout.debug_md, ccif->layout.debug_size);
 }
@@ -307,6 +396,7 @@ struct ccci_ccif *ccci_ccif_create(struct platform_device *pdev,
 	ccif = devm_kzalloc(dev, sizeof(*ccif), GFP_KERNEL);
 	if (!ccif)
 		return ERR_PTR(-ENOMEM);
+	mutex_init(&ccif->tx_lock);
 	ccif->infra = infra;
 	ccif->step = "reserved";
 	ret = ccci_ccif_plan(smem, &ccif->layout);

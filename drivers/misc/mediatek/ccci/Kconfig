@@ -325,7 +325,8 @@ config OP6893_CCCI_CCISM
 	help
 	  Bounded CCISM INIT/ACK/RBREADY/DONE state machine using the same-board
 	  6.6 sequence, with explicit SCP generation, deadlines and stopped-MD
-	  shutdown. Callbacks supply CCIF2 clocks/SMC13, system-port TX, exact
-	  shared-memory clearing and the leased SCP APCCCI transport. There is
-	  no platform start caller, mapping, MD CPU release or automatic action.
+	  shutdown. A unique bridge reserves CCIF2 and exact ID16 pages, holds
+	  inherited clock aliases, invokes SMC13 and uses ordinary system-port
+	  TX and a leased SCP client. A bounded worker handles replies and timers.
+	  No platform start caller, MD CPU release or automatic action is added.
 	  Disabled by default; completion is distinct from radio readiness.
