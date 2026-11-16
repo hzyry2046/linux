@@ -4,6 +4,7 @@
 
 import contextlib
 import io
+import json
 import os
 from pathlib import Path
 import socket
@@ -17,7 +18,7 @@ from unittest.mock import Mock, patch
 from modem_fs_backend import ACKNOWLEDGEMENT, MARKER, WorkingCopy
 from modem_fs_wire import StaleGeneration, UnsupportedOperation
 from modem_service_backend import (FS, HEADER, RECORD_MAX, RPC, VERSION,
-                                   RecordError, decode_record, main, serve)
+                                   RecordError, decode_record, load_rpc_policy, main, serve)
 
 
 def word(value):
@@ -188,6 +189,102 @@ class ServiceTest(unittest.TestCase):
         with self.assertRaises(RecordError):
             decode_record(bytes(more), 19)
 
+    def policy(self, value):
+        path = self.root / 'rpc-policy.json'
+        path.write_text(json.dumps(value))
+        path.chmod(0o600)
+        return path
+
+    @staticmethod
+    def rpc_packet(operation, args=(), slot=2):
+        body = word(operation) + word(len(args))
+        for arg in args:
+            body += word(len(arg)) + arg + b'\0' * (-len(arg) % 4)
+        return struct.pack('<4I', 0x12345678, 16 + len(body), 0x89230020, slot) + body
+
+    def test_mixed_fs_and_user_rpc_preserve_atomic_record_identity(self):
+        path = self.policy({'version': 1, 'properties': {'known': 'value', 'absent': None},
+                            'sar': {'product_hw': 'synthetic', 'regionmark': 'region',
+                                    'projects': {'synthetic': {'region': 7}}}})
+        rpc = load_rpc_policy(path)
+        packets = [record(), record(self.rpc_packet(0x400f, (b'known\0',)), kind=RPC, slot=2),
+                   record(self.rpc_packet(0x4010), kind=RPC, slot=2)]
+        fd = self.descriptor()
+        writer = Mock(side_effect=lambda unused_fd, data: len(data))
+        self.assertEqual(serve(self.backend, 19, fd, rpc=rpc,
+                               reader=Mock(side_effect=packets + [b'']), writer=writer), 3)
+        self.assert_closed(fd)
+        for request, call in zip(packets, writer.call_args_list):
+            reply = call.args[1]
+            self.assertEqual(reply[:28], request[:28])
+            self.assertEqual(reply[32:36], request[32:36])
+        prop = writer.call_args_list[1].args[1][32:]
+        self.assertEqual(struct.unpack_from('<I', prop, 28)[0], 5)
+        self.assertEqual(prop[36:42], b'value\0')
+        sar = writer.call_args_list[2].args[1][32:]
+        self.assertEqual(struct.unpack_from('<I', sar, 36)[0], 7)
+
+    def test_rpc_unknown_fact_and_invalid_reply_close_without_write(self):
+        rpc = load_rpc_policy(self.policy({'version': 1, 'properties': {'other': None}}))
+        request = record(self.rpc_packet(0x400f, (b'unknown',)), kind=RPC, slot=2)
+        from modem_rpc_backend import Unavailable
+        for handler, error in [(rpc, Unavailable), (lambda unused: packet(), RecordError)]:
+            fd = self.descriptor()
+            writer = Mock()
+            with self.assertRaises(error):
+                serve(self.backend, 19, fd, rpc=handler,
+                      reader=Mock(return_value=request), writer=writer)
+            writer.assert_not_called()
+            self.assert_closed(fd)
+        stale = record(self.rpc_packet(0x400f, (b'other',)), kind=RPC, slot=2, generation=18)
+        fd = self.descriptor()
+        handler = Mock()
+        with self.assertRaises(StaleGeneration):
+            serve(self.backend, 19, fd, rpc=handler, reader=Mock(return_value=stale))
+        handler.assert_not_called()
+        self.assert_closed(fd)
+
+    def test_policy_schema_rejects_ambiguous_or_unproven_facts(self):
+        invalid = [[], {}, {'version': True}, {'version': 1, 'extra': 2},
+                   {'version': 1, 'properties': []},
+                   {'version': 1, 'properties': {'known': 3}},
+                   {'version': 1, 'properties': {'known': 'a\0b'}},
+                   {'version': 1, 'sar': {'index': 0}},
+                   {'version': 1, 'sar': {'product_hw': 'x', 'regionmark': 'y',
+                                          'projects': {'x': {'y': True}}}}]
+        for value in invalid:
+            with self.assertRaises((RecordError, ValueError)):
+                load_rpc_policy(self.policy(value))
+        path = self.policy({'version': 1})
+        path.write_text('{"version":1,"properties":{"x":"a","x":"b"}}')
+        with self.assertRaises(RecordError):
+            load_rpc_policy(path)
+
+    def test_policy_file_permissions_links_size_and_snapshot_lifetime(self):
+        path = self.policy({'version': 1, 'properties': {'known': 'old'}})
+        rpc = load_rpc_policy(path)
+        path.write_text(json.dumps({'version': 1, 'properties': {'known': 'new'}}))
+        self.assertIn(b'old\0', rpc(self.rpc_packet(0x400f, (b'known',))))
+        for mode in (0o644, 0o400, 0o660):
+            path.chmod(mode)
+            with self.assertRaises(RecordError):
+                load_rpc_policy(path)
+        path.chmod(0o600)
+        link = self.root / 'policy-link'
+        link.symlink_to(path)
+        with self.assertRaises(OSError):
+            load_rpc_policy(link)
+        link.unlink()
+        os.link(path, link)
+        with self.assertRaises(RecordError):
+            load_rpc_policy(path)
+        link.unlink()
+        for content in (b'', b' ' * 65537):
+            path.write_bytes(content)
+            with self.assertRaises(RecordError):
+                load_rpc_policy(path)
+
+
     def test_cli_refuses_regular_endpoint_and_reports_cleanup_failure_safely(self):
         endpoint = self.root / 'ordinary'
         endpoint.write_bytes(b'')
@@ -199,7 +296,7 @@ class ServiceTest(unittest.TestCase):
         fd = self.descriptor()
         backend = Mock()
         backend.shutdown.return_value = -18
-        def close_endpoint(unused_backend, unused_generation, owned_fd):
+        def close_endpoint(unused_backend, unused_generation, owned_fd, **unused_options):
             os.close(owned_fd)
         output = io.StringIO()
         with contextlib.redirect_stderr(output):

@@ -7,14 +7,16 @@ slot, canonical packet length. Each read/write must transfer ONE WHOLE record.
 There is no stream reassembly or retry after a short read/write. Any unsupported
 request or failure closes the endpoint so the kernel can revoke the lease.
 
-Only the caller's marked private WorkingCopy is used. RPC is deliberately not
-implemented. No operation logs paths, packet bytes, contents or exception text.
+Only the caller's marked private WorkingCopy is used. User RPC requires an
+explicit immutable audited policy file; no Android properties are read. No operation logs paths, packet bytes, contents or exception text.
 The caller must explicitly provide --endpoint, --root and --generation; this
 program does not start the modem, provision data, or claim services are ready.
 """
 
 import argparse
 from dataclasses import dataclass, field
+from functools import partial
+import json
 import os
 import stat
 import struct
@@ -22,6 +24,7 @@ import sys
 
 from modem_fs_backend import WorkingCopy, UnsupportedOperation
 from modem_fs_wire import MESSAGE_MAX, StaleGeneration, respond
+from modem_rpc_backend import PropertySnapshot, SarSnapshot, respond as rpc_respond
 
 VERSION = 1
 FS = 0
@@ -71,20 +74,20 @@ def decode_record(data, expected_generation):
 
 
 def _reply(record, packet):
-    if record.kind != FS:
-        raise UnsupportedOperation('RPC service is not implemented')
-    if not isinstance(packet, bytes) or not 24 <= len(packet) <= MESSAGE_MAX:
+    limit, channel = (MESSAGE_MAX, 15) if record.kind == FS else (RPC_MAX, 33)
+    if not isinstance(packet, bytes) or not 24 <= len(packet) <= limit:
         raise RecordError('invalid canonical response size')
     length, sequence, slot, operation = struct.unpack_from('<4I', packet, 4)
     request_operation, = struct.unpack_from('<I', record.packet, 16)
-    if (length != len(packet) or sequence & 0xffff != 15 or slot != record.slot or
-            operation != request_operation):
+    expected_operation = request_operation if record.kind == FS else request_operation | 0xffff0000
+    if (length != len(packet) or sequence & 0xffff != channel or slot != record.slot or
+            operation != expected_operation or packet[:4] != record.packet[:4]):
         raise RecordError('invalid canonical response metadata')
     return HEADER.pack(VERSION, record.kind, record.generation, record.token,
                        record.slot, len(packet)) + packet
 
 
-def serve(backend, generation, fd, *, reader=os.read, writer=os.write):
+def serve(backend, generation, fd, *, rpc=None, reader=os.read, writer=os.write):
     """Own/close fd; serve serial atomic records until EOF or an exception.
 
     The caller owns backend shutdown. Generation mismatch, malformed records,
@@ -102,15 +105,89 @@ def serve(backend, generation, fd, *, reader=os.read, writer=os.write):
             if data == b'':
                 return count
             record = decode_record(data, generation)
-            if record.kind != FS:
-                raise UnsupportedOperation('RPC service is not implemented')
-            packet = respond(backend, generation, record.packet)
+            if record.kind == FS:
+                packet = respond(backend, generation, record.packet)
+            elif rpc is not None:
+                packet = rpc(record.packet)
+            else:
+                raise UnsupportedOperation('RPC policy is not configured')
             reply = _reply(record, packet)
             if writer(fd, reply) != len(reply):
                 raise RecordError('short endpoint write')
             count += 1
     finally:
         os.close(fd)
+
+
+def _unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise RecordError('duplicate policy field')
+        result[key] = value
+    return result
+
+
+def _policy_bytes(value):
+    if type(value) is not str:
+        raise RecordError('policy string required')
+    return value.encode('utf-8')
+
+
+def load_rpc_policy(path):
+    """Load one immutable policy, before opening the kernel endpoint.
+
+    The caller asserts provenance/completeness; permissions alone do not prove
+    facts. No path, property, SAR value or parser exception is logged here.
+    """
+    fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or
+                stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1 or
+                not 0 < info.st_size <= 65536):
+            raise RecordError('invalid private policy file')
+        chunks = []
+        total = 0
+        while True:
+            chunk = os.read(fd, 65537 - total)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > 65536:
+                raise RecordError('policy exceeds size limit')
+        if total != info.st_size:
+            raise RecordError('policy size changed')
+    finally:
+        os.close(fd)
+    config = json.loads(b''.join(chunks), object_pairs_hook=_unique_object)
+    if (type(config) is not dict or type(config.get('version')) is not int or
+            config['version'] != 1 or set(config) - {'version', 'properties', 'sar'}):
+        raise RecordError('invalid policy schema')
+    properties = None
+    if 'properties' in config:
+        values = config['properties']
+        if type(values) is not dict:
+            raise RecordError('invalid property namespace')
+        properties = PropertySnapshot(tuple((_policy_bytes(k), None if v is None else
+                                             _policy_bytes(v)) for k, v in values.items()))
+    sar = None
+    if 'sar' in config:
+        values = config['sar']
+        if (type(values) is not dict or
+                set(values) != {'product_hw', 'regionmark', 'projects'} or
+                type(values['projects']) is not dict):
+            raise RecordError('invalid SAR policy')
+        projects = []
+        for hardware, regions in values['projects'].items():
+            if type(regions) is not dict:
+                raise RecordError('invalid SAR region policy')
+            projects.append((_policy_bytes(hardware), tuple((_policy_bytes(region), index)
+                                                          for region, index in regions.items())))
+        sar = SarSnapshot(_policy_bytes(values['product_hw']), _policy_bytes(values['regionmark']),
+                          tuple(projects))
+    return partial(rpc_respond, properties=properties, sar=sar)
 
 
 class _ArgumentParser(argparse.ArgumentParser):
@@ -124,6 +201,7 @@ def main(argv=None):
     parser.add_argument('--endpoint', required=True, help='explicit kernel endpoint node')
     parser.add_argument('--root', required=True, help='existing marked private working copy')
     parser.add_argument('--generation', required=True, help='explicit nonzero generation')
+    parser.add_argument('--rpc-policy', help='explicit private audited user RPC policy JSON')
     args = parser.parse_args(argv)
     backend = None
     fd = -1
@@ -131,12 +209,13 @@ def main(argv=None):
     try:
         generation = int(args.generation, 0)
         _generation(generation)
+        rpc = load_rpc_policy(args.rpc_policy) if args.rpc_policy else None
         backend = WorkingCopy(args.root, generation)
         fd = os.open(args.endpoint, os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW)
         if not stat.S_ISCHR(os.fstat(fd).st_mode):
             raise RecordError('endpoint must be a character device')
         owned_fd, fd = fd, -1
-        serve(backend, generation, owned_fd)
+        serve(backend, generation, owned_fd, rpc=rpc)
     except KeyboardInterrupt:
         sys.stderr.write('modem backend interrupted\n')
         status = 130
