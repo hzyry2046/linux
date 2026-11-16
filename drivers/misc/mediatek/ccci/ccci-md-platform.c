@@ -19,6 +19,9 @@
 #include "ccci-md-platform.h"
 #include "ccci-ccif.h"
 #include "ccci-ccism-bridge.h"
+#include "ccci-md-boot.h"
+#include "ccci-nvram-cache.h"
+#include "ccci-rtc32k.h"
 #include "ccci-service-endpoint.h"
 #include "ccci-port-dispatch.h"
 #include "ccci-rpc-op6893.h"
@@ -29,6 +32,7 @@
 #define MD_POWER_CONFIG	6
 #define MD_CHECK_DONE	3
 #define MD_PROTECT2	(BIT(10) | BIT(21) | BIT(29))
+#define SPM_PCM_REG13	0x110
 
 struct ccci_md_platform {
 	/* Serializes commands, state reporting and shutdown. */
@@ -46,6 +50,8 @@ struct ccci_md_platform {
 	struct ccci_ccism_bridge *bridge;
 	struct ccci_service_endpoint *services;
 	struct ccci_port_dispatch *dispatch;
+	struct ccci_nvram_cache *cache;
+	struct ccci_md_boot *boot;
 };
 
 /* Independent hardware check also catches a genpd power-off veto/failure. */
@@ -251,6 +257,43 @@ static ssize_t md_power_show(struct device *dev, struct device_attribute *attr, 
 	return ret;
 }
 
+/*
+ * Active boot: reset/join CCIF while clocks are held, prove MD1 OFF, then stop
+ * services and SCP. The CCIF stop inside the dispatcher then returns early.
+ */
+static int md_platform_off(struct ccci_md_platform *md)
+{
+	u32 r13 = 0;
+	int ret;
+
+	if (ccci_md_boot_active(md->boot)) {
+		if (!regmap_read(md->spm, SPM_PCM_REG13, &r13))
+			ccci_md_boot_note_pcm(md->boot, r13);
+		ret = ccci_ccif_stop(md->ccif);
+		if (!ret)
+			ret = ccci_md_power_off(&md->power);
+		if (!ret)
+			ret = ccci_md_boot_stop(md->boot, true);
+		return ret;
+	}
+	ret = ccci_md_boot_offline(md->boot);
+	if (!ret)
+		ret = ccci_nvram_cache_offline(md->cache);
+	if (!ret)
+		ret = ccci_port_dispatch_offline(md->dispatch);
+	if (!ret)
+		ret = ccci_service_endpoint_offline(md->services);
+	if (!ret)
+		ret = ccci_ccism_bridge_offline(md->bridge);
+	if (!ret && md->ccif && md->power.state == CCCI_MD_POWERED)
+		ret = ccci_ccif_stop(md->ccif);
+	if (!ret && md->power.state != CCCI_MD_INHERITED)
+		ret = ccci_md_power_off(&md->power);
+	if (!ret)
+		ret = ccci_nvram_cache_stop(md->cache);
+	return ret;
+}
+
 static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 			      const char *buf, size_t count)
 {
@@ -263,15 +306,7 @@ static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 	} else if (sysfs_streq(buf, "takeover")) {
 		ret = ccci_md_power_takeover(&md->power);
 	} else if (sysfs_streq(buf, "off")) {
-		ret = ccci_port_dispatch_offline(md->dispatch);
-		if (!ret)
-			ret = ccci_service_endpoint_offline(md->services);
-		if (!ret)
-			ret = ccci_ccism_bridge_offline(md->bridge);
-		if (!ret && md->ccif && md->power.state == CCCI_MD_POWERED)
-			ret = ccci_ccif_stop(md->ccif);
-		if (!ret)
-			ret = ccci_md_power_off(&md->power);
+		ret = md_platform_off(md);
 	} else {
 		ret = -EINVAL;
 	}
@@ -281,6 +316,55 @@ static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 	return ret ?: count;
 }
 static DEVICE_ATTR_RW(md_power);
+
+static ssize_t md_boot_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	ssize_t ret;
+
+	mutex_lock(&md->lock);
+	ret = ccci_md_boot_status(md->boot, buf);
+	mutex_unlock(&md->lock);
+	return ret;
+}
+
+static ssize_t md_boot_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	enum ccci_runtime_crystal crystal;
+	enum ccci_rtc32k_source source;
+	u64 generation;
+	int ret;
+
+	if (!md->boot)
+		return -EOPNOTSUPP;
+	mutex_lock(&md->lock);
+	if (sscanf(buf, "prepare %llu", &generation) == 1) {
+		if (md->power.state != CCCI_MD_POWERED || !md->power.clocks ||
+		    !md->power.domain) {
+			ret = -EHOSTDOWN;
+			goto out;
+		}
+		ret = ccci_rtc32k_read(dev, &crystal, &source);
+		if (!ret)
+			dev_info(dev, "MD boot prepare: generation=%llu crystal=%u source=%u\n",
+				 generation, crystal, source);
+		if (!ret)
+			ret = ccci_md_boot_prepare(md->boot, &md->smem, generation, crystal);
+	} else if (sysfs_streq(buf, "release")) {
+		ret = ccci_md_boot_release(md->boot);
+	} else if (sysfs_streq(buf, "stop")) {
+		/* Parent must have independently read MD1 OFF. */
+		ret = ccci_md_boot_stop(md->boot, md->power.state == CCCI_MD_STOPPED);
+	} else {
+		ret = -EINVAL;
+	}
+out:
+	mutex_unlock(&md->lock);
+	return ret ?: count;
+}
+static DEVICE_ATTR_RW(md_boot);
 
 static ssize_t ccif_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -309,7 +393,10 @@ static ssize_t ccif_store(struct device *dev, struct device_attribute *attr,
 	if (md->power.state != CCCI_MD_POWERED || !md->power.clocks || !md->power.domain) {
 		ret = -EHOSTDOWN;
 	} else {
-		ret = ccci_port_dispatch_offline(md->dispatch);
+		/* The boot owner owns the rings once its one preparation starts. */
+		ret = ccci_md_boot_offline(md->boot);
+		if (!ret)
+			ret = ccci_port_dispatch_offline(md->dispatch);
 		if (!ret)
 			ret = ccci_service_endpoint_offline(md->services);
 		if (!ret)
@@ -373,8 +460,9 @@ static ssize_t dispatch_show(struct device *dev, struct device_attribute *attr, 
 static DEVICE_ATTR_RO(dispatch);
 
 static struct attribute *md_attrs[] = {
-	&dev_attr_md_power.attr, &dev_attr_ccif.attr, &dev_attr_handshake.attr,
-	&dev_attr_ccism.attr, &dev_attr_services.attr, &dev_attr_dispatch.attr, NULL,
+	&dev_attr_md_power.attr, &dev_attr_md_boot.attr, &dev_attr_ccif.attr,
+	&dev_attr_handshake.attr, &dev_attr_ccism.attr, &dev_attr_services.attr,
+	&dev_attr_dispatch.attr, NULL,
 };
 
 static const struct attribute_group md_group = { .attrs = md_attrs };
@@ -519,6 +607,24 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 			return dev_err_probe(dev, ret, "port dispatcher unavailable\n");
 		}
 	}
+	if (IS_ENABLED(CONFIG_OP6893_CCCI_NVRAM_CACHE)) {
+		md->cache = ccci_nvram_cache_create(dev, &md->smem);
+		if (IS_ERR(md->cache)) {
+			ret = PTR_ERR(md->cache);
+			dev_pm_domain_detach(md->domain, false);
+			device_unregister(md->lookup);
+			return dev_err_probe(dev, ret, "NVRAM cache geometry unavailable\n");
+		}
+	}
+	if (IS_ENABLED(CONFIG_OP6893_CCCI_MD_BOOT)) {
+		md->boot = ccci_md_boot_create(dev, md->ccif, md->dispatch, md->cache);
+		if (IS_ERR(md->boot)) {
+			ret = PTR_ERR(md->boot);
+			dev_pm_domain_detach(md->domain, false);
+			device_unregister(md->lookup);
+			return dev_err_probe(dev, ret, "MD boot owner unavailable\n");
+		}
+	}
 	platform_set_drvdata(pdev, md);
 	ret = devm_device_add_group(dev, &md_group);
 	if (ret) {
@@ -540,15 +646,7 @@ void ccci_md_platform_shutdown(struct platform_device *pdev)
 	if (!md)
 		return;
 	mutex_lock(&md->lock);
-	ret = ccci_port_dispatch_offline(md->dispatch);
-	if (!ret)
-		ret = ccci_service_endpoint_offline(md->services);
-	if (!ret)
-		ret = ccci_ccism_bridge_offline(md->bridge);
-	if (!ret && md->ccif && md->power.state == CCCI_MD_POWERED)
-		ret = ccci_ccif_stop(md->ccif);
-	if (!ret && md->power.state != CCCI_MD_INHERITED)
-		ret = ccci_md_power_off(&md->power);
+	ret = md_platform_off(md);
 	if (ret)
 		dev_warn(&pdev->dev, "MD shutdown held at %s: %d\n", md->power.step, ret);
 	mutex_unlock(&md->lock);

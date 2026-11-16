@@ -367,3 +367,16 @@ config OP6893_CCCI_NVRAM_CACHE
 	  and no region content is exported. Construction performs no I/O.
 	  Disabled by default.
 
+
+config OP6893_CCCI_MD_BOOT
+	bool "Build the gated op6893 MD CPU release owner"
+	depends on OP6893_CCCI_DISPATCH && OP6893_CCCI_NVRAM_CACHE && NVMEM
+	help
+	  Add the unique MD boot owner. Prepare is the ready gate: prepare the
+	  ordinary CCIF rings, map and first-clear the feature-36 cache, build
+	  typed runtime offers from the validated LK layout and reserve the
+	  connected FS backend plus real SCP lease. Release starts RX/handshake
+	  and then issues the same-board (6,0) MD CPU boot SMC exactly once.
+	  A service stop requires parent MD1 domain OFF readback as hardware
+	  evidence; RX closure, faults or generation changes are not evidence.
+	  No automatic action or sysfs trigger runs at probe. Disabled by default.
