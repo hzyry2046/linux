@@ -1,0 +1,44 @@
+{
+ "date": "2026-11-17",
+ "scope": "The unit's current Android boot image, captured read-only and adopted as the recovery image for returning from mainline experiments.",
+ "capture": {
+  "method": "adb exec-out dd if=/dev/block/sdc48, streamed to the host; no device-side file and no write to any partition",
+  "partition": "/dev/block/sdc48 (boot, 32 MiB = 65536 sectors)",
+  "truncation_note": "toybox dd writes its record summary to stdout, so the stream was cut to the exact partition size before hashing",
+  "sha256": "d8c9c35f35f405117a640692cf409250af8fe50c0f3601af071a37852ccd8847",
+  "bytes": 33554432,
+  "magic": "ANDROID!",
+  "header_version": 2,
+  "page_size": 2048,
+  "kernel_bytes": 21121546,
+  "ramdisk_bytes": 1325698,
+  "dtb_bytes": 210407,
+  "avb_footer": false
+ },
+ "identity_check": {
+  "image_kernel_version": "Linux version 4.19.325N-cip127-st11hzyry2046-g96ee6e0e2bfb-dirty (hzyry2046@origin) #1 SMP PREEMPT Tue Jul 21 14:44:19 UTC 2026",
+  "device_proc_version": "identical string read from /proc/version while Android was running",
+  "conclusion": "the captured partition is the image the unit is actually booting, not a stale copy"
+ },
+ "storage": {
+  "path": "/data/src/mainline/mt6893-direct/recovery/android-boot-current.img",
+  "mode": "0644",
+  "tracked_by_git": false,
+  "reason": "a 32 MiB vendor binary does not belong in the kernel tree; the hash above is the reference"
+ },
+ "supersedes": {
+  "previous_recovery_image": "evidence/ack-boot.img",
+  "previous_sha256": "455ed6cea037d6d6bd9af328d589ab39b8692edd4db2c3924e1f8da7b4722c88",
+  "note": "the older image stays in place because build.py uses it as the boot-image packing base; only the recovery role moves to the current image"
+ },
+ "pack_compatibility": {
+  "compatible": true,
+  "checks": "header_version 2, page 2048, no second stage, no recovery DTBO, header_size 1660, no AVB footer",
+  "note": "it would also satisfy pack.py's base requirements, but the packing base was deliberately not changed here"
+ },
+ "usage": [
+  "watchdog reset to reach fastboot when a flash is required",
+  "fastboot flash boot recovery/android-boot-current.img",
+  "fastboot reboot"
+ ]
+}

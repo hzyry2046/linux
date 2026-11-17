@@ -132,10 +132,22 @@ static int ccci_lk_inspect_probe(struct platform_device *pdev)
 	}
 	dev_info(dev, "LK metadata valid: version=%u tags=%u bytes=%u ccb=%u; modem not started\n",
 		 header.version, header.count, header.size, layout.ccb_present);
-	/* Names and sizes only: payloads stay uninterpreted and are wiped below. */
-	for (u32 i = 0; i < header.count; i++)
-		dev_info(dev, "LK tag[%u]=%s size=%u\n", i,
-			 (const char *)snapshot + workspace[i].offset, workspace[i].size);
+	/*
+	 * Names and sizes only: payloads stay uninterpreted and are wiped below.
+	 * The scalar tags are printed as one u32 because they are counts/sizes the
+	 * later stages must compare against, not opaque payload.
+	 */
+	for (u32 i = 0; i < header.count; i++) {
+		const char *tag = (const char *)snapshot + workspace[i].offset;
+		const u8 *value = snapshot + workspace[i].data;
+
+		if (workspace[i].size == 4 && ccci_lk_scalar_tag(tag))
+			dev_info(dev, "LK tag[%u]=%s size=4 value=%u\n", i, tag,
+				 get_unaligned_le32(value));
+		else
+			dev_info(dev, "LK tag[%u]=%s size=%u\n", i, tag,
+				 workspace[i].size);
+	}
 	if (IS_ENABLED(CONFIG_OP6893_CCCI_MD_PLATFORM) &&
 	    of_device_is_compatible(dev->of_node, "realme,op6893-modem-platform")) {
 		stage = "platform-owner";

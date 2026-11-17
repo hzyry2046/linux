@@ -1,0 +1,50 @@
+{
+ "date": "2026-11-17",
+ "scope": "Snapshot A/B, LK scalar tag values and the corrected picture of the fault address inside the MD image. Read-only device access; no firmware payload was dumped.",
+ "image": {
+  "dist": "dist/09e7591adc6f/boot.img",
+  "release": "7.3.0-op6893-d1-09e7591adc6f+",
+  "sha256": "4746faa5345530dce7876c5a27501895b653324fcacd5db72838e757923e53a4",
+  "adds": "scalar LK tag values in the boot log (no new sysfs, no payload)"
+ },
+ "snapshot_ab": {
+  "question": "does a stale NVRAM snapshot explain the MD fault?",
+  "frozen_snapshot": "/data/src/op6893-private/nvram-working-copy (extracted 2026-11-17 ~10:20)",
+  "live_snapshot": "/data/src/op6893-private/nvram-live-20261117 (extracted 2026-11-17 ~20:10)",
+  "difference": "11 files, all updated by the vendor stack after the first extraction",
+  "result": {
+   "fs_tx": 964,
+   "fs_tx_error": 0,
+   "ex_type": "0x1d",
+   "pc": "0x91823b66",
+   "address": "0x90d18620",
+   "sp": "0x24ab42d0",
+   "last_fs_operation": "CMPT_Read Z:\\NVRAM\\NVD_DATA\\MF04_003, offset 0x1bc size 0x17c",
+   "ccism": "state=1 ARMED, bridge_touched=0"
+  },
+  "conclusion": "identical outcome with both snapshots, so the snapshot age is not the cause; the fault is deterministic across three runs with two different snapshots and three different images"
+ },
+ "lk_scalars": {
+  "source": "boot log, allowlisted single-u32 tags only",
+  "values": {
+   "md1img": 33471260,
+   "hdr_count": 1,
+   "retrieve_num": 4,
+   "ccb_gear_id": 12,
+   "md1_smem_cahce_offset": 134217728,
+   "md_mpu_num": 9,
+   "free_in_kernel": 0
+  }
+ },
+ "interpretation": {
+  "image_size": "md1img is 33,471,260 bytes (31.92 MiB), matching the md1rom partition header size, so the loaded image spans the whole bank0 head",
+  "fault_addresses": "with the MD view base 0x90000000, pc is image+0x1823b66 (24.14 MiB) and the faulting address is image+0xd18620 (13.10 MiB); both are inside the 31.92 MiB image, so this is not an access past the loaded image",
+  "cache_md_base": "md1_smem_cahce_offset is 0x8000000, so the cached bank4 MD view is 0x40000000 + 0x8000000 = 0x48000000, exactly the value the driver publishes and exactly the vendor formula",
+  "mpu_table": "md_mpu_num is 9 and the tag is 216 bytes, so an entry is 24 bytes; the vendor struct _mpu_cfg is 20 bytes, which confirms the LK table is not that struct and must not be applied as if it were"
+ },
+ "not_done": [
+  "no modem firmware payload or code was dumped; only headers and scalar tags were read",
+  "the MD's read-only/writable segment split is not obtainable from kernel-side metadata, because LK owns that layout"
+ ],
+ "next_observation_point": "the vendor trace continues with UM12_005 after MF04_003, while this firmware faults instead; everything the AP supplies up to that point has been shown exact, so further progress needs MD-internal evidence rather than another AP-side guess"
+}

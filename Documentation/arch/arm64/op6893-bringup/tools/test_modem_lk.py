@@ -205,6 +205,28 @@ bool contains(const struct ccci_lk_region *r, u64 b, u64 n) {
         assert parse(long_chain, count=count) < 0
         print('PASS: synthetic SMEM/CCB, names, cycles, header/payload overlaps, truncated fields and reservation bounds')
 
+        # Only the allowlisted scalars are ever printed as a value.
+        scalar = tmp/'scalar.c'
+        scalar.write_text('''#include <assert.h>
+#include "ccci-lk.h"
+int main(void) {
+ assert(ccci_lk_scalar_tag("md1img"));
+ assert(ccci_lk_scalar_tag("md_mpu_num"));
+ assert(ccci_lk_scalar_tag("md1_smem_cahce_offset"));
+ assert(!ccci_lk_scalar_tag("md_mpu_inf"));
+ assert(!ccci_lk_scalar_tag("hdr_tbl_inf"));
+ assert(!ccci_lk_scalar_tag("retrieve0"));
+ assert(!ccci_lk_scalar_tag(""));
+ return 0;
+}
+''')
+        exe = tmp/'scalar'
+        subprocess.run(common + ['-I'+str(KERNEL/'drivers/misc/mediatek/ccci'), str(scalar),
+                                 str(KERNEL/'drivers/misc/mediatek/ccci/ccci-lk.c'),
+                                 '-o', str(exe)], check=True)
+        subprocess.run([str(exe)], check=True)
+        print('PASS: scalar tag allowlist prints values only for single-u32 tags')
+
         # Run the actual parser with exact-sized heap buffers under ASan/UBSan.
         fuzz = tmp/'fuzz.c'
         fuzz.write_text('''#include <stdlib.h>

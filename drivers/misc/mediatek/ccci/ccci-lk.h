@@ -24,4 +24,7 @@ int ccci_lk_parse(const struct ccci_lk_header *header, const void *data,
 		  struct ccci_lk_tag workspace[CCCI_LK_MAX_TAGS],
 		  struct ccci_lk_layout *layout);
 
+/* True for the allowlisted single-u32 tags; all other payloads stay opaque. */
+bool ccci_lk_scalar_tag(const char *name);
+
 #endif

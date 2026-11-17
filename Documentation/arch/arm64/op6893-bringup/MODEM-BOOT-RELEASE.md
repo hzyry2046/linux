@@ -380,3 +380,59 @@ MD 需要真实 NVRAM 内容或 bin-region 备份；按项目约束不导入。
 模型缺少诊断引入的 printk，SCP owner harness 仍断言“完全不存在 RX start”
 且仍从 `.c` 里取结构体。两者都已修好，并顺带修掉了发送忙路径上多读一次 AP
 寄存器的问题。
+
+### 恢复用的 Android 内核
+
+从 2026-11-17 起，回 Android 时刷的是**设备当前实际在跑的那张镜像**，而不是
+更早的 `evidence/ack-boot.img`：
+
+```
+/data/src/mainline/mt6893-direct/recovery/android-boot-current.img
+sha256 d8c9c35f35f405117a640692cf409250af8fe50c0f3601af071a37852ccd8847
+```
+
+它是用 `adb exec-out dd if=/dev/block/sdc48` 只读流式导出、再按分区实际大小
+（32 MiB）截断后取的；镜像里的内核版本串与运行中 `/proc/version` 完全一致，
+所以确认就是当前在用的那一张，不是陈旧副本。旧的 `ack-boot.img`
+（`455ed6ce…`）继续留在原处，因为 `build.py` 拿它当打包基底；只有**恢复角色**
+换成了当前镜像。
+
+注意 toybox 的 `dd` 会把记录统计写到 stdout，导出后必须按 65536×512 截断再
+校验，否则哈希会包含那几行文本。
+详见 `evidence/android-boot-recovery.json`。
+
+## 快照 A/B 与 LK 标量（2026-11-17，镜像 09e7591adc6f）
+
+**问题**：我们的 NVRAM 私有副本是时间点快照，设备上已有 11 个运行时文件被
+Android 更新；会不会是"数据过时"导致 MD 走到坏指针？
+
+**做法**：只读重新提取一份活体快照（`nvram-live-20261117`，453 文件，与冻结
+快照差 11 个），用同一放行流程各跑一次。
+
+**结果**：`tx=964`、`tx_error=0`、`ex_type=0x1d`、
+`pc=0x91823b66 addr=0x90d18620 sp=0x24ab42d0`、最后一条仍是
+`CMPT_Read MF04_003 offset=0x1bc size=0x17c`、CCISM 仍 `ARMED`
+`bridge_touched=0`——**完全一致**。所以快照新旧不是原因，故障在三份不同快照/
+镜像下都稳定复现。
+
+同时把 LK 的单 u32 标量标签打进了启动日志（只加白名单标签，不新增 sysfs、
+不打印任何载荷）：
+
+```
+md1img=33471260  hdr_count=1  retrieve_num=4  ccb_gear_id=12
+md1_smem_cahce_offset=134217728 (0x8000000)  md_mpu_num=9  free_in_kernel=0
+```
+
+三项直接结论：
+
+1. **镜像 31.92 MiB**（与 `md1rom` 分区头一致），而故障 `pc` 在镜像内
+   +24.14 MiB、故障地址在 +13.10 MiB，所以不是"访问超出已加载镜像"。
+2. **`cache_md_base` 得到独立确认**：`0x40000000 + 0x8000000 = 0x48000000`，
+   与驱动发布的值、与厂商 `ccci_md_mem_inf_prepare()` 的公式完全一致。
+3. **`md_mpu_num=9`、表 216 字节 ⇒ 每条 24 字节**，而厂商
+   `struct _mpu_cfg` 是 20 字节——这进一步说明 LK 那张表不是该结构，不能
+   当成"9 条区域"直接套用（本轮仍未写任何 EMI MPU 寄存器）。
+
+MD 的只读/可写段划分由 LK 决定，内核侧拿不到，因此"故障地址属于代码段还是
+数据段"这条无法用现有元数据判定。证据见
+`evidence/modem-snapshot-ab-and-lk-scalars.json`。

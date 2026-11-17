@@ -1,6 +1,27 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Bounded decoding only. Unknown tag payloads are neither interpreted nor logged. */
+#include <linux/kernel.h>
+
 #include "ccci-lk.h"
+
+/*
+ * Scalar LK tags: a single u32 count/size that a later stage compares against.
+ * Everything else stays an uninterpreted payload.
+ */
+static const char *const ccci_lk_scalars[] = {
+	"md1img", "hdr_count", "retrieve_num", "ccb_gear_id",
+	"md1_smem_cahce_offset", "md_mpu_num", "free_in_kernel",
+};
+
+bool ccci_lk_scalar_tag(const char *name)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(ccci_lk_scalars); i++)
+		if (!strcmp(name, ccci_lk_scalars[i]))
+			return true;
+	return false;
+}
 
 static bool ccci_lk_overlap(u32 a, u32 size_a, u32 b, u32 size_b)
 {
