@@ -388,7 +388,7 @@ int ccci_ccif_service_send(struct ccci_ccif *ccif, const void *packet, u32 size,
 {
 	const u8 *input = packet;
 	u8 *copy;
-	u32 channel, queue, index;
+	u32 channel, queue, index, busy;
 	int ret;
 
 	if (!ccif || !packet || size <= 20 || size > 20 + 0xd80 ||
@@ -422,10 +422,12 @@ int ccci_ccif_service_send(struct ccci_ccif *ccif, const void *packet, u32 size,
 	ret = ccci_ccif_rx_error(ccif->rx);
 	if (ret)
 		goto out;
-	if (readl(ccif->ap + 4) & BIT(queue)) {
+	/* One read of the AP busy word: it decides the send and feeds the log. */
+	busy = readl(ccif->ap + 4);
+	if (busy & BIT(queue)) {
 		ret = -EBUSY;
 		pr_info_ratelimited("ccci: service send deferred: channel=%u queue=%u busy=%#x\n",
-				    channel, queue, readl(ccif->ap + 4));
+				    channel, queue, busy);
 		goto out;
 	}
 	/* HIF owns sequence per channel; FS/RPC assert only while awaiting HS2. */

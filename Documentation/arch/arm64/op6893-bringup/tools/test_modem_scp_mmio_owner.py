@@ -246,11 +246,21 @@ def main():
     parser.add_argument('--dtb', type=Path, action='append', default=[])
     args = parser.parse_args()
     source = SOURCE.read_text()
-    assert "ccci_scp_receive_start(" not in source
-    assert not re.search(r"\breset_generation\s*=(?!=)", source)
+    # RX start and the reset generation are owned by the one-shot initial boot
+    # path only: the probe and the cfg/MMIO/IRQ branches exercised below must
+    # never start reception or arm a generation.
+    boot = extract(source, 'static ssize_t initial_boot_store(')
+    assert source.count("ccci_scp_receive_start(") == 1
+    assert boot.count("ccci_scp_receive_start(") == 1
+    assert source.count("owner->reset_generation = ") == 2
+    assert boot.count("owner->reset_generation = ") == 2
+    assert "owner->reset_generation = 1" in boot
+    assert "owner->reset_generation = 0" in boot
     helper = extract(source, 'static int ccci_scp_core_tcm_reserve(')
     assert not re.search(r'\b(readl|writel|memcpy_fromio|memcpy_toio|memset_io)\s*\(', helper)
-    code = (prefix + extract(source, 'struct ccci_scp_resource_owner {') + ';\n' +
+    # The owner structure moved to its own header; keep the same shape check.
+    owner_header = (K / 'drivers/misc/mediatek/ccci/ccci-scp-owner.h').read_text()
+    code = (prefix + extract(owner_header, 'struct ccci_scp_resource_owner {') + ';\n' +
             'static DEFINE_MUTEX(ccci_scp_resource_owner_lock);\n' +
             'static bool ccci_scp_resource_claimed;\n' + dependencies +
             extract(source, 'static void ccci_scp_resource_unclaim(') + '\n' +

@@ -19,6 +19,12 @@ static void *kmemdup(const void *p,size_t n,int flags){
  (void)flags;allocations++;if(alloc_fail)return NULL;void *v=malloc(n);assert(v);memcpy(v,p,n);return v;
 }
 static void kfree_sensitive(void *p){assert(p);frees++;free(p);}
+/* The sender reports deferred/failed transmit through printk; keep it silent. */
+__attribute__((unused)) static int test_printk(const char *fmt,...){(void)fmt;return 0;}
+#define pr_info(...) test_printk(__VA_ARGS__)
+#define pr_err(...) test_printk(__VA_ARGS__)
+#define pr_warn(...) test_printk(__VA_ARGS__)
+#define pr_info_ratelimited(...) test_printk(__VA_ARGS__)
 static void writel(u32 value,void *p){
  assert((p==ap_registers+4 && value==BIT(expected_queue)) ||
         (p==ap_registers+12 && value==expected_queue));

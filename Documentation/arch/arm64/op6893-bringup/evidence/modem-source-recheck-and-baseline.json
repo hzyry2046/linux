@@ -1,0 +1,67 @@
+{
+ "date": "2026-11-17",
+ "scope": "Post-reboot re-verification that the vendor NVRAM source was never written by this work, plus the baseline build of the committed tree. Read-only device access.",
+ "device": {
+  "state": "Android 16 (vendor 5.10 kernel), KernelSU root shell",
+  "serial": "IF7HHUAUVSHIGMJR",
+  "note": "the unit was rebooted by the operator before this check, so the vendor stack ran and updated its own runtime NVRAM"
+ },
+ "source_recheck": {
+  "method": "per-file sha256 of the four source trees on the device compared against the frozen private snapshot; two independent implementations (md-nvram-recheck.py and a fresh md-nvram-extract.py snapshot) agree",
+  "trees": [
+   "/mnt/vendor/nvdata/md",
+   "/mnt/vendor/protect_f/md",
+   "/mnt/vendor/protect_s/md",
+   "/mnt/vendor/nvcfg"
+  ],
+  "files_both_sides": 453,
+  "identical": 442,
+  "differing": 11,
+  "deltas": [
+   {"path": "Z/NVRAM/NVD_DATA/ER1E_000", "device_mtime": "2026-11-17 12:05:03", "bytes": 1424},
+   {"path": "Z/NVRAM/NVD_DATA/IM03_001", "device_mtime": "2026-11-17 12:05:03", "bytes": 128},
+   {"path": "Z/NVRAM/NVD_DATA/MF04_003", "device_mtime": "2026-11-17 19:46:36", "bytes": 824},
+   {"path": "Z/NVRAM/NVD_DATA/MT6K_004", "device_mtime": "2026-11-17 12:04:49", "bytes": 384},
+   {"path": "Z/NVRAM/NVD_DATA/NA77_014", "device_mtime": "2026-11-17 19:46:36", "bytes": 26544},
+   {"path": "Z/NVRAM/NVD_DATA/SS1A_011", "device_mtime": "2026-11-17 12:05:03", "bytes": 10072},
+   {"path": "X/ER1D_002", "device_mtime": "2026-11-17 12:05:03", "bytes": 6496},
+   {"path": "Y/ER1D_002", "device_mtime": "2026-11-17 12:05:03", "bytes": 6496},
+   {"path": "S/fg/old_fg_data", "device_mtime": "2026-11-17 19:41:28", "bytes": 216},
+   {"path": "S/sensor/gyro_bias.json", "device_mtime": "2026-11-17 19:42:42", "bytes": 63},
+   {"path": "S/sensor/gyro_temp.json", "device_mtime": "2026-11-17 19:42:42", "bytes": 104}
+  ],
+  "attribution": "every device mtime is later than the snapshot mtimes (the latest snapshot mtime is 2026-11-17 10:20), so the deltas are writes performed by the vendor stack during the Android boots that happened after extraction; nine of them keep their exact size, which is consistent with in-place counter updates",
+  "our_writes": "none: every experiment wrote only to /tmp/op6893-fs on the device, and the extraction path uses adb exec-out with no device-side staging file",
+  "conclusion": "the source was not written by this work; it is a live snapshot that the vendor modem keeps updating, so the frozen copy is a point-in-time snapshot rather than a permanent mirror"
+ },
+ "baseline_build": {
+  "purpose": "prove the committed tree builds with the experimental modem options disabled",
+  "dist": "dist/f0b0f962e615/boot.img",
+  "release": "7.3.0-op6893-d1-f0b0f962e615+",
+  "sha256": "26a9f86d2f9b5079e334bacafae70616d2551b17d71b5c51e5ae1e543cc57453",
+  "disabled_options_confirmed": [
+   "OP6893_CCCI_MD_PLATFORM",
+   "OP6893_CCCI_MD_BOOT",
+   "OP6893_CCCI_SERVICES",
+   "OP6893_CCCI_DISPATCH",
+   "OP6893_CCCI_HANDSHAKE",
+   "OP6893_CCCI_SMEM"
+  ],
+  "errors_in_log": 0,
+  "note": "out/.config now holds the baseline configuration again, matching the earlier restore convention"
+ },
+ "operator_tooling": {
+  "location": "/data/src/mainline/mt6893-direct (not a git repository, so site-specific paths and the serial stay out of the kernel tree)",
+  "scripts": [
+   "md-release-cycle.py: SysRq reset, wait for SSH, push the marked private working copy, the runner modules and optionally the audited policy",
+   "md-release-run.sh: on-device probe that pins SCP, powers the MD, runs the explicit runner with both opt-in traces and prints the state",
+   "md-rpc-policy.py: derives the private policy from the audited getprop export; reproduces the hardware-tested policy byte-identically (34 facts: 25 present, 9 proven absent)",
+   "md-nvram-extract.py: read-only adb exec-out tar into a new snapshot with marker and manifest; refuses unsafe members and never writes to the source",
+   "md-nvram-recheck.py: live-versus-snapshot comparison with device mtimes so a delta is attributed rather than assumed"
+  ]
+ },
+ "not_claimed": [
+  "that the modem reaches HS2 or radio readiness",
+  "that the current snapshot equals the live NVRAM at any later time"
+ ]
+}

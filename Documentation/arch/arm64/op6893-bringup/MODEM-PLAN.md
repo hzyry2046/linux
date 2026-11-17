@@ -1,16 +1,23 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 # op6893 基带：内核对比与搭建计划
 
-更新：2026-11-16。SCP常驻/READY1/awake与一次MD-invalid已实测；
-MD继承ON接管、冷上电及普通CCIF prepare/stop/off已在8ec93b17bbb5实测。
-普通CCIF接收、runtime协商/回复与有状态HS1/HS2 consumer已离线实现验证，
-见[R7.3](MODEM-RUNTIME-HANDSHAKE.md)。随后增加SCP client与后置CCISM core，
-见[R7.4](MODEM-CCISM.md)。CCIF2/system 与服务 dispatcher 已完成离线连接，
-见[R7.8](MODEM-PORT-DISPATCH.md)。本机 RPC 事实、用户应答与 typed payload 已离线接续，见 R7.9。
-cache owner、32k 板级事实、ready gate 与唯一 CPU 放行入口已离线接续，见
-[R7.10](MODEM-BOOT-RELEASE.md)。下一组是私有 FS 工作副本/真实用户策略准备，
-然后合并首次 MD 放行、HS1/runtime/HS2、后置 CCISM 与停止实测。
-没有 MD CPU release caller 或真实 HS1/HS2，不为 dormant 代码单独刷机。
+更新：2026-11-17。**已真机实测**：SCP 常驻/READY1/awake；MD 继承 ON 接管与
+冷上电；普通 CCIF prepare/stop/off；唯一一次 `(6,0)` MD CPU 放行；HS1 被接受、
+runtime 发布、endpoint arm；真实 NVRAM 下的完整 FS 扫描（859 请求 / 964 次
+发送 / `tx_error=0` / 105 个路径 / 84 次写回）；审计后的用户 RPC 属性应答。
+**当前边界**：MD 在读完 `Z:\NVRAM\NVD_DATA\MF04_003` 之后抛出自身的
+`MPU_NOT_ALLOW`（`ex_type=0x1d`）致命异常，HS2 尚未到达，因此没有 CCISM
+后置协议、没有 radio READY。该边界已排除 FS 应答形状、真实 NVRAM 缺失、
+属性查询、feature 38、首启 SMEM 内容与 EMI MPU 表，详见
+[R7.10](MODEM-BOOT-RELEASE.md) 与
+`evidence/modem-rpc-policy-live-boot.json`。
+
+此前各阶段：普通 CCIF 接收、runtime 协商/回复与有状态 HS1/HS2 consumer
+见 [R7.3](MODEM-RUNTIME-HANDSHAKE.md)；SCP client 与后置 CCISM core 见
+[R7.4](MODEM-CCISM.md)；CCIF2/system 与服务 dispatcher 见
+[R7.8](MODEM-PORT-DISPATCH.md)；本机 RPC 事实与用户应答见 R7.9；
+cache owner、32k 板级事实、ready gate 与唯一 CPU 放行入口见 R7.10。
+不为 dormant 代码单独刷机。
 AI辅助源码分析与实现。
 SID3 shutdown 对照及启动电压契约见 [供电生命周期](MODEM-RAILS.md)。
 图形接续事项保存在 [GRAPHICS-TODO.md](GRAPHICS-TODO.md)，先推进基带框架。

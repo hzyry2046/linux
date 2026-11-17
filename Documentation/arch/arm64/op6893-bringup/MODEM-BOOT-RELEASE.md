@@ -351,3 +351,24 @@ MD 需要真实 NVRAM 内容或 bin-region 备份；按项目约束不导入。
   125 MB，而 rootfs 为 121 MB，重建并安装新 rootfs 需要先删掉保留的回滚
   镜像，因此本轮没有为仅含诊断开关的 runner 变化重建 rootfs，跟踪开关是从
   `/tmp/op6893-modem` 覆盖运行的。
+
+## 固化后的操作入口（2026-11-17）
+
+此前每次实验都依赖 `/tmp` 里的临时脚本，开发机重启后就丢失了。现在这些
+站点相关的操作脚本放在**非 git** 的构建工作区
+`/data/src/mainline/mt6893-direct`，内核树里只保留文档和通用测试：
+
+| 脚本 | 作用 |
+|---|---|
+| `md-release-cycle.py` | SysRq 复位 → 等 SSH → 推送标记过的私有工作副本、runner 模块、可选 policy |
+| `md-release-run.sh` | 设备侧放行探针：pin/start SCP → takeover/on → 带两个跟踪开关跑 runner → 打印全部状态 |
+| `md-rpc-policy.py` | 从审计过的 getprop 导出生成私有 policy（可复现上机用的 34 条事实：25 有值 + 9 已核实缺失） |
+| `md-nvram-extract.py` | 只读 `adb exec-out tar` 生成新快照 + 标记 + 清单，拒绝不安全成员，从不写回源 |
+| `md-nvram-recheck.py` | 活体源与快照逐文件比对，并打印设备侧 mtime/size 以便归因 |
+
+同时确认：提交后的树在关闭全部实验选项下仍能构建
+（`dist/f0b0f962e615`，SHA256
+`26a9f86d2f9b5079e334bacafae70616d2551b17d71b5c51e5ae1e543cc57453`，
+`MD_PLATFORM/MD_BOOT/SERVICES/DISPATCH/HANDSHAKE/SMEM` 全部未启用，
+构建日志 0 error），`out/.config` 也随之回到基线配置。
+详见 `evidence/modem-source-recheck-and-baseline.json`。

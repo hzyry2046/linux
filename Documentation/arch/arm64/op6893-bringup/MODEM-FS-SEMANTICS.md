@@ -409,3 +409,32 @@ remaining answers are a protocol-legal "not supported" that the MD itself
 declared optional. Missing runtime features are therefore not a violation, and
 completing them is not the next required step.
 
+
+## Snapshot re-check and reproducible extraction (2026-11-17)
+
+The extraction and the comparison are now reproducible scripts kept in the
+non-git build workspace `/data/src/mainline/mt6893-direct`, so site-specific
+paths and the serial never enter the kernel tree:
+
+- `md-nvram-extract.py` streams each source tree with `adb exec-out tar` into a
+  new snapshot directory, refuses absolute or `..` members and non-regular
+  members, strips the source directory name so the layout is `Z/X/Y/S`, and
+  writes the marker plus a per-file `manifest.json`. Nothing is staged on the
+  device and nothing is written back.
+- `md-nvram-recheck.py` compares the live trees with a snapshot and prints the
+  device mtime and size for every difference, so a delta is attributed instead
+  of assumed.
+
+After the operator rebooted the unit, the live source was re-checked against
+the frozen snapshot: 453 files on both sides, 442 byte-identical, 11 different.
+Every differing file has a device mtime later than the snapshot (the newest
+snapshot mtime is 10:20, the device files are 12:04-19:46), and nine of them
+keep their exact byte size, which is consistent with the vendor modem updating
+its own counters while Android runs. A freshly produced snapshot shows the same
+11 deltas, so the two implementations agree.
+
+The practical consequence: this work made no writes to the source, but the
+source is a live target that the vendor stack keeps updating. The private copy
+is a point-in-time snapshot. A future experiment either accepts that snapshot
+or re-extracts; it must not treat the snapshot as a permanent mirror.
+See `evidence/modem-source-recheck-and-baseline.json`.

@@ -1,5 +1,18 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-17 MD首次真机放行与真实数据实测：SCP常驻→`takeover/on`冷上电→
+`prepare`门→唯一一次`(6,0)`放行（`boot_ret=0`）→HS1被接受、runtime发布、
+endpoint arm；随后在真实NVRAM私有副本上完成整轮FS扫描（859请求/964发送/
+`tx_error=0`/105路径/84写回），审计后的用户RPC属性应答（25条有值+9条已核实
+缺失）使同一流程从88次发送推进到964次。当前边界是MD自身的
+`MPU_NOT_ALLOW`（`ex_type=0x1d`）致命异常，HS2未到达，因此**蜂窝仍未启用**、
+无CCISM后置协议、无注册或数据面。该边界已排除FS形状、真实NVRAM、属性查询、
+feature 38、首启SMEM与EMI MPU表；异常记录按记录内核心数解码，LK几何以只读
+`lk_regions` 查证。见[放行与异常边界](MODEM-BOOT-RELEASE.md)、
+`evidence/modem-rpc-policy-live-boot.json` 与
+`evidence/modem-source-recheck-and-baseline.json`（源未被写入：453文件中442
+逐字节一致，11个差异全部是Android自身在提取后更新的运行时项）。
+
 2026-11-16 MD放行入口离线接续：新增默认关闭的cache唯一owner（首次清零、
 重连不清零）、`external-32k`事实读取与显式板级无晶体声明、ready gate和
 唯一一次`(6,0)`放行；停止以MD1 OFF六寄存器读回为证据，PCM bit仅诊断。
@@ -210,8 +223,8 @@ USB/Wi-Fi SSH 和外置 rootfs 正常；MD/SCP 尚未启动。详见 [R3](MODEM-
 | 摄像头 / ISP | 未启用 | 传感器型号、总线、供电、时钟、ISP 管线待调查 |
 | RTC / 持久时间 | 未启用 | RTC_CLASS 关闭；不能用启动日志时间作为准确实时时钟 |
 | SCP | 短时常驻/awake实测 | READY1、持续CPU消费、awake三次配对、一次MD-invalid传输；STOP双核SET/GIC五路屏蔽 | 无APCCCI状态回复；未验证长期运行、core1独立运行或完整恢复 | [常驻接入](MODEM-SCP-RUNTIME.md) |
-| MD平台与普通CCIF初始化 | 部分，实测 | LK接管、一次冷上电/关电、32环格式化和双视图SRAM校验、停止后GIC屏蔽 | IRQ/worker/HS1解码仅离线验证；无门铃/现场包、热重启、CCISM或MD CPU启动 | [CCIF](MODEM-CCIF.md) |
-| modem / 蜂窝 / GNSS | 未启用 | MD平台和CCIF初始化已实测，SCP初始启动与RX已实测 | FSM/CCISM后端仅离线验证；服务门控、MD启停与HS1/HS2真机待完成 | [计划](MODEM-PLAN.md) |
+| MD平台与普通CCIF初始化 | 部分，实测 | LK接管、冷上电/关电、唯一一次`(6,0)`放行、HS1接受、runtime发布、真实CCIF RX/TX（964次发送、`tx_error=0`）、停止后GIC屏蔽 | HS2未到达；无热重启、无CCISM后置协议、无注册/数据面；MD异常为自身`MPU_NOT_ALLOW` | [CCIF](MODEM-CCIF.md)、[放行](MODEM-BOOT-RELEASE.md) |
+| modem / 蜂窝 / GNSS | 未启用 | MD平台、CCIF、FS与用户RPC已真机跑通到HS1之后；真实NVRAM扫描完整 | MD在`MF04_003`之后抛`MPU_NOT_ALLOW`，HS2/CCISM/注册/数据面均未开始；不代表可打电话或上网 | [计划](MODEM-PLAN.md) |
 | NFC / 指纹 / 振动 / IMU 等传感器 | 未验证、未建立支持 | 需逐项识别本机硬件及资源，不能借用同品牌另一机型结论 |
 | UFS 写入、USB host、运行时自动挂起 | 未验证 | 目前测试策略不覆盖这些行为 |
 | pstore 故障恢复链路 | 历史不可靠，非保证能力 | 用户指出 fastboot oem peek 可读保留内存；不能把无 pstore 当作内核未执行的证明 |
