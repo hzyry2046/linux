@@ -668,7 +668,8 @@ static ssize_t md_at_show(struct device *dev, struct device_attribute *attr, cha
 	if (ret < 0)
 		return ret;
 	used = ret;
-	ret = ccci_md_at_status(md->at, buf + used);
+	/* sysfs_emit() requires a page-aligned buffer, so append with a size. */
+	ret = ccci_md_at_status(md->at, buf + used, PAGE_SIZE - used);
 	if (ret < 0)
 		return ret;
 	return used + ret;

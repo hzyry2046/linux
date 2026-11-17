@@ -8,6 +8,7 @@
 #include <linux/completion.h>
 #include <linux/device.h>
 #include <linux/fs.h>
+#include <linux/kernel.h>
 #include <linux/kref.h>
 #include <linux/miscdevice.h>
 #include <linux/mutex.h>
@@ -330,14 +331,15 @@ static const struct file_operations at_fops = {
 	.llseek = noop_llseek,
 };
 
-ssize_t ccci_md_at_status(struct ccci_md_at *at, char *buf)
+/* Explicit size: this is appended after another line, so buf is not page aligned. */
+ssize_t ccci_md_at_status(struct ccci_md_at *at, char *buf, size_t size)
 {
 	unsigned long flags;
 	u32 queued;
 	int error;
 	bool hs2, stopped;
 
-	if (!at)
+	if (!at || !buf || !size)
 		return -EOPNOTSUPP;
 	spin_lock_irqsave(&at->ring_lock, flags);
 	queued = at_queued(at);
@@ -345,11 +347,11 @@ ssize_t ccci_md_at_status(struct ccci_md_at *at, char *buf)
 	hs2 = at->hs2;
 	stopped = at->stopped;
 	spin_unlock_irqrestore(&at->ring_lock, flags);
-	return sysfs_emit(buf,
-			  "open=%u hs2=%u stopped=%u error=%d queued=%u rx_frames=%u rx_bytes=%u rx_dropped=%u tx_frames=%u tx_bytes=%u tx_error=%d\n",
-			  at->open_file ? 1 : 0, hs2, stopped, error, queued,
-			  at->rx_frames, at->rx_bytes, at->rx_dropped,
-			  at->tx_frames, at->tx_bytes, at->tx_error);
+	return scnprintf(buf, size,
+			 "open=%u hs2=%u stopped=%u error=%d queued=%u rx_frames=%u rx_bytes=%u rx_dropped=%u tx_frames=%u tx_bytes=%u tx_error=%d\n",
+			 at->open_file ? 1 : 0, hs2, stopped, error, queued,
+			 at->rx_frames, at->rx_bytes, at->rx_dropped,
+			 at->tx_frames, at->tx_bytes, at->tx_error);
 }
 
 static void at_free(struct kref *refs)

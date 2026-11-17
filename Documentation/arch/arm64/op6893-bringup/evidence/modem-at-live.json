@@ -1,0 +1,40 @@
+{
+ "date": "2026-11-17",
+ "scope": "First live AT dialogue with the MD over the AT/MUX byte pipe. The AP sends commands, the MD answers with its own AT stack.",
+ "image": {
+  "dist": "dist/c96a4caab4b4/boot.img",
+  "release": "7.3.0-op6893-d1-c96a4caab4b4+",
+  "sha256": "adbea79e0405f836a311d33fdb4f0523c405c2b25658b0fcefb695b57e9209a1",
+  "flashed": true
+ },
+ "link": {
+  "handshake": "first run: sabm=1 ua=1 (the MD answers a SABM with its own SABM, so both directions settle); later runs: sabm=0 ua=0 because the MD is already established and ignores a duplicate SABM",
+  "md_to_ap_before_sabm": "raw AT text, not 0710 framed: e.g. +EIMSGEO: 100,1,\"\",... and +EWIFIRSSITHRCFG: 0,4,-85,-88,-75,-78",
+  "md_to_ap_after_sabm": "the echo arrives 0710 framed (UIH), the AT answers arrive as raw text (+CSQ: 99, 99 / OK), so the client demultiplexes both shapes from one stream",
+  "queue": "5, matching both the vendor DATA_AT_CMD_Q table and the frames the MD actually sent"
+ },
+ "first_dialogue": {
+  "AT": "OK",
+  "AT+CSQ": "+CSQ: 99, 99 / OK",
+  "AT+CPIN?": "ERROR",
+  "AT+CREG?": "+CREG: 3,0,\"0000\",\"00FFFFFFF\",0,0,0 / OK",
+  "AT+CFUN?": "+CFUN: 0 / OK",
+  "AT+COPS?": "+COPS: 0 / OK",
+  "AT+CGATT?": "+CGATT: 0 / OK"
+ },
+ "interpretation": {
+  "channel": "the AT transport works end to end: the AP writes 0710 UIH frames and the MD answers",
+  "state": "the modem reports minimum functionality (CFUN 0), no operator, no PS attach and no signal, and registration is denied (CREG stat 3)",
+  "not_surprising": "there is no SIM in the slot (AT+CPIN? ERROR), so denial is expected; the point of this run is that the transport and the MD AT stack are alive"
+ },
+ "pipe_counters_after_dialogue": "open=0 hs2=1 error=0 queued=0 rx_frames=124 rx_bytes=665 rx_dropped=0 tx_frames=31 tx_bytes=330 tx_error=0",
+ "fixes_found_on_hardware": [
+  "sysfs_emit() requires a page-aligned buffer, so appending the pipe line at an offset silently produced nothing; the status now uses scnprintf with an explicit size",
+  "the client assumed a framed MD-to-AP direction; it must demultiplex 0710 frames and raw AT text from the same stream",
+  "a late answer leaked into the next command, so each command now discards queued input before sending"
+ ],
+ "not_claimed": [
+  "any radio capability: no SIM, no attach, no data",
+  "that the MD's 0710 implementation matches the codec beyond this dialogue"
+ ]
+}

@@ -1,0 +1,43 @@
+{
+ "date": "2026-11-17",
+ "scope": "Radio readiness on mainline: the MD answers AT, enables full functionality, reads the SIM and registers on the network. This is the first registration result of the bring-up.",
+ "image": {
+  "dist": "dist/c96a4caab4b4/boot.img",
+  "release": "7.3.0-op6893-d1-c96a4caab4b4+",
+  "sha256": "adbea79e0405f836a311d33fdb4f0523c405c2b25658b0fcefb695b57e9209a1",
+  "flashed": true
+ },
+ "prerequisite_fix": {
+  "symptom": "the first AT round ended when the FS/RPC runner exited on an unaudited property",
+  "cause": "the MD asked for ro.oppo.operator over RPC (op 0x400f) and the policy had no audited answer, so the backend failed closed and its endpoint close aborted the whole generation with -EPIPE",
+  "verification": "the complete, unfiltered getprop dump already held for this device (1625 keys, including ro.product.device=op6893) contains no ro.oppo.* key at all",
+  "action": "ro.oppo.operator added to the audited OBSERVED set as proven absent; the policy is now 35 facts, 25 present and 10 proven absent",
+  "note": "a live getprop re-check on Android is still pending; the evidence used is the full dump from this build"
+ },
+ "sequence": [
+  "AT -> OK",
+  "AT+CFUN? -> +CFUN: 0 (minimum functionality)",
+  "AT+CFUN=1 -> OK plus a URC burst: +ESMLSTATUS, +ECEMODE, +ECEVDP, +EHVOLTE, +ECAPABILITY, +EPOK, +ECT3G, +EUSIM, +ESIMECC",
+  "AT+CPIN? -> +CPIN: READY",
+  "AT+CSQ -> +CSQ: 17, 99",
+  "AT+COPS=? -> (2,\"CHN-CT\",\"CT\",\"46011\",7) current, plus CMCC/46015/CU-GSM forbidden"
+ ],
+ "final_state": {
+  "AT+CEREG?": "+CEREG: 3,1,\"9A17\",\"03C341C3\",7,0,0",
+  "interpretation": "EPS registration status 1 = registered on the home network, TAC 0x9A17, cell 0x03C341C3, AcT 7 = LTE",
+  "AT+CGATT?": "+CGATT: 1 (PS attached)",
+  "AT+COPS?": "+COPS: 0,0,\"CHN-CT\",7",
+  "AT+CSQ": "+CSQ: 17, 99",
+  "AT+CREG?": "+CREG: 3,0,\"0000\",\"00FFFFFFF\",0,0,0",
+  "cs_note": "CS registration stays denied, which is expected for an LTE-only attach with no CS fallback configured; the EPS domain is registered"
+ },
+ "not_claimed": [
+  "any data plane: no CCMNI netdev and no CCB channels exist, so no PDP context can carry traffic",
+  "that AT+CGACT would succeed",
+  "voice or SMS"
+ ],
+ "next": [
+  "CCB control area plus the CCMNI netdev are the two missing pieces for data",
+  "a live getprop re-check for ro.oppo.operator when Android is next up"
+ ]
+}

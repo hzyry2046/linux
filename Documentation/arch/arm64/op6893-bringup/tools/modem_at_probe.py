@@ -27,6 +27,32 @@ class AtError(RuntimeError):
     """Transport or protocol failure; messages carry no payload text."""
 
 
+def _pump(buffer, frames_out, text_out):
+    """Split a mixed stream: 0710 frames start with a flag, the rest is AT text.
+
+    The same-board MD frames its echo but sends the AT answers as raw text, so
+    both shapes must be handled from one stream. Returns the unconsumed tail.
+    """
+    while buffer:
+        if buffer[0] == mux.FLAG:
+            end = buffer.find(bytes((mux.FLAG,)), 1)
+            if end < 0:
+                return buffer
+            try:
+                frames_out.append(mux.decode(buffer[:end + 1]))
+            except mux.MuxError:
+                text_out += buffer[:end + 1]
+            buffer = buffer[end + 1:]
+        else:
+            nxt = buffer.find(bytes((mux.FLAG,)))
+            if nxt < 0:
+                text_out += buffer
+                return b''
+            text_out += buffer[:nxt]
+            buffer = buffer[nxt:]
+    return b''
+
+
 class FdReader:
     """select/read wrapper so the same state machine runs on a real fd or a model."""
 
@@ -53,26 +79,73 @@ def _drain(reader, buffer, deadline):
         if not chunk:
             raise AtError('endpoint closed')
         buffer += chunk
-        got, buffer = mux.frames(buffer)
-        out.extend(got)
-        if got:
+        if len(buffer) >= 4:
             break
     return out, buffer
 
 
+def _discard(reader, quiet):
+    """Drop already-queued bytes so a late answer cannot answer the next command."""
+    deadline = time.monotonic() + quiet
+    dropped = 0
+    while time.monotonic() < deadline:
+        ready, _, _ = select.select([reader], [], [],
+                                    max(0.0, deadline - time.monotonic()))
+        if not ready:
+            break
+        chunk = reader.read(READ_MAX)
+        if not chunk:
+            break
+        dropped += len(chunk)
+        deadline = time.monotonic() + quiet
+    return dropped
+
+
+def _split(buffer, frames):
+    """Pump the raw buffer into frames plus raw text: (text, unconsumed tail)."""
+    text = bytearray()
+    tail = _pump(buffer, frames, text)
+    return bytes(text), tail
+
+
+def _take_lines(text, lines):
+    """Extract complete printable lines; keep the unterminated tail."""
+    while b'\n' in text:
+        raw, text = text.split(b'\n', 1)
+        line = mux.printable(raw.replace(b'\r', b''), LINE_MAX).strip('.')
+        if line:
+            lines.append(line)
+    return text
+
+
 def establish(reader, write, timeout):
-    """SABM on DLCI 0, then wait for UA. Any DM is a refusal, not a retry."""
+    """0710 establishment is symmetric: send SABM, answer the peer's SABM, wait.
+
+    The same-board MD sends its own SABM rather than a UA, so both directions
+    are tracked separately and reported; DM is a refusal, never a retry.
+    """
     write(mux.encode(0, mux.CONTROL_SABM))
     deadline = time.monotonic() + timeout
     buffer = b''
+    seen_sabm = seen_ua = False
     while time.monotonic() < deadline:
         got, buffer = _drain(reader, buffer, deadline)
+        _text, buffer = _split(buffer, got)
         for frame in got:
-            if frame.dlci == 0 and frame.control == mux.CONTROL_UA:
-                return
-            if frame.dlci == 0 and frame.control == mux.CONTROL_DM:
+            if frame.dlci != 0:
+                continue
+            if frame.control == mux.CONTROL_SABM:
+                seen_sabm = True
+                write(mux.encode(0, mux.CONTROL_UA))
+            elif frame.control == mux.CONTROL_UA:
+                seen_ua = True
+            elif frame.control == mux.CONTROL_DM:
                 raise AtError('modem refused the control channel')
-    raise AtError('no UA within the deadline')
+        if seen_sabm and seen_ua:
+            return {'sabm': True, 'ua': True}
+    # Silence is reported, not invented: the caller decides what to do with it,
+    # because an already-established MD ignores a duplicate SABM.
+    return {'sabm': seen_sabm, 'ua': seen_ua}
 
 
 def command(reader, write, text, timeout):
@@ -81,22 +154,21 @@ def command(reader, write, text, timeout):
         raise AtError('command length out of range')
     if any(not 0x20 <= ord(char) < 0x7f for char in text):
         raise AtError('command must be printable ASCII')
+    _discard(reader, 0.2)
     write(mux.encode(0, mux.CONTROL_UIH, (text + '\r').encode('ascii')))
     deadline = time.monotonic() + timeout
     buffer = b''
+    text = b''
     lines = []
     while time.monotonic() < deadline:
         got, buffer = _drain(reader, buffer, deadline)
+        chunk, buffer = _split(buffer, got)
+        text += chunk
         for frame in got:
-            if frame.dlci != 0 or frame.control != mux.CONTROL_UIH:
-                continue
-            for line in mux.printable(frame.payload, LINE_MAX).split('.'):
-                if not line:
-                    continue
-                lines.append(line)
-                if line in ('OK', 'ERROR', '+CME ERROR', 'NO CARRIER'):
-                    return lines
-        if got and not lines:
+            if frame.dlci == 0 and frame.control == mux.CONTROL_UIH:
+                text += frame.payload
+        text = _take_lines(text, lines)
+        if any(line in ('OK', 'ERROR', '+CME ERROR', 'NO CARRIER') for line in lines):
             return lines
     return lines
 
@@ -104,7 +176,8 @@ def command(reader, write, text, timeout):
 class ModelModem:
     """In-memory stand-in for --self-test only; it is not the MD."""
 
-    def __init__(self):
+    def __init__(self, send_sabm=False):
+        self.send_sabm = send_sabm
         self.inbox = bytearray()
         self.outbox = bytearray()
         self.established = False
@@ -118,6 +191,8 @@ class ModelModem:
             if frame.control == mux.CONTROL_SABM:
                 self.established = True
                 self.outbox += mux.encode(0, mux.CONTROL_UA)
+                if self.send_sabm:
+                    self.outbox += mux.encode(0, mux.CONTROL_SABM)
             elif frame.control == mux.CONTROL_UIH and self.established:
                 text = frame.payload.decode('ascii', 'replace').strip()
                 self.commands.append(text)
@@ -138,9 +213,8 @@ class ModelModem:
 
 
 def self_test():
-    model = ModelModem()
-    rfd, wfd = os.pipe()
-    try:
+    def run(model):
+        rfd, wfd = os.pipe()
         reader = FdReader(rfd)
 
         def write(data):
@@ -149,25 +223,81 @@ def self_test():
             if reply:
                 os.write(wfd, reply)
 
-        establish(reader, write, 1.0)
-        assert model.established
-        assert command(reader, write, 'AT', 1.0) == ['OK']
-        assert command(reader, write, 'AT+CSQ', 1.0) == ['+CSQ: 20,99', 'OK']
-        assert command(reader, write, 'AT+CREG?', 1.0) == ['+CREG: 0,2', 'OK']
-        assert command(reader, write, 'AT+NOPE', 1.0) == ['ERROR']
-        assert model.commands == ['AT', 'AT+CSQ', 'AT+CREG?', 'AT+NOPE']
-        for bad in ('', 'AT\x01', 'A' * 300):
-            try:
-                command(reader, write, bad, 1.0)
-            except AtError:
-                pass
-            else:
-                raise AssertionError('accepted an invalid command')
+        summary = establish(reader, write, 1.0)
+        return summary, reader, write, rfd, wfd
+
+    # The MD answers with UA: the plain case.
+    model = ModelModem()
+    summary, reader, write, rfd, wfd = run(model)
+    assert summary == {'sabm': False, 'ua': True} and model.established
+    assert command(reader, write, 'AT', 1.0) == ['OK']
+    assert command(reader, write, 'AT+CSQ', 1.0) == ['+CSQ: 20,99', 'OK']
+    assert command(reader, write, 'AT+CREG?', 1.0) == ['+CREG: 0,2', 'OK']
+    assert command(reader, write, 'AT+NOPE', 1.0) == ['ERROR']
+    assert model.commands == ['AT', 'AT+CSQ', 'AT+CREG?', 'AT+NOPE']
+    for bad in ('', 'AT\x01', 'A' * 300):
+        try:
+            command(reader, write, bad, 1.0)
+        except AtError:
+            pass
+        else:
+            raise AssertionError('accepted an invalid command')
+
+    # A silent peer is reported honestly instead of being treated as ready.
+    class Silent(ModelModem):
+        def write(self, data):
+            pass
+
+    rfd, wfd = os.pipe()
+    try:
+        summary = establish(FdReader(rfd), lambda data: None, 0.2)
+        assert summary == {'sabm': False, 'ua': False}
     finally:
         os.close(rfd)
         os.close(wfd)
-    print('PASS: AT client state machine: SABM/UA, UIH round-trip, response lines,')
-    print('      ERROR termination and command validation (in-memory model only)')
+
+    # The MD sends its own SABM, as this board does: both directions settle.
+    model = ModelModem(send_sabm=True)
+    summary, reader, write, rfd, wfd = run(model)
+    assert summary == {'sabm': True, 'ua': True}
+    assert command(reader, write, 'AT', 1.0) == ['OK']
+
+    os.close(rfd)
+    os.close(wfd)
+    print('PASS: AT client state machine: symmetric SABM/UA, UIH round-trip,')
+    print('      response lines, ERROR termination and command validation')
+
+
+def dump(device, seconds, hex_bytes=0, sabm=False, send=None):
+    """Read-only view of what the MD sends: dlci, control and a bounded text."""
+    fd = os.open(device, os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC)
+    reader = FdReader(fd)
+    buffer = b''
+    seen = bytearray()
+    deadline = time.monotonic() + seconds
+    try:
+        if sabm:
+            os.write(fd, mux.encode(0, mux.CONTROL_SABM))
+            sys.stdout.write('sent SABM\n')
+            time.sleep(0.3)
+        if send is not None:
+            os.write(fd, mux.encode(0, mux.CONTROL_UIH, (send + '\r').encode('ascii')))
+            sys.stdout.write('sent UIH %r\n' % send)
+        while time.monotonic() < deadline:
+            got, buffer = _drain(reader, buffer, min(deadline, time.monotonic() + 0.5))
+            seen += buffer[len(buffer) - len(buffer):]
+            for frame in got:
+                sys.stdout.write('dlci=%d control=0x%02x len=%d text=%r\n'
+                                 % (frame.dlci, frame.control, len(frame.payload),
+                                    mux.printable(frame.payload)))
+    finally:
+        os.close(fd)
+    if buffer:
+        sys.stdout.write('tail=%d bytes unparsed\n' % len(buffer))
+        if hex_bytes:
+            head = buffer[:hex_bytes]
+            sys.stdout.write('hex=%s\n' % ' '.join('%02x' % byte for byte in head))
+    return 0
 
 
 def main(argv=None):
@@ -178,20 +308,35 @@ def main(argv=None):
     parser.add_argument('--timeout', type=float, default=3.0)
     parser.add_argument('--self-test', action='store_true',
                         help='run the client against an in-memory model')
+    parser.add_argument('--dump', type=float, default=0.0, metavar='SECONDS',
+                        help='only read and describe frames for this long')
+    parser.add_argument('--hex', type=int, default=0, metavar='BYTES',
+                        help='with --dump: also show at most this many raw bytes')
+    parser.add_argument('--sabm', action='store_true',
+                        help='with --dump: send SABM first to request 0710 mode')
+    parser.add_argument('--send', default=None,
+                        help='with --dump: send this AT text as a UIH frame first')
     args = parser.parse_args(argv)
 
     if args.self_test:
         self_test()
         return 0
+    if args.device and args.dump:
+        return dump(args.device, args.dump, args.hex, args.sabm, args.send)
     if not args.device or not args.command:
         parser.error('--device and at least one --command are required')
 
     fd = os.open(args.device, os.O_RDWR | os.O_NOFOLLOW | os.O_CLOEXEC)
     reader = FdReader(fd)
+
+    def write(data):
+        return os.write(fd, data)
+
     try:
-        establish(reader, os.write, args.timeout)
+        summary = establish(reader, write, args.timeout)
+        sys.stdout.write('established sabm=%d ua=%d\n' % (summary['sabm'], summary['ua']))
         for text in args.command:
-            lines = command(reader, os.write, text, args.timeout)
+            lines = command(reader, write, text, args.timeout)
             sys.stdout.write('%s -> %s\n' % (text, ' | '.join(lines) if lines else '<no reply>'))
     finally:
         os.close(fd)

@@ -26,7 +26,7 @@ void ccci_md_at_abort(struct ccci_md_at *at, int error);
 /* Real MD stop proof required; joins the open file before returning. */
 int ccci_md_at_stop(struct ccci_md_at *at, bool md_stopped);
 int ccci_md_at_offline(struct ccci_md_at *at);
-ssize_t ccci_md_at_status(struct ccci_md_at *at, char *buf);
+ssize_t ccci_md_at_status(struct ccci_md_at *at, char *buf, size_t size);
 #else
 static inline struct ccci_md_at *
 ccci_md_at_create(struct device *dev, struct ccci_ccif *ccif) { return NULL; }
@@ -40,7 +40,7 @@ static inline int ccci_md_at_hs2(struct ccci_md_at *at) { return 0; }
 static inline void ccci_md_at_abort(struct ccci_md_at *at, int error) { }
 static inline int ccci_md_at_stop(struct ccci_md_at *at, bool md_stopped) { return 0; }
 static inline int ccci_md_at_offline(struct ccci_md_at *at) { return 0; }
-static inline ssize_t ccci_md_at_status(struct ccci_md_at *at, char *buf)
+static inline ssize_t ccci_md_at_status(struct ccci_md_at *at, char *buf, size_t size)
 {
 	return -EOPNOTSUPP;
 }

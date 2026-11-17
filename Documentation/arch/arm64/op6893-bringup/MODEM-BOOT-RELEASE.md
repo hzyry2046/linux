@@ -732,3 +732,52 @@ HS2 之后 MD 会在 AT/MUX 通道（CCCI UART2）上发起对话，而我们此
 2. `python3 modem_at_probe.py --device /dev/ccci-at-10209000.modem-platform --command AT --command 'AT+CPIN?' --command 'AT+CREG?'`；
 3. 若 SABM 无 UA，先用 `md_at` 看管道计数与 `md_at` 预览，确认 MD 是否真的在
    发 0710 帧（首字节应是 `0xF9`）。
+
+## 无线电就绪：AT 对话到 LTE 注册（2026-11-17，镜像 c96a4caab4b4）
+
+### 首次真机 AT 对话
+
+AT 通道打通后，第一次对话遇到一个**前置缺陷**：MD 通过 RPC（op `0x400f`）询问
+`ro.oppo.operator`，策略里没有已审计答案，backend 按 fail-closed 退出，端点
+关闭把整个 generation 以 `-EPIPE` 打断（`dispatch state=7 error=-32`，
+`services pending=1`）。
+
+查证：本机**完整未过滤**的 getprop 导出（1625 键，含
+`ro.product.device=op6893`）里**完全没有 `ro.oppo.*` 键**。于是把它加入已审计
+的 OBSERVED 集合、标记为已核实缺失；策略现在是 35 条事实（25 有值 + 10 缺失）。
+
+### 对话结果
+
+```
+AT          -> OK
+AT+CFUN?    -> +CFUN: 0                     （最小功能，飞行模式）
+AT+CFUN=1   -> OK + 一串 URC
+               (+ESMLSTATUS/+ECEMODE/+ECEVDP/+EHVOLTE/+ECAPABILITY/+EPOK/+ECT3G/+EUSIM/+ESIMECC)
+AT+CPIN?    -> +CPIN: READY                  （SIM 已识别）
+AT+CSQ      -> +CSQ: 17, 99                  （真实信号，不再是 99）
+AT+COPS=?   -> (2,"CHN-CT","CT","46011",7) 为当前网络，移动/联通为 forbidden
+```
+
+### 注册状态
+
+```
+AT+CEREG?  -> +CEREG: 3,1,"9A17","03C341C3",7,0,0
+AT+CGATT?  -> +CGATT: 1
+AT+COPS?   -> +COPS: 0,0,"CHN-CT",7
+AT+CSQ     -> +CSQ: 17, 99
+AT+CREG?   -> +CREG: 3,0,"0000","00FFFFFFF",0,0,0
+```
+
+也就是说：**EPS 已注册到归属网络（stat=1，LTE，TAC 0x9A17，小区 0x03C341C3），
+PS 已附着，运营商 CHN-CT**。`+CREG` 的 CS 域仍是 denied，这在没有配置 CS
+fallback 的 LTE-only 附着下是预期的。
+
+这是整条 bring-up 第一次拿到注册结果：从 MD 放行、HS1/HS2、CCISM RUNNING，
+到 AT 通道可用、射频打开、SIM 识别、LTE 注册。
+
+### 仍然没有的
+
+**数据面**：既没有 CCMNI 网卡，也没有 CCB 通道，所以没有 PDP 上下文能承载流量；
+语音/SMS 同样没有。下一步就是 CCB 控制区 + CCMNI netdev。
+
+证据见 `evidence/modem-radio-registered.json`。

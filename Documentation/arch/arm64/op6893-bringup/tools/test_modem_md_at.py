@@ -56,6 +56,9 @@ HEADERS = {
                'static inline void mutex_init(struct mutex *m){pthread_mutex_init(&m->lock,NULL);}\n'
                'static inline void mutex_lock(struct mutex *m){pthread_mutex_lock(&m->lock);}\n'
                'static inline void mutex_unlock(struct mutex *m){pthread_mutex_unlock(&m->lock);}\n',
+    'kernel.h': '#pragma once\n'
+                 '#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))\n'
+                 '#define scnprintf(b,n,fmt,...) snprintf(b,n,fmt,__VA_ARGS__)\n',
     'slab.h': '#pragma once\n#include <linux/types.h>\n#include <stdlib.h>\n#include <string.h>\n'
               '#define GFP_KERNEL 0\n'
               'static inline void *kzalloc(size_t n,int f){(void)f;return calloc(1,n);}\n'
@@ -294,7 +297,7 @@ int main(void)
 	at_release(NULL, &file);           /* completion already satisfied */
 	assert(!ccci_md_at_stop(at, true));
 	assert(at->stopped && at->error == -ESHUTDOWN);
-	assert(ccci_md_at_status(at, status) > 0 && strstr(status, "stopped=1"));
+	assert(ccci_md_at_status(at, status, sizeof(status)) > 0 && strstr(status, "stopped=1"));
 	assert(ccci_md_at_offline(at) == 0);
 	at_remove(at);
 
@@ -302,12 +305,12 @@ int main(void)
 	at = new_pipe();
 	memset(&file, 0, sizeof(file));
 	assert(!open_pipe(at, &file));
-	assert(ccci_md_at_status(at, status) > 0);
+	assert(ccci_md_at_status(at, status, sizeof(status)) > 0);
 	assert(strstr(status, "open=1") && strstr(status, "hs2=0") &&
 	       strstr(status, "rx_frames=0") && strstr(status, "tx_frames=0"));
 	assert(at_poll(&file, NULL) == 0);
 	ccci_md_at_abort(at, -EIO);
-	assert(ccci_md_at_status(at, status) > 0 && strstr(status, "error=-5"));
+	assert(ccci_md_at_status(at, status, sizeof(status)) > 0 && strstr(status, "error=-5"));
 	assert(at_poll(&file, NULL) == (EPOLLERR | EPOLLHUP));
 	at_release(NULL, &file);
 	at_remove(at);
