@@ -671,3 +671,64 @@ CCB 是数据通道用的，我们还没有 CCB 控制区/端口子系统，所�
 MD 现在活着并持续工作，但**无线电仍未就绪**：没有注册、没有 AT 对话、没有
 数据面。下一步是让 AT/MUX 通道真正与用户态对话（而不是只观察），以及补
 CCB/数据通道。证据见 `evidence/modem-hs2-and-ccism-running.json`。
+
+## AT/MUX 传输通道（2026-11-17，镜像 a1957caf951d，未上机）
+
+HS2 之后 MD 会在 AT/MUX 通道（CCCI UART2）上发起对话，而我们此前只观察不回包。
+本轮把这条通道做成真正的双向字节管道。
+
+### 厂商事实（决定实现形态）
+
+- `port_cfg.c`：`{CCCI_UART2_TX, CCCI_UART2_RX, DATA_AT_CMD_Q, ...}`，
+  以字符设备 `ttyC0` 暴露（minor 3）；
+- 通道号 **TX 12 / RX 10**，队列 **`DATA_AT_CMD_Q` = 5**（`MD_GENERATION >= 6293`）。
+  这个队列号与上一轮真机抓到的 `queue=5` **完全一致**，不是推测；
+- `port_dev_write()` 对原始字符端口构造的头部是
+  `data[0]=0, data[1]=payload+16, channel=tx_ch, reserved=0`；
+- **厂商内核不做 0710 复用**，复用由用户态 `gsm0710muxd` 完成。所以内核侧
+  保持成纯字节管道，复用和 AT 全在用户态。
+
+### 内核侧
+
+- 新增 `ccci-md-at.c/.h`：root-only `0600` 的 `ccci-at-<devname>` 字符设备，
+  独占打开、16 KiB 接收环、分块发送、故障锁存、停止需要真实 MD 停止证据；
+- `ccci_ccif_at_send()`：**由内核构造头部**（channel 12 / queue 5），用户态
+  只提供 0710 字节流；把发送核心从 `ccci_ccif_service_send()` 抽成共享的
+  `ccif_transmit()`，序列号/忙字/门铃规则只保留一份；
+- 调度器：channel 10 的载荷交给管道；HS2 接受时 arm、故障时 abort、
+  停止时随 generation 一起停、离线时一起离线；
+- `md_at` 现在两行：第一行是调度器计数与可选预览，第二行是管道状态
+  （`open/hs2/queued/rx_frames/tx_frames/error`）。
+
+### 用户态
+
+- `modem_at_mux.py`：**只做 0710 基本模式**——标志字节、字节填充、
+  取反 CRC-8 FCS、SABM/UA/DM/DISC、单字节长度的 UIH，解码处处有界；
+- `modem_at_probe.py`：先 SABM 等 UA，再用 UIH 发 AT 命令，打印 **MD 自己的
+  应答**（有界、仅可打印）；`--self-test` 用内存模型跑同一套状态机。
+
+### 测试抓到的两个真实缺陷
+
+1. **HS2 之前的写入会把 `-ENOTCONN` 永久锁存**，等于一次过早写入就打死整条
+   通道。现在 `-ENOTCONN` 与 `-EBUSY`/`-EAGAIN` 一样视为瞬时，只锁存真实
+   传输故障。
+2. **真实内核构建才发现缺 `<linux/poll.h>`**——host 桩自己声明了
+   `poll_table`，把这个错误掩盖了。补上头文件后构建通过。
+
+### 状态
+
+镜像 `a1957caf951d`（sha256 `affe0c6e…`）**已构建、未刷机**：设备离线充电，
+按约定停在这里。`nm out/vmlinux` 可见 `ccci_ccif_at_send`、`ccci_md_at_create`、
+`ccci_md_at_hs2`、`ccci_md_at_receive`，确认代码确实进了镜像。
+
+56 组 host 测试全通过，checkpatch 对新文件 0 error 0 warning。
+
+**明确未验证**：MD 的 0710 实现是否与这个编解码一致、SABM/UA 在真机上是否
+成功、任何 AT 命令是否有应答。证据见 `evidence/modem-at-mux-transport.json`。
+
+### 下次上机的第一步
+
+1. 刷 `a1957caf951d`，跑一次放行到 HS2（约 62 秒）；
+2. `python3 modem_at_probe.py --device /dev/ccci-at-10209000.modem-platform --command AT --command 'AT+CPIN?' --command 'AT+CREG?'`；
+3. 若 SABM 无 UA，先用 `md_at` 看管道计数与 `md_at` 预览，确认 MD 是否真的在
+   发 0710 帧（首字节应是 `0xF9`）。

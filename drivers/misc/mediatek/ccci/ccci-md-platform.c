@@ -22,6 +22,7 @@
 #include "ccci-md-platform.h"
 #include "ccci-ccif.h"
 #include "ccci-ccism-bridge.h"
+#include "ccci-md-at.h"
 #include "ccci-md-boot.h"
 #include "ccci-md-ee.h"
 #include "ccci-nvram-cache.h"
@@ -55,6 +56,8 @@ struct ccci_md_platform {
 	struct ccci_ccism_bridge *bridge;
 	struct ccci_service_endpoint *services;
 	struct ccci_port_dispatch *dispatch;
+	/* AT/MUX byte pipe, created only with the dispatcher. */
+	struct ccci_md_at *at;
 	struct ccci_nvram_cache *cache;
 	struct ccci_md_boot *boot;
 	/* Read-only MD exception record header, mapped only when LK exported it. */
@@ -659,8 +662,16 @@ static DEVICE_ATTR_RW(runtime_mask);
 static ssize_t md_at_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	ssize_t ret, used;
 
-	return ccci_port_dispatch_at(md->dispatch, buf);
+	ret = ccci_port_dispatch_at(md->dispatch, buf);
+	if (ret < 0)
+		return ret;
+	used = ret;
+	ret = ccci_md_at_status(md->at, buf + used);
+	if (ret < 0)
+		return ret;
+	return used + ret;
 }
 
 static ssize_t md_at_store(struct device *dev, struct device_attribute *attr,
@@ -1047,6 +1058,19 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 			dev_pm_domain_detach(md->domain, false);
 			device_unregister(md->lookup);
 			return dev_err_probe(dev, ret, "port dispatcher unavailable\n");
+		}
+		md->at = ccci_md_at_create(dev, md->ccif);
+		if (IS_ERR(md->at)) {
+			ret = PTR_ERR(md->at);
+			dev_pm_domain_detach(md->domain, false);
+			device_unregister(md->lookup);
+			return dev_err_probe(dev, ret, "AT byte pipe unavailable\n");
+		}
+		ret = ccci_port_dispatch_set_at(md->dispatch, md->at);
+		if (ret) {
+			dev_pm_domain_detach(md->domain, false);
+			device_unregister(md->lookup);
+			return dev_err_probe(dev, ret, "AT pipe attachment refused\n");
 		}
 	}
 	if (IS_ENABLED(CONFIG_OP6893_CCCI_NVRAM_CACHE)) {

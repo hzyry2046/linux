@@ -27,7 +27,7 @@ struct ccci_ccif {
 	struct mutex tx_lock;
 	bool tx_active;
 	u16 tx_sequence;
-	u16 service_sequence[2];
+	u16 service_sequence[3];
 	int tx_error;
 	struct ccci_ccif_rx *rx;
 	struct ccci_ccif_controller *control;
@@ -382,35 +382,16 @@ ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf)
 			  ccif->layout.debug_md, ccif->layout.debug_size);
 }
 
-/* Packet codec and leased request ownership are checked by the service caller. */
-int ccci_ccif_service_send(struct ccci_ccif *ccif, const void *packet, u32 size,
-			   bool hs2_seen)
+/*
+ * One normal-bank transmit with the shared sequence/busy/doorbell rules. The
+ * caller has already validated the packet and owns the copy.
+ */
+static int ccif_transmit(struct ccci_ccif *ccif, u8 *copy, u32 size, u32 channel,
+			 u32 queue, u32 index, bool hs2_seen)
 {
-	const u8 *input = packet;
-	u8 *copy;
-	u32 channel, queue, index, busy;
+	u32 busy;
 	int ret;
 
-	if (!ccif || !packet || size <= 20 || size > 20 + 0xd80 ||
-	    get_unaligned_le32(input + 4) != size)
-		return -EINVAL;
-	channel = get_unaligned_le32(input + 8) & 0xffff;
-	if (channel == 15) {
-		if (get_unaligned_le32(input + 12) >= 5)
-			return -ERANGE;
-		queue = 4;
-		index = 0;
-	} else if (channel == 33) {
-		if (size < 24 || size > 2048 || get_unaligned_le32(input + 12) > 2)
-			return -ERANGE;
-		queue = 1;
-		index = 1;
-	} else {
-		return -EOPNOTSUPP;
-	}
-	copy = kmemdup(packet, size, GFP_KERNEL);
-	if (!copy)
-		return -ENOMEM;
 	mutex_lock(&ccif->tx_lock);
 	ret = ccif->tx_error;
 	if (ret)
@@ -455,6 +436,66 @@ int ccci_ccif_service_send(struct ccci_ccif *ccif, const void *packet, u32 size,
 	ret = 0;
 out:
 	mutex_unlock(&ccif->tx_lock);
+	return ret;
+}
+
+/* Packet codec and leased request ownership are checked by the service caller. */
+int ccci_ccif_service_send(struct ccci_ccif *ccif, const void *packet, u32 size,
+			   bool hs2_seen)
+{
+	const u8 *input = packet;
+	u8 *copy;
+	u32 channel, queue, index;
+	int ret;
+
+	if (!ccif || !packet || size <= 20 || size > 20 + 0xd80 ||
+	    get_unaligned_le32(input + 4) != size)
+		return -EINVAL;
+	channel = get_unaligned_le32(input + 8) & 0xffff;
+	if (channel == 15) {
+		if (get_unaligned_le32(input + 12) >= 5)
+			return -ERANGE;
+		queue = 4;
+		index = 0;
+	} else if (channel == 33) {
+		if (size < 24 || size > 2048 || get_unaligned_le32(input + 12) > 2)
+			return -ERANGE;
+		queue = 1;
+		index = 1;
+	} else {
+		return -EOPNOTSUPP;
+	}
+	copy = kmemdup(packet, size, GFP_KERNEL);
+	if (!copy)
+		return -ENOMEM;
+	ret = ccif_transmit(ccif, copy, size, channel, queue, index, hs2_seen);
+	kfree_sensitive(copy);
+	return ret;
+}
+
+/*
+ * AT/MUX payload on CCCI_UART2_TX (channel 12, queue 5). The header is built
+ * here exactly as the same-board char port does for a raw byte write, so
+ * userspace owns only the 0710 stream and never the CCCI header.
+ */
+int ccci_ccif_at_send(struct ccci_ccif *ccif, const void *payload, u32 size,
+		      bool hs2_seen)
+{
+	u8 *copy;
+	int ret;
+
+	if (!ccif || !payload || !size || size > CCCI_CCIF_AT_MAX)
+		return -EINVAL;
+	copy = kmalloc(CCCI_CCIF_HEADER + size, GFP_KERNEL);
+	if (!copy)
+		return -ENOMEM;
+	put_unaligned_le32(0, copy);
+	put_unaligned_le32(CCCI_CCIF_HEADER + size, copy + 4);
+	put_unaligned_le32(CCCI_CCIF_AT_CHANNEL, copy + 8);
+	put_unaligned_le32(0, copy + 12);
+	memcpy(copy + CCCI_CCIF_HEADER, payload, size);
+	ret = ccif_transmit(ccif, copy, CCCI_CCIF_HEADER + size, CCCI_CCIF_AT_CHANNEL,
+			    CCCI_CCIF_AT_QUEUE, 2, hs2_seen);
 	kfree_sensitive(copy);
 	return ret;
 }

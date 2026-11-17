@@ -11,6 +11,7 @@
 #include <linux/workqueue.h>
 
 #include "ccci-ccif.h"
+#include "ccci-md-at.h"
 #include "ccci-ccism.h"
 #include "ccci-ccism-bridge.h"
 #include "ccci-port-dispatch.h"
@@ -46,6 +47,8 @@ struct ccci_port_dispatch {
 	struct ccci_ccif *ccif;
 	struct ccci_ccism_bridge *bridge;
 	struct ccci_service_endpoint *endpoint;
+	/* AT/MUX byte pipe owner; NULL when the port was not created. */
+	struct ccci_md_at *at;
 	u64 generation;
 	enum dispatch_state state;
 	int error;
@@ -137,6 +140,7 @@ static void dispatch_fault_work(struct work_struct *work)
 		dispatch->fault_closed = true;
 		ccci_service_endpoint_abort(dispatch->endpoint, dispatch->generation,
 					    READ_ONCE(dispatch->error));
+		ccci_md_at_abort(dispatch->at, READ_ONCE(dispatch->error));
 		ccci_ccif_abort(dispatch->ccif, READ_ONCE(dispatch->error));
 	}
 	mutex_unlock(&dispatch->lock);
@@ -215,6 +219,8 @@ static int dispatch_port(void *context, const struct ccci_ccif_event *event)
 		}
 		ret = ccci_service_endpoint_hs2(dispatch->endpoint, dispatch->generation);
 		if (!ret)
+			ret = ccci_md_at_hs2(dispatch->at);
+		if (!ret)
 			ret = ccci_ccism_bridge_port(dispatch->bridge, event);
 		if (!ret)
 			dispatch->state = DISPATCH_HS2;
@@ -236,10 +242,11 @@ static int dispatch_port(void *context, const struct ccci_ccif_event *event)
 		   dispatch->state == DISPATCH_HS2) {
 		/*
 		 * The MD opens the AT/MUX channel right after HS2. Record it and
-		 * keep the generation alive; nothing is answered for the RIL here.
+		 * hand the payload to the byte pipe; nothing is answered here.
 		 */
 		dispatch_at_record(dispatch, event);
 		dispatch_observe(dispatch, event);
+		ret = dispatch->at ? ccci_md_at_receive(dispatch->at, event) : 0;
 	} else if (dispatch->state == DISPATCH_HS2 && header.channel < CCCI_PORT_MAX) {
 		/*
 		 * Any other defined MD port opened after HS2. Observe the channel
@@ -328,6 +335,8 @@ int ccci_port_dispatch_stop(struct ccci_port_dispatch *dispatch, bool md_stopped
 	mutex_unlock(&dispatch->lock);
 	ret = ccci_service_endpoint_stop(dispatch->endpoint, true);
 	if (!ret)
+		ret = ccci_md_at_stop(dispatch->at, true);
+	if (!ret)
 		ret = ccci_ccism_bridge_stop(dispatch->bridge, true);
 	if (!ret)
 		ret = ccci_ccism_bridge_offline(dispatch->bridge);
@@ -346,6 +355,24 @@ int ccci_port_dispatch_offline(struct ccci_port_dispatch *dispatch)
 		return 0;
 	mutex_lock(&dispatch->lock);
 	ret = dispatch->attempted && dispatch->state != DISPATCH_STOPPED ? -EBUSY : 0;
+	mutex_unlock(&dispatch->lock);
+	if (!ret)
+		ccci_md_at_offline(dispatch->at);
+	return ret;
+}
+
+/* Before start only: the AT pipe owner is immutable through a generation. */
+int ccci_port_dispatch_set_at(struct ccci_port_dispatch *dispatch, struct ccci_md_at *at)
+{
+	int ret = 0;
+
+	if (!dispatch)
+		return -EINVAL;
+	mutex_lock(&dispatch->lock);
+	if (dispatch->attempted)
+		ret = -EBUSY;
+	else
+		dispatch->at = at;
 	mutex_unlock(&dispatch->lock);
 	return ret;
 }

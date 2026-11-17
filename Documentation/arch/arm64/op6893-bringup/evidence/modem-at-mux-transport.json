@@ -1,0 +1,47 @@
+{
+ "date": "2026-11-17",
+ "scope": "AT/MUX transport between userspace and the MD: the kernel byte pipe, the CCCI transmit path it uses, and the 0710 codec plus AT client that ride on it. Implemented and host-tested only; the device was offline, so nothing here is a hardware result.",
+ "image": {
+  "dist": "dist/a1957caf951d/boot.img",
+  "release": "7.3.0-op6893-d1-a1957caf951d+",
+  "sha256": "affe0c6e0f657a7b9902d36b36e007732b9ae7811175ed7bae76686bd075f018",
+  "built": true,
+  "flashed": false,
+  "symbols": "nm out/vmlinux shows ccci_ccif_at_send, ccci_md_at_create, ccci_md_at_hs2, ccci_md_at_receive"
+ },
+ "vendor_reference": {
+  "port": "port_cfg.c: {CCCI_UART2_TX, CCCI_UART2_RX, DATA_AT_CMD_Q, DATA_AT_CMD_Q, ...} as char node ttyC0, minor 3",
+  "channels": "TX 12, RX 10",
+  "queue": "DATA_AT_CMD_Q = 5 for MD_GENERATION >= 6293 (6297 here)",
+  "queue_confirmed_on_hardware": "the MD's own AT frames arrived with queue=5 in the previous session, which matches the vendor table",
+  "header": "port_dev_write() for a raw char port sets data[0]=0, data[1]=payload+16, channel=tx_ch, reserved=0",
+  "muxing": "the vendor kernel does not multiplex: userspace gsm0710muxd does, so the kernel side stays a byte pipe"
+ },
+ "kernel": {
+  "ccci-md-at.c": "root-only 0600 misc device ccci-at-<devname>, exclusive open, 16 KiB RX ring, chunked transmit, latched faults, stop requires real MD-stop proof",
+  "ccci-ccif-at-send": "builds the char-port header itself on channel 12 queue 5; the shared transmit helper was factored out of ccci_ccif_service_send so sequence, busy-word and doorbell rules stay in one place",
+  "dispatcher": "channel 10 payload is handed to the pipe; the pipe is armed on accepted HS2, aborted on fault, stopped with the generation and offlined with the dispatcher",
+  "md_at": "the sysfs line now shows the dispatcher counters and the pipe state (open/hs2/queued/rx/tx) on two lines"
+ },
+ "userspace": {
+  "modem_at_mux.py": "GSM 07.10 basic mode only: flags, byte stuffing, complemented CRC-8 FCS, SABM/UA/DM/DISC, UIH with a single-byte length, bounded decode",
+  "modem_at_probe.py": "SABM then UA, then AT commands over UIH; prints the MD's own answers, bounded and printable-only; --self-test runs the same state machine against an in-memory model",
+  "not_implemented": "advanced mode, multiple DLCIs, flow control, and any AT interpretation. The MD answers AT; this tool never does."
+ },
+ "bugs_found_by_the_tests": [
+  "the pipe latched -ENOTCONN as a permanent fault, so one write before HS2 killed the channel for the rest of the generation",
+  "the real kernel build caught a missing <linux/poll.h>, which the host harness had masked by declaring poll_table itself"
+ ],
+ "tests": {
+  "test_modem_md_at.py": "real C with modelled kernel services: exclusive open, payload-only receive, ring overflow latched, chunked transmit, backpressure vs fault, HS2 gate, stop proof, status counters",
+  "test_modem_at_mux.py": "real codec: flags, stuffing, FCS, UIH length, DLCI round-trip, whole-frame splitting, every rejection bound",
+  "modem_at_probe.py --self-test": "client state machine against an in-memory model",
+  "suite": "56 test_modem_* groups pass; checkpatch 0 error 0 warning on the new files"
+ },
+ "not_claimed": [
+  "that the MD's 0710 implementation matches this codec",
+  "that SABM/UA succeeds on hardware",
+  "that any AT command is answered",
+  "radio readiness of any kind"
+ ]
+}

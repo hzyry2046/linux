@@ -12,6 +12,11 @@ MODEL = BASE['MODEL']
 a = MODEL.index('static void writel(')
 b = MODEL.index('static void mb(', a)
 MODEL = MODEL[:a] + r'''
+/* Header model: the AT/MUX transmit contract from ccci-ccif.h. */
+#define CCCI_CCIF_HEADER 16
+#define CCCI_CCIF_AT_CHANNEL 12
+#define CCCI_CCIF_AT_QUEUE 5
+#define CCCI_CCIF_AT_MAX 3456
 static unsigned expected_queue, allocations, frees;
 static bool alloc_fail;
 #define GFP_KERNEL 0
@@ -19,6 +24,9 @@ static void *kmemdup(const void *p,size_t n,int flags){
  (void)flags;allocations++;if(alloc_fail)return NULL;void *v=malloc(n);assert(v);memcpy(v,p,n);return v;
 }
 static void kfree_sensitive(void *p){assert(p);frees++;free(p);}
+static void *kmalloc(size_t n,int flags){
+ (void)flags;allocations++;if(alloc_fail)return NULL;void *v=malloc(n);assert(v);return v;
+}
 /* The sender reports deferred/failed transmit through printk; keep it silent. */
 __attribute__((unused)) static int test_printk(const char *fmt,...){(void)fmt;return 0;}
 #define pr_info(...) test_printk(__VA_ARGS__)
@@ -164,6 +172,27 @@ static void stop_race(void){
  unsigned old_reads=ap_reads,old_calls=calls;
  assert(ccci_ccif_service_send(&c,packet,40,true)==-ESHUTDOWN && ap_reads==old_reads && calls==old_calls);
  destroy_sender(&c);puts("PASS: actual service sender/STOP concurrency drains before gate close");
+ /* AT/MUX: the header is built here, on channel 12 queue 5, payload verbatim. */
+ {
+  static const u8 stream[]="\xf9\x03\x3f\x01\x1c\xf9";
+  struct ccci_ccif c;
+  init_sender(&c,CCCI_CCIF_AT_QUEUE);
+  assert(ccci_ccif_at_send(&c,NULL,sizeof(stream),true)==-EINVAL);
+  assert(ccci_ccif_at_send(&c,stream,0,true)==-EINVAL);
+  assert(ccci_ccif_at_send(&c,stream,CCCI_CCIF_AT_MAX+1,true)==-EINVAL);
+  assert(!ccci_ccif_at_send(&c,stream,sizeof(stream),true));
+  assert(ap_writes==2);
+  const u8 *sent=NULL;
+  for(size_t i=0;i+sizeof(stream)+CCCI_CCIF_HEADER<=sizeof(memory);i++)
+   if(!memcmp(memory+i,stream,sizeof(stream))){sent=memory+i-CCCI_CCIF_HEADER;break;}
+  assert(sent);
+  assert(!get_unaligned_le32(sent));
+  assert(get_unaligned_le32(sent+4)==CCCI_CCIF_HEADER+sizeof(stream));
+  assert((get_unaligned_le32(sent+8)&0xffff)==CCCI_CCIF_AT_CHANNEL);
+  assert(!get_unaligned_le32(sent+12));
+  destroy_sender(&c);
+  puts("PASS: actual AT/MUX sender: header built here, channel 12 queue 5, payload verbatim");
+ }
 }
 int main(void){baseline_main();tx_tests();stop_race();}
 '''
@@ -176,6 +205,8 @@ def main():
                        owner.index('static int ccif_bank_read(')]
     sender = owner[owner.index('static void ccif_tx_gate('):
                    owner.index('static bool ccci_ccif_faulted(')]
+    transmit = owner[owner.index('static int ccif_transmit('):
+                     owner.index('int ccci_ccif_service_send(')]
     service = owner[owner.index('int ccci_ccif_service_send('):
                     owner.index('ssize_t ccci_ccif_handshake_status(')]
     with tempfile.TemporaryDirectory(prefix='op6893-service-tx-') as directory:
@@ -190,7 +221,7 @@ def main():
             (root / 'linux' / name).write_text(content)
         harness = BASE['BASE']['HARNESS'].replace('int main(void){', 'static void baseline_main(void){')
         harness = harness.replace('static u8 memory[2048];', 'static u8 memory[8192];')
-        (root / 'test.c').write_text(harness + MODEL + structures + sender + service + TEST)
+        (root / 'test.c').write_text(harness + MODEL + structures + sender + transmit + service + TEST)
         subprocess.run(['cc', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
                         '-Wno-misleading-indentation', '-fsanitize=address,undefined',
                         '-fno-sanitize-recover=all', '-no-pie', '-pthread',

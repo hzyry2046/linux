@@ -42,6 +42,17 @@ int ccci_ccif_system_send(struct ccci_ccif *ccif, u32 message, u32 reserved);
  */
 int ccci_ccif_service_send(struct ccci_ccif *ccif, const void *packet, u32 size,
 			   bool hs2_seen);
+/*
+ * AT/MUX payload only; builds the same-board char-port header for channel 12
+ * on queue 5. Userspace owns the 0710 stream, never the CCCI header. Same
+ * admission rules and lock freedom as ccci_ccif_service_send().
+ */
+#define CCCI_CCIF_HEADER	16
+#define CCCI_CCIF_AT_CHANNEL	12
+#define CCCI_CCIF_AT_QUEUE	5
+#define CCCI_CCIF_AT_MAX	3456
+int ccci_ccif_at_send(struct ccci_ccif *ccif, const void *payload, u32 size,
+		      bool hs2_seen);
 /* Sleepable: close TX/RX admission without waiting on consumer or parent lock. */
 void ccci_ccif_abort(struct ccci_ccif *ccif, int error);
 int ccci_ccif_stop(struct ccci_ccif *ccif);
@@ -80,6 +91,12 @@ static inline int ccci_ccif_system_send(struct ccci_ccif *ccif, u32 message, u32
 
 static inline int ccci_ccif_service_send(struct ccci_ccif *ccif, const void *packet,
 					 u32 size, bool hs2_seen)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int ccci_ccif_at_send(struct ccci_ccif *ccif, const void *payload,
+				    u32 size, bool hs2_seen)
 {
 	return -EOPNOTSUPP;
 }

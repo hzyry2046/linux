@@ -87,6 +87,16 @@ static int ccci_ccism_bridge_port(struct ccci_ccism_bridge *p,const struct ccci_
 static int ccci_service_endpoint_receive(struct ccci_service_endpoint *p,u64 g,const struct ccci_ccif_event *e){
  (void)p;assert(g==77);note(e->header.channel==14?'f':'r');return fail_receive;
 }
+/* AT/MUX byte pipe model: records the calls the dispatcher must make. */
+static int at_marker;
+static struct ccci_md_at *at_owner;
+static unsigned at_received, at_hs2, at_stopped, at_aborted, at_offline;
+int ccci_md_at_receive(struct ccci_md_at *at,const struct ccci_ccif_event *e){
+ if(!at){return 0;}assert(at==at_owner&&e);at_received++;return 0;}
+int ccci_md_at_hs2(struct ccci_md_at *at){if(at){assert(at==at_owner);at_hs2++;}return 0;}
+void ccci_md_at_abort(struct ccci_md_at *at,int e){if(at){assert(at==at_owner);assert(e<0);at_aborted++;}}
+int ccci_md_at_stop(struct ccci_md_at *at,bool stopped){if(at){assert(at==at_owner);assert(stopped);at_stopped++;}return 0;}
+int ccci_md_at_offline(struct ccci_md_at *at){if(at){assert(at==at_owner);at_offline++;}return 0;}
 static void ccci_service_endpoint_abort(struct ccci_service_endpoint *p,u64 g,int e){(void)p;assert(g==77&&e<0);note('E');}
 static void ccci_ccif_abort(struct ccci_ccif *p,int e){(void)p;assert(e<0);note('C');}
 static int ccci_ccif_stop(struct ccci_ccif *p){(void)p;note('J');if(!fail_ccif_stop)rx_joined=true;return fail_ccif_stop;}
@@ -119,9 +129,11 @@ int main(void){
  alloc_fail=true;assert(IS_ERR(ccci_port_dispatch_create(&dev,&ccif,&bridge,&endpoint)));alloc_fail=false;
  action_fail=true;assert(IS_ERR(ccci_port_dispatch_create(&dev,&ccif,&bridge,&endpoint)));action_fail=false;
  struct ccci_port_dispatch *d=fresh();assert(!IS_ERR(d));assert(!logn&&!ccci_port_dispatch_offline(d));
+ at_owner=(struct ccci_md_at *)&at_marker;assert(!ccci_port_dispatch_set_at(d,at_owner));
  assert(ccci_port_dispatch_prepare(d,0)==-EINVAL);assert(!logn);
  assert(ccci_port_dispatch_start(d,&offer)==-EAGAIN);assert(!logn);
  assert(!ccci_port_dispatch_prepare(d,77));assert(!strcmp(logbuf,"RB"));
+ assert(ccci_port_dispatch_set_at(d,at_owner)==-EBUSY);
  assert(ccci_port_dispatch_prepare(d,77)==-EALREADY);assert(!strcmp(logbuf,"RB"));
  synchronous_hs1=true;assert(!ccci_port_dispatch_start(d,&offer));assert(!strcmp(logbuf,"RBFSA"));
  assert(d->state==DISPATCH_WAIT_HS2);assert(ccci_port_dispatch_status(d,status)>0);assert(strstr(status,"cpu_release_issued=0 service_ready=0"));
@@ -139,7 +151,9 @@ int main(void){
   assert(!ccci_port_dispatch_at_preview(d,false));
   assert(ccci_port_dispatch_at(d,status)>0&&strstr(status,"text=\n"));
   ae=packet(at,sizeof(at),12,false);assert(!consumer(consumer_ctx,&ae));
-  assert(d->at_frames==3&&d->at_last_channel==12);}
+  assert(d->at_frames==3&&d->at_last_channel==12);
+  /* The byte pipe saw HS2 and both AT frames; nothing else reaches it. */
+  assert(at_hs2==1&&at_received==3);}
  /* Every other defined MD port after HS2 is observed, never fatal. */
  {u8 pcm[24];struct ccci_ccif_event pe=packet(pcm,sizeof(pcm),4,false);
   clearlog();assert(!consumer(consumer_ctx,&pe));assert(!logn);
@@ -147,6 +161,7 @@ int main(void){
   assert(!ccci_port_dispatch_status(d,status)||strstr(status,"observed=0x"));}
  unsigned before=logn;assert(ccci_port_dispatch_stop(d,false)==-EBUSY&&logn==before);
  clearlog();assert(!ccci_port_dispatch_stop(d,true));assert(!strcmp(logbuf,"Jebo"));dev.cleanup(dev.context);
+ assert(at_stopped==1);
  /* FS before runtime/HS1 is terminal, with no synchronous abort I/O. */
  d=running();clearlog();assert(consumer(consumer_ctx,&fe)==-EPROTO);assert(!logn&&d->fault_work.pending);
  run_work(&d->fault_work);assert(!strcmp(logbuf,"EC")&&d->state==DISPATCH_FAILED);dispose(d);
