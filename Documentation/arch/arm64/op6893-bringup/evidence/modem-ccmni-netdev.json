@@ -1,0 +1,38 @@
+{
+ "date": "2026-11-17",
+ "scope": "First CCMNI data port: netdev registration, the transmit path to the MD, and what the MD does with data that arrives too early.",
+ "images": [
+  {"dist": "dist/a57a1834ec79/boot.img", "sha256": "b643f9f6f4bd79461f1ae7e89fdfb9442125489e3aaa3bc61451fe3b6d4d503d",
+   "content": "CCMNI netdev, transmit allowed as soon as HS2 is accepted"},
+  {"dist": "dist/c4873dcf85ad/boot.img", "sha256": "12b0fdf177980b3483df37d8a34bdf3ac5ade3f2eeffbaf77325929ec6849571",
+   "content": "adds an explicit operator gate so the data path stays silent until enabled"}
+ ],
+ "vendor_reference": {
+  "port": "port_cfg.c: {CCCI_CCMNI1_TX, CCCI_CCMNI1_RX, DATA_TX_Q, DATA_RX_Q, 0xF0 | DATA_TX_ACK_Q, ...} as netdev ccmni0",
+  "channels": "TX 22, RX 20",
+  "queues": "DATA_TX_Q = DATA_RX_Q = 0 for MD_GENERATION >= 6293 (6297 here), shared with the system channel",
+  "header": "port_net.c pushes a CCCI header with data[0] = ccmni index, data[1] = total length including the header, reserved = 0"
+ },
+ "implementation": {
+  "ccci-ccif-net-send": "builds the net header on channel 22 queue 0 and reuses the shared transmit helper",
+  "ccci-md-net.c": "one netdev ccmni0, bounded transmit queue drained by a workqueue (ndo_start_xmit is atomic while the CCIF transmit takes the owner mutex), RX skb built from the channel-20 payload, carrier and queue gated",
+  "dispatcher": "channels 20/22 go to the netdev, HS2 arms it, faults abort it, stop and offline follow the generation",
+  "md_net": "operator gate plus counters: hs2/opened/enabled/queued/tx/tx_busy/tx_dropped/rx"
+ },
+ "hardware_result": {
+  "netdev": "ccmni0 exists after boot with mtu 1500 and state DOWN",
+  "transmit_path": "with the gate open and the interface up, the stack sent 4 frames (280 bytes) and the counters advanced: tx=4 tx_bytes=280 tx_busy=1",
+  "md_reaction": "the MD asserted in mcu/service/hif/nccci/src/ccci_apis.c line 1574 with para=0x16 (22, the CCMNI TX channel): data arrived before its data path was ready",
+  "consequence": "the generation was aborted, so the gate is now mandatory and defaults to off"
+ },
+ "second_run_with_gate_closed": {
+  "netdev": "hs2=1 opened=0 enabled=0, no transmit attempted",
+  "unexpected": "the FS service transmit failed with -74 (-EBADMSG) on queue 4 after 3610 transmissions, which aborted the generation",
+  "status": "not yet explained; the ring validation rejects a header/footer or control-word mismatch, and the netdev sent nothing in this run, so this is a separate issue from the data path"
+ },
+ "not_claimed": [
+  "any PDP context or IP traffic: AT+CGACT was never reached in a live generation",
+  "that queue 0 is the correct transmit queue for this MD; the assert leaves that open",
+  "that the -EBADMSG ring failure is transient"
+ ]
+}

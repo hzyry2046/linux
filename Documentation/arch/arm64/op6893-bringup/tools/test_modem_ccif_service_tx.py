@@ -17,6 +17,11 @@ MODEL = MODEL[:a] + r'''
 #define CCCI_CCIF_AT_CHANNEL 12
 #define CCCI_CCIF_AT_QUEUE 5
 #define CCCI_CCIF_AT_MAX 3456
+#define CCCI_CCIF_NET_CHANNEL 22
+#define CCCI_CCIF_NET_QUEUE 0
+#define CCCI_CCIF_NET_MIN 14
+#define CCCI_CCIF_NET_MAX (1500 + 128)
+#define CCCI_CCIF_NET_INDEX_MAX 20
 static unsigned expected_queue, allocations, frees;
 static bool alloc_fail;
 #define GFP_KERNEL 0
@@ -192,6 +197,28 @@ static void stop_race(void){
   assert(!get_unaligned_le32(sent+12));
   destroy_sender(&c);
   puts("PASS: actual AT/MUX sender: header built here, channel 12 queue 5, payload verbatim");
+ }
+ /* CCMNI: index in data[0], total length in data[1], channel 22 queue 0. */
+ {
+  static u8 frame[64];
+  struct ccci_ccif c;
+  init_sender(&c,CCCI_CCIF_NET_QUEUE);
+  for(unsigned i=0;i<sizeof(frame);i++)frame[i]=(u8)(i*7+1);
+  assert(ccci_ccif_net_send(&c,0,NULL,20)==-EINVAL);
+  assert(ccci_ccif_net_send(&c,0,frame,CCCI_CCIF_NET_MIN-1)==-EINVAL);
+  assert(ccci_ccif_net_send(&c,0,frame,CCCI_CCIF_NET_MAX+1)==-EINVAL);
+  assert(ccci_ccif_net_send(&c,CCCI_CCIF_NET_INDEX_MAX+1,frame,20)==-EINVAL);
+  assert(!ccci_ccif_net_send(&c,3,frame,sizeof(frame)));
+  const u8 *sent=NULL;
+  for(size_t i=0;i+sizeof(frame)+CCCI_CCIF_HEADER<=sizeof(memory);i++)
+   if(!memcmp(memory+i,frame,sizeof(frame))){sent=memory+i-CCCI_CCIF_HEADER;break;}
+  assert(sent);
+  assert(get_unaligned_le32(sent)==3);
+  assert(get_unaligned_le32(sent+4)==CCCI_CCIF_HEADER+sizeof(frame));
+  assert((get_unaligned_le32(sent+8)&0xffff)==CCCI_CCIF_NET_CHANNEL);
+  assert(!get_unaligned_le32(sent+12));
+  destroy_sender(&c);
+  puts("PASS: actual CCMNI sender: index and total length in the header, channel 22 queue 0");
  }
 }
 int main(void){baseline_main();tx_tests();stop_race();}

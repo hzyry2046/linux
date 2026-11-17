@@ -11,6 +11,7 @@ struct ccci_ccif;
 struct ccci_ccism_bridge;
 struct ccci_service_endpoint;
 struct ccci_md_at;
+struct ccci_md_net;
 struct ccci_runtime_offer;
 struct ccci_port_dispatch;
 
@@ -33,6 +34,8 @@ int ccci_port_dispatch_stop(struct ccci_port_dispatch *dispatch, bool md_stopped
 int ccci_port_dispatch_offline(struct ccci_port_dispatch *dispatch);
 /* Before start only: the AT byte pipe is immutable through a generation. */
 int ccci_port_dispatch_set_at(struct ccci_port_dispatch *dispatch, struct ccci_md_at *at);
+/* Before start only: the CCMNI netdev owner is immutable per generation. */
+int ccci_port_dispatch_set_net(struct ccci_port_dispatch *dispatch, struct ccci_md_net *net);
 ssize_t ccci_port_dispatch_status(struct ccci_port_dispatch *dispatch, char *buf);
 /* AT/MUX observation: counts plus an opt-in bounded printable preview. */
 ssize_t ccci_port_dispatch_at(struct ccci_port_dispatch *dispatch, char *buf);
@@ -41,6 +44,8 @@ int ccci_port_dispatch_at_preview(struct ccci_port_dispatch *dispatch, bool enab
 static inline int ccci_port_dispatch_offline(struct ccci_port_dispatch *dispatch) { return 0; }
 static inline int ccci_port_dispatch_set_at(struct ccci_port_dispatch *dispatch,
 					    struct ccci_md_at *at) { return -EOPNOTSUPP; }
+static inline int ccci_port_dispatch_set_net(struct ccci_port_dispatch *dispatch,
+					     struct ccci_md_net *net) { return -EOPNOTSUPP; }
 static inline struct ccci_port_dispatch *
 ccci_port_dispatch_create(struct device *dev, struct ccci_ccif *ccif,
 			  struct ccci_ccism_bridge *bridge,

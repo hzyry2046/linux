@@ -12,6 +12,7 @@
 
 #include "ccci-ccif.h"
 #include "ccci-md-at.h"
+#include "ccci-md-net.h"
 #include "ccci-ccism.h"
 #include "ccci-ccism-bridge.h"
 #include "ccci-port-dispatch.h"
@@ -34,6 +35,9 @@ enum dispatch_state {
 #define CCCI_AT_PREVIEW	48
 /* System channel: CCISM owns 0x11a/0x11b, everything else is observed only. */
 #define CCCI_SYSTEM_RX	2
+/* Same-board CCMNI1 data channels. */
+#define CCCI_NET_RX	20
+#define CCCI_NET_TX	22
 /* Highest defined MD channel id in the same-board enum (CCCI_MAX_CH_NUM). */
 #define CCCI_PORT_MAX	258
 
@@ -49,6 +53,8 @@ struct ccci_port_dispatch {
 	struct ccci_service_endpoint *endpoint;
 	/* AT/MUX byte pipe owner; NULL when the port was not created. */
 	struct ccci_md_at *at;
+	/* CCMNI netdev owner; NULL when the port was not created. */
+	struct ccci_md_net *net;
 	u64 generation;
 	enum dispatch_state state;
 	int error;
@@ -141,6 +147,7 @@ static void dispatch_fault_work(struct work_struct *work)
 		ccci_service_endpoint_abort(dispatch->endpoint, dispatch->generation,
 					    READ_ONCE(dispatch->error));
 		ccci_md_at_abort(dispatch->at, READ_ONCE(dispatch->error));
+		ccci_md_net_abort(dispatch->net, READ_ONCE(dispatch->error));
 		ccci_ccif_abort(dispatch->ccif, READ_ONCE(dispatch->error));
 	}
 	mutex_unlock(&dispatch->lock);
@@ -221,6 +228,8 @@ static int dispatch_port(void *context, const struct ccci_ccif_event *event)
 		if (!ret)
 			ret = ccci_md_at_hs2(dispatch->at);
 		if (!ret)
+			ret = ccci_md_net_hs2(dispatch->net);
+		if (!ret)
 			ret = ccci_ccism_bridge_port(dispatch->bridge, event);
 		if (!ret)
 			dispatch->state = DISPATCH_HS2;
@@ -247,6 +256,11 @@ static int dispatch_port(void *context, const struct ccci_ccif_event *event)
 		dispatch_at_record(dispatch, event);
 		dispatch_observe(dispatch, event);
 		ret = dispatch->at ? ccci_md_at_receive(dispatch->at, event) : 0;
+	} else if ((header.channel == CCCI_NET_RX || header.channel == CCCI_NET_TX) &&
+		   dispatch->state == DISPATCH_HS2) {
+		/* Data frames go to the netdev; nothing is answered on this path. */
+		dispatch_observe(dispatch, event);
+		ret = dispatch->net ? ccci_md_net_receive(dispatch->net, event) : 0;
 	} else if (dispatch->state == DISPATCH_HS2 && header.channel < CCCI_PORT_MAX) {
 		/*
 		 * Any other defined MD port opened after HS2. Observe the channel
@@ -337,6 +351,8 @@ int ccci_port_dispatch_stop(struct ccci_port_dispatch *dispatch, bool md_stopped
 	if (!ret)
 		ret = ccci_md_at_stop(dispatch->at, true);
 	if (!ret)
+		ret = ccci_md_net_stop(dispatch->net, true);
+	if (!ret)
 		ret = ccci_ccism_bridge_stop(dispatch->bridge, true);
 	if (!ret)
 		ret = ccci_ccism_bridge_offline(dispatch->bridge);
@@ -356,8 +372,26 @@ int ccci_port_dispatch_offline(struct ccci_port_dispatch *dispatch)
 	mutex_lock(&dispatch->lock);
 	ret = dispatch->attempted && dispatch->state != DISPATCH_STOPPED ? -EBUSY : 0;
 	mutex_unlock(&dispatch->lock);
-	if (!ret)
+	if (!ret) {
 		ccci_md_at_offline(dispatch->at);
+		ccci_md_net_offline(dispatch->net);
+	}
+	return ret;
+}
+
+/* Before start only: the netdev owner is immutable through a generation. */
+int ccci_port_dispatch_set_net(struct ccci_port_dispatch *dispatch, struct ccci_md_net *net)
+{
+	int ret = 0;
+
+	if (!dispatch)
+		return -EINVAL;
+	mutex_lock(&dispatch->lock);
+	if (dispatch->attempted)
+		ret = -EBUSY;
+	else
+		dispatch->net = net;
+	mutex_unlock(&dispatch->lock);
 	return ret;
 }
 

@@ -97,6 +97,16 @@ int ccci_md_at_hs2(struct ccci_md_at *at){if(at){assert(at==at_owner);at_hs2++;}
 void ccci_md_at_abort(struct ccci_md_at *at,int e){if(at){assert(at==at_owner);assert(e<0);at_aborted++;}}
 int ccci_md_at_stop(struct ccci_md_at *at,bool stopped){if(at){assert(at==at_owner);assert(stopped);at_stopped++;}return 0;}
 int ccci_md_at_offline(struct ccci_md_at *at){if(at){assert(at==at_owner);at_offline++;}return 0;}
+/* CCMNI netdev model: records the calls the dispatcher must make. */
+static int net_marker;
+static struct ccci_md_net *net_owner;
+static unsigned net_received, net_hs2, net_stopped, net_aborted, net_offline;
+int ccci_md_net_receive(struct ccci_md_net *n,const struct ccci_ccif_event *e){
+ if(!n){return 0;}assert(n==net_owner&&e);net_received++;return 0;}
+int ccci_md_net_hs2(struct ccci_md_net *n){if(n){assert(n==net_owner);net_hs2++;}return 0;}
+void ccci_md_net_abort(struct ccci_md_net *n,int e){if(n){assert(n==net_owner);assert(e<0);net_aborted++;}}
+int ccci_md_net_stop(struct ccci_md_net *n,bool s){if(n){assert(n==net_owner);assert(s);net_stopped++;}return 0;}
+int ccci_md_net_offline(struct ccci_md_net *n){if(n){assert(n==net_owner);net_offline++;}return 0;}
 static void ccci_service_endpoint_abort(struct ccci_service_endpoint *p,u64 g,int e){(void)p;assert(g==77&&e<0);note('E');}
 static void ccci_ccif_abort(struct ccci_ccif *p,int e){(void)p;assert(e<0);note('C');}
 static int ccci_ccif_stop(struct ccci_ccif *p){(void)p;note('J');if(!fail_ccif_stop)rx_joined=true;return fail_ccif_stop;}
@@ -130,10 +140,12 @@ int main(void){
  action_fail=true;assert(IS_ERR(ccci_port_dispatch_create(&dev,&ccif,&bridge,&endpoint)));action_fail=false;
  struct ccci_port_dispatch *d=fresh();assert(!IS_ERR(d));assert(!logn&&!ccci_port_dispatch_offline(d));
  at_owner=(struct ccci_md_at *)&at_marker;assert(!ccci_port_dispatch_set_at(d,at_owner));
+ net_owner=(struct ccci_md_net *)&net_marker;assert(!ccci_port_dispatch_set_net(d,net_owner));
  assert(ccci_port_dispatch_prepare(d,0)==-EINVAL);assert(!logn);
  assert(ccci_port_dispatch_start(d,&offer)==-EAGAIN);assert(!logn);
  assert(!ccci_port_dispatch_prepare(d,77));assert(!strcmp(logbuf,"RB"));
  assert(ccci_port_dispatch_set_at(d,at_owner)==-EBUSY);
+ assert(ccci_port_dispatch_set_net(d,net_owner)==-EBUSY);
  assert(ccci_port_dispatch_prepare(d,77)==-EALREADY);assert(!strcmp(logbuf,"RB"));
  synchronous_hs1=true;assert(!ccci_port_dispatch_start(d,&offer));assert(!strcmp(logbuf,"RBFSA"));
  assert(d->state==DISPATCH_WAIT_HS2);assert(ccci_port_dispatch_status(d,status)>0);assert(strstr(status,"cpu_release_issued=0 service_ready=0"));
@@ -154,6 +166,12 @@ int main(void){
   assert(d->at_frames==3&&d->at_last_channel==12);
   /* The byte pipe saw HS2 and both AT frames; nothing else reaches it. */
   assert(at_hs2==1&&at_received==3);}
+ /* CCMNI data frames reach the netdev; HS2 armed it. */
+ {u8 data[64];struct ccci_ccif_event ne=packet(data,sizeof(data),20,false);
+  clearlog();assert(!consumer(consumer_ctx,&ne));assert(!logn);
+  assert(net_hs2==1&&net_received==1);
+  ne=packet(data,sizeof(data),22,false);assert(!consumer(consumer_ctx,&ne));
+  assert(net_received==2);}
  /* Every other defined MD port after HS2 is observed, never fatal. */
  {u8 pcm[24];struct ccci_ccif_event pe=packet(pcm,sizeof(pcm),4,false);
   clearlog();assert(!consumer(consumer_ctx,&pe));assert(!logn);
@@ -161,7 +179,7 @@ int main(void){
   assert(!ccci_port_dispatch_status(d,status)||strstr(status,"observed=0x"));}
  unsigned before=logn;assert(ccci_port_dispatch_stop(d,false)==-EBUSY&&logn==before);
  clearlog();assert(!ccci_port_dispatch_stop(d,true));assert(!strcmp(logbuf,"Jebo"));dev.cleanup(dev.context);
- assert(at_stopped==1);
+ assert(at_stopped==1&&net_stopped==1);
  /* FS before runtime/HS1 is terminal, with no synchronous abort I/O. */
  d=running();clearlog();assert(consumer(consumer_ctx,&fe)==-EPROTO);assert(!logn&&d->fault_work.pending);
  run_work(&d->fault_work);assert(!strcmp(logbuf,"EC")&&d->state==DISPATCH_FAILED);dispose(d);

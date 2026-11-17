@@ -23,6 +23,7 @@
 #include "ccci-ccif.h"
 #include "ccci-ccism-bridge.h"
 #include "ccci-md-at.h"
+#include "ccci-md-net.h"
 #include "ccci-md-boot.h"
 #include "ccci-md-ee.h"
 #include "ccci-nvram-cache.h"
@@ -58,6 +59,8 @@ struct ccci_md_platform {
 	struct ccci_port_dispatch *dispatch;
 	/* AT/MUX byte pipe, created only with the dispatcher. */
 	struct ccci_md_at *at;
+	/* CCMNI netdev, created only with the dispatcher. */
+	struct ccci_md_net *net;
 	struct ccci_nvram_cache *cache;
 	struct ccci_md_boot *boot;
 	/* Read-only MD exception record header, mapped only when LK exported it. */
@@ -672,6 +675,10 @@ static ssize_t md_at_show(struct device *dev, struct device_attribute *attr, cha
 	ret = ccci_md_at_status(md->at, buf + used, PAGE_SIZE - used);
 	if (ret < 0)
 		return ret;
+	used += ret;
+	ret = ccci_md_net_status(md->net, buf + used, PAGE_SIZE - used);
+	if (ret < 0)
+		return ret;
 	return used + ret;
 }
 
@@ -692,6 +699,30 @@ static ssize_t md_at_store(struct device *dev, struct device_attribute *attr,
 	return ret ? ret : count;
 }
 static DEVICE_ATTR_RW(md_at);
+
+/* Operator gate for the CCMNI data path; default off keeps the MD silent. */
+static ssize_t md_net_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+
+	return ccci_md_net_status(md->net, buf, PAGE_SIZE);
+}
+
+static ssize_t md_net_store(struct device *dev, struct device_attribute *attr,
+			    const char *buf, size_t count)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	int ret;
+
+	if (sysfs_streq(buf, "on"))
+		ret = ccci_md_net_enable(md->net, true);
+	else if (sysfs_streq(buf, "off"))
+		ret = ccci_md_net_enable(md->net, false);
+	else
+		return -EINVAL;
+	return ret ? ret : count;
+}
+static DEVICE_ATTR_RW(md_net);
 
 /*
  * Printable text of the MD debug region, newest tail first. Binary record
@@ -877,7 +908,7 @@ static struct attribute *md_attrs[] = {
 	&dev_attr_dispatch.attr, &dev_attr_md_ee.attr, &dev_attr_md_ee_raw.attr,
 	&dev_attr_lk_regions.attr, &dev_attr_smem_users.attr,
 	&dev_attr_smem_cache.attr, &dev_attr_smem_clear.attr,
-	&dev_attr_runtime_mask.attr, &dev_attr_md_at.attr,
+	&dev_attr_runtime_mask.attr, &dev_attr_md_at.attr, &dev_attr_md_net.attr,
 	&dev_attr_md_dbg.attr, &dev_attr_md_dfd_info.attr, NULL,
 };
 
@@ -1072,6 +1103,19 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 			dev_pm_domain_detach(md->domain, false);
 			device_unregister(md->lookup);
 			return dev_err_probe(dev, ret, "AT pipe attachment refused\n");
+		}
+		md->net = ccci_md_net_create(dev, md->ccif);
+		if (IS_ERR(md->net)) {
+			ret = PTR_ERR(md->net);
+			dev_pm_domain_detach(md->domain, false);
+			device_unregister(md->lookup);
+			return dev_err_probe(dev, ret, "CCMNI netdev unavailable\n");
+		}
+		ret = ccci_port_dispatch_set_net(md->dispatch, md->net);
+		if (ret) {
+			dev_pm_domain_detach(md->domain, false);
+			device_unregister(md->lookup);
+			return dev_err_probe(dev, ret, "CCMNI attachment refused\n");
 		}
 	}
 	if (IS_ENABLED(CONFIG_OP6893_CCCI_NVRAM_CACHE)) {

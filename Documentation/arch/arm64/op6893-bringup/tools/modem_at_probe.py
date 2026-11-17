@@ -53,6 +53,19 @@ def _pump(buffer, frames_out, text_out):
     return b''
 
 
+def _write_retry(write, data, deadline=None):
+    """Write with bounded retries: EAGAIN here is queue backpressure, not a fault."""
+    if deadline is None:
+        deadline = time.monotonic() + 2.0
+    while True:
+        try:
+            return write(data)
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                raise AtError('transmit queue stayed busy')
+            time.sleep(0.05)
+
+
 class FdReader:
     """select/read wrapper so the same state machine runs on a real fd or a model."""
 
@@ -124,7 +137,7 @@ def establish(reader, write, timeout):
     The same-board MD sends its own SABM rather than a UA, so both directions
     are tracked separately and reported; DM is a refusal, never a retry.
     """
-    write(mux.encode(0, mux.CONTROL_SABM))
+    _write_retry(write, mux.encode(0, mux.CONTROL_SABM))
     deadline = time.monotonic() + timeout
     buffer = b''
     seen_sabm = seen_ua = False
@@ -136,7 +149,7 @@ def establish(reader, write, timeout):
                 continue
             if frame.control == mux.CONTROL_SABM:
                 seen_sabm = True
-                write(mux.encode(0, mux.CONTROL_UA))
+                _write_retry(write, mux.encode(0, mux.CONTROL_UA))
             elif frame.control == mux.CONTROL_UA:
                 seen_ua = True
             elif frame.control == mux.CONTROL_DM:
@@ -155,7 +168,8 @@ def command(reader, write, text, timeout):
     if any(not 0x20 <= ord(char) < 0x7f for char in text):
         raise AtError('command must be printable ASCII')
     _discard(reader, 0.2)
-    write(mux.encode(0, mux.CONTROL_UIH, (text + '\r').encode('ascii')))
+    _write_retry(write, mux.encode(0, mux.CONTROL_UIH, (text + '\r').encode('ascii')),
+                 time.monotonic() + 5.0)
     deadline = time.monotonic() + timeout
     buffer = b''
     text = b''

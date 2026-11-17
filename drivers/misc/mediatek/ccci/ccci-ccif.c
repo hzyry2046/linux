@@ -27,7 +27,7 @@ struct ccci_ccif {
 	struct mutex tx_lock;
 	bool tx_active;
 	u16 tx_sequence;
-	u16 service_sequence[3];
+	u16 service_sequence[4];
 	int tx_error;
 	struct ccci_ccif_rx *rx;
 	struct ccci_ccif_controller *control;
@@ -496,6 +496,33 @@ int ccci_ccif_at_send(struct ccci_ccif *ccif, const void *payload, u32 size,
 	memcpy(copy + CCCI_CCIF_HEADER, payload, size);
 	ret = ccif_transmit(ccif, copy, CCCI_CCIF_HEADER + size, CCCI_CCIF_AT_CHANNEL,
 			    CCCI_CCIF_AT_QUEUE, 2, hs2_seen);
+	kfree_sensitive(copy);
+	return ret;
+}
+
+/*
+ * CCMNI payload on the net channel (22, shared control queue 0). The header is
+ * built here exactly as the same-board net port does: data[0] is the CCMNI
+ * index and data[1] the total length including the header.
+ */
+int ccci_ccif_net_send(struct ccci_ccif *ccif, u32 index, const void *payload, u32 size)
+{
+	u8 *copy;
+	int ret;
+
+	if (!ccif || !payload || size < CCCI_CCIF_NET_MIN || size > CCCI_CCIF_NET_MAX ||
+	    index > CCCI_CCIF_NET_INDEX_MAX)
+		return -EINVAL;
+	copy = kmalloc(CCCI_CCIF_HEADER + size, GFP_KERNEL);
+	if (!copy)
+		return -ENOMEM;
+	put_unaligned_le32(index, copy);
+	put_unaligned_le32(CCCI_CCIF_HEADER + size, copy + 4);
+	put_unaligned_le32(CCCI_CCIF_NET_CHANNEL, copy + 8);
+	put_unaligned_le32(0, copy + 12);
+	memcpy(copy + CCCI_CCIF_HEADER, payload, size);
+	ret = ccif_transmit(ccif, copy, CCCI_CCIF_HEADER + size, CCCI_CCIF_NET_CHANNEL,
+			    CCCI_CCIF_NET_QUEUE, 3, true);
 	kfree_sensitive(copy);
 	return ret;
 }
