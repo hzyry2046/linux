@@ -31,6 +31,9 @@ int ccci_port_dispatch_start(struct ccci_port_dispatch *dispatch,
 int ccci_port_dispatch_stop(struct ccci_port_dispatch *dispatch, bool md_stopped);
 int ccci_port_dispatch_offline(struct ccci_port_dispatch *dispatch);
 ssize_t ccci_port_dispatch_status(struct ccci_port_dispatch *dispatch, char *buf);
+/* AT/MUX observation: counts plus an opt-in bounded printable preview. */
+ssize_t ccci_port_dispatch_at(struct ccci_port_dispatch *dispatch, char *buf);
+int ccci_port_dispatch_at_preview(struct ccci_port_dispatch *dispatch, bool enable);
 #else
 static inline int ccci_port_dispatch_offline(struct ccci_port_dispatch *dispatch) { return 0; }
 static inline struct ccci_port_dispatch *
@@ -39,5 +42,9 @@ ccci_port_dispatch_create(struct device *dev, struct ccci_ccif *ccif,
 			  struct ccci_service_endpoint *endpoint) { return NULL; }
 static inline ssize_t ccci_port_dispatch_status(struct ccci_port_dispatch *dispatch,
 						char *buf) { return -EOPNOTSUPP; }
+static inline ssize_t ccci_port_dispatch_at(struct ccci_port_dispatch *dispatch,
+					    char *buf) { return -EOPNOTSUPP; }
+static inline int ccci_port_dispatch_at_preview(struct ccci_port_dispatch *dispatch,
+						bool enable) { return -EOPNOTSUPP; }
 #endif
 #endif

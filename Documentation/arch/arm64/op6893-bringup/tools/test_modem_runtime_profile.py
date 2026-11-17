@@ -23,6 +23,12 @@ static void setup_profile(void){
  user(19,0x20000,0xb4400,false);user(20,0xe0000,0x1e400,false);user(32,0x1000,0x100000,true);
  boot.crystal=CCCI_RUNTIME_CRYSTAL_ABSENT;memset(built,0xa5,sizeof(built));
 }
+/* The LK CCB aggregate plus its control area, both reported to the MD. */
+static void setup_ccb(void){
+ setup_profile();
+ layout.cached=(struct ccci_lk_region){0x90000000,0x8000000};
+ user(1,0,0x4000000,true);user(4,0x10,0x1000,false);
+}
 static void zero_offers(void){
  const unsigned char *p=(const unsigned char *)built;
  for(unsigned i=0;i<sizeof(built);i++)assert(!p[i]);
@@ -30,9 +36,9 @@ static void zero_offers(void){
 static void profile_tests(void){
  setup_profile();assert(!ccci_runtime_bootstrap(&layout,&boot,built));
  assert(!ccci_runtime_validate(built));
- const unsigned ids[]={0,1,2,6,14,27,28,36};
+ const unsigned ids[]={0,1,2,5,6,7,8,9,10,11,12,14,19,20,25,27,28,32,36};
  for(unsigned i=0;i<64;i++){
-  bool expected=false;for(unsigned j=0;j<8;j++)if(i==ids[j])expected=true;
+  bool expected=false;for(unsigned j=0;j<19;j++)if(i==ids[j])expected=true;
   assert(built[i].supported==expected && !built[i].version);
   if(!expected)assert(!built[i].length);
  }
@@ -46,6 +52,45 @@ static void profile_tests(void){
   assert(get_unaligned_le32(built[features[j]].data)==layout.users[users[j]].md);
   assert(get_unaligned_le32(built[features[j]].data+4)==layout.users[users[j]].size);
  }
+ /* Board scalars: zero-flag features, seed, sbp/wmid, CCCI flags, time, C2K. */
+ const unsigned zeros[]={5,8,19};
+ for(unsigned j=0;j<3;j++){
+  assert(built[zeros[j]].length==16);
+  for(unsigned k=0;k<16;k++)assert(!built[zeros[j]].data[k]);
+ }
+ assert(built[7].length==16 && get_unaligned_le32(built[7].data)==0x5a5a1234U);
+ assert(!get_unaligned_le32(built[7].data+4));
+ assert(!get_unaligned_le32(built[9].data));
+ assert(get_unaligned_le32(built[9].data+4)==0x7d);
+ assert(!get_unaligned_le32(built[9].data+8));
+ assert(get_unaligned_le32(built[10].data)==3);
+ assert(!get_unaligned_le32(built[10].data+4));
+ assert(get_unaligned_le32(built[11].data)==1700000000U);
+ assert(!get_unaligned_le32(built[11].data+4));
+ assert(!get_unaligned_le32(built[11].data+8));
+ assert(get_unaligned_le32(built[12].data)==4);
+ assert(built[20].length==4 && get_unaligned_le32(built[20].data)==3584-16);
+ assert(built[32].length==4 && !get_unaligned_le32(built[32].data));
+ /* LWA is advertised with an explicit empty region, as the vendor does. */
+ assert(built[25].length==8 && !get_unaligned_le32(built[25].data));
+ assert(!get_unaligned_le32(built[25].data+4));
+ /* Regions absent from this layout stay unsupported. */
+ const unsigned absent[]={15,16,17,18,26,30,31,35,38};
+ for(unsigned j=0;j<9;j++)assert(!built[absent[j]].supported);
+ /* CCB present: only the raw downlink split is advertised, never CCB itself. */
+ setup_ccb();assert(!ccci_runtime_bootstrap(&layout,&boot,built));
+ assert(!built[15].supported);
+ assert(built[16].length==8);
+ assert(get_unaligned_le32(built[16].data)==layout.users[1].md+0x200000);
+ assert(get_unaligned_le32(built[16].data+4)==layout.users[1].size-0x200000);
+ /* A CCB aggregate that cannot hold the 2 MiB window is not advertised. */
+ setup_ccb();layout.users[1].size=0x200000;
+ assert(!ccci_runtime_bootstrap(&layout,&boot,built));
+ assert(!built[16].supported);
+ setup_ccb();layout.users[1].md+=4;
+ assert(!ccci_runtime_bootstrap(&layout,&boot,built));
+ assert(!built[15].supported && !built[16].supported);
+ setup_profile();assert(!ccci_runtime_bootstrap(&layout,&boot,built));
  memset(query,3,sizeof(query));query[0]=2;
  assert(!ccci_runtime_encode(query,built,blob,sizeof(blob),&used,negotiated,&rejected));
  assert(negotiated[6]==2 && negotiated[27]==2 && negotiated[36]==2);

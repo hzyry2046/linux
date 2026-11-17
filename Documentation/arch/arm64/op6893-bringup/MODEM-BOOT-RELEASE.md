@@ -601,3 +601,73 @@ MD 对每一次拒绝都能容忍（HS1 从未失败），但主线是唯一只�
 协议栈。这已经是 AP 侧最后一个未对齐的大项。
 
 证据见 `evidence/modem-md-dfd-and-dbm.json`。
+
+## HS2 与 CCISM RUNNING 打通（2026-11-17，镜像 2cfc8943f254）
+
+### 结论：决定 HS2 的是 runtime feature 集合，不是 cache、DBM 或任何单个字段
+
+把 HS1 回复里 MD 能协商到的 feature 从 **9 个**扩到 **28 个**之后，MD 的行为
+发生了根本变化：
+
+| | 之前（9 个） | 之后（28 个） |
+|---|---|---|
+| 异常 | `ex_type=0x1d` `MPU_NOT_ALLOW` `pc=0x91823b66` | **无异常**（`md_ee error=-61`） |
+| handshake | `state=3 WAIT_HS2` | **`state=4 HS2_SEEN error=0 hs2_seen=1`** |
+| dispatch | `state=3` | **`state=4 HS2 error=0`** |
+| CCISM | `state=1 ARMED`，一条消息都没发 | **`state=5 RUNNING`**（完整 INIT/ACK/DONE + SCP RBREADY） |
+| FS 发送 | 964，随后即死 | 6041 且仍在增长，`tx_error=0` |
+| 端口拒绝 | — | 0 次 |
+
+时间线：HS1 在 22.1 s 被接受，**HS2 在 62.5 s 被接受**——MD 先花约 40 秒做
+NVRAM 初始化，然后才发 HS2。之前我们在 30 秒窗口内就判定"没到 HS2"，这是
+观测窗口太短造成的误判。
+
+### 新增的 feature（全部有来源，不猜）
+
+标量类（16/4 字节，值取自本机厂商内核日志）：`5 HIF_DMA_REMAP`（全零）、
+`7 RANDOM_SEED`、`8 GPS_COCLOCK`（全零）、`9 SBP_ID`（`{0, 0x7d}`）、
+`10 MISC_CCCI`（`{3}` = 序列检查 + 状态轮询）、`11 CLIB_TIME`（墙钟）、
+`12 C2K`（`{0x4}`）、`19 EE_AFTER_EPOF`（全零）、`20 AP_CCMNI_MTU`（`{3568}`）、
+`32 MD_MTEE`（`{0}`，本板无 MTEE）。
+
+区域类（SMEM user 的 MD 视图 + 大小）：`17 DT_NETD`、`18 DT_USB`、
+`26 AUDIO_RAW`、`30 MD_CONSYS`、`31 MD_USIP`、`35 MD_WIFI_PROXY`、
+`16 DHL_RAW`（LK 的 CCB 聚合按厂商规则在 2 MiB 处切开）。
+`25 LWA` 按厂商行为发显式空区域 `{0,0}`（该 feature 在厂商侧是 MUST，
+即使没有 LWA 区也照发）。
+
+### 仍然不发：feature 15（CCB）
+
+新增 `runtime_mask`（十六进制 u64，位 N 屏蔽 offer N，发布前生效、单次尝试后
+拒绝修改）后逐项二分：
+
+| mask | 结果 |
+|---|---|
+| `0x18000`（15+16） | 无异常，MD 继续读 NVRAM（tx 2792，`tx_error=-16`） |
+| `0x8000`（仅 15） | 无异常，MD 继续读 NVRAM（tx 2802），**最终到 HS2** |
+| `0x0` | MD 在 `ccci_shm_bm.c` 断言（`ex_type=0x50`，带源码路径与行号） |
+
+也就是说：**只要广播 CCB，MD 就在启动期断言**；不广播它，MD 正常到 HS2。
+CCB 是数据通道用的，我们还没有 CCB 控制区/端口子系统，所以暂不广播，
+把这条留到真正实现数据面时再解决。`13 MD_IMAGE_START_MEMORY` 同样暂缓：
+它需要从镜像头解析大小，驱动目前不做这件事，猜一个值比诚实拒绝更糟。
+
+### 端口策略：从"逐通道 fail-closed"改成"HS2 之后观察但不回包"
+
+之前 MD 每打开一个新端口（AT 10、系统 2、PCM 4、`MD_DIRC_RX` 200 …），
+我们返回 `-EOPNOTSUPP` 并让整个 generation 失败。现在：
+
+- HS2 之后，任何小于 `CCCI_MAX_CH_NUM`(258) 的通道都只计数（64 以下每通道
+  一位，之上一个计数器）并接受，**不回任何包**；
+- AT/MUX 通道另有 `md_at`：默认只给计数，写 `on` 才在 48 字节上限内给出
+  可打印预览；
+- 仍然 fail-closed 的：控制通道消息、FS/RPC 语义、以及超出同板枚举的通道 id。
+
+实测观察到的端口序列：`2`(系统) → `4`(PCM) → `10`(AT/MUX) → `59`/`61`
+(`IMSDC_DL`/`ICUSB_TX`) → `200`(`MD_DIRC_RX`)。
+
+### 还没做的
+
+MD 现在活着并持续工作，但**无线电仍未就绪**：没有注册、没有 AT 对话、没有
+数据面。下一步是让 AT/MUX 通道真正与用户态对话（而不是只观察），以及补
+CCB/数据通道。证据见 `evidence/modem-hs2-and-ccism-running.json`。

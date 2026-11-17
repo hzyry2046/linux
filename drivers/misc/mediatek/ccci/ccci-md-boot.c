@@ -37,6 +37,8 @@ struct ccci_md_boot {
 	struct ccci_port_dispatch *dispatch;
 	struct ccci_nvram_cache *cache;
 	struct ccci_runtime_offer offers[CCCI_RUNTIME_FEATURES];
+	/* Operator bisection mask: bit N suppresses offer N before publication. */
+	u64 feature_mask;
 	u64 generation;
 	enum boot_state state;
 	enum ccci_runtime_crystal crystal;
@@ -57,6 +59,45 @@ static int boot_fault(struct ccci_md_boot *boot, int error)
 	boot->state = BOOT_FAILED;
 	boot->error = error;
 	return error;
+}
+
+/* Suppress the operator-selected offers before they are published once. */
+static void boot_mask_offers(struct ccci_md_boot *boot)
+{
+	for (u32 id = 0; id < CCCI_RUNTIME_FEATURES; id++) {
+		if (!(boot->feature_mask & BIT_ULL(id)))
+			continue;
+		boot->offers[id].supported = false;
+		boot->offers[id].length = 0;
+		memset(boot->offers[id].data, 0, sizeof(boot->offers[id].data));
+	}
+}
+
+int ccci_md_boot_set_feature_mask(struct ccci_md_boot *boot, u64 mask)
+{
+	int ret = 0;
+
+	if (!boot)
+		return -EINVAL;
+	mutex_lock(&boot->lock);
+	if (boot->attempted)
+		ret = -EBUSY;
+	else
+		boot->feature_mask = mask;
+	mutex_unlock(&boot->lock);
+	return ret;
+}
+
+u64 ccci_md_boot_feature_mask(struct ccci_md_boot *boot)
+{
+	u64 mask;
+
+	if (!boot)
+		return 0;
+	mutex_lock(&boot->lock);
+	mask = boot->feature_mask;
+	mutex_unlock(&boot->lock);
+	return mask;
 }
 
 int ccci_md_boot_prepare(struct ccci_md_boot *boot, const struct ccci_smem_layout *smem,
@@ -90,6 +131,8 @@ int ccci_md_boot_prepare(struct ccci_md_boot *boot, const struct ccci_smem_layou
 		ret = ccci_smem_clear_first(boot->dev, smem);
 	if (!ret)
 		ret = ccci_runtime_bootstrap(smem, &info, boot->offers);
+	if (!ret)
+		boot_mask_offers(boot);
 	if (!ret)
 		ret = ccci_port_dispatch_prepare(boot->dispatch, generation);
 	if (!ret)

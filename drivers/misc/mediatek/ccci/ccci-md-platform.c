@@ -623,6 +623,65 @@ static ssize_t smem_clear_show(struct device *dev, struct device_attribute *attr
 static DEVICE_ATTR_RW(smem_clear);
 
 /*
+ * Operator bisection of the runtime feature set: bit N suppresses offer N
+ * before the single publication, so one image can compare subsets. Refused
+ * once the MD boot attempt has started.
+ */
+static ssize_t runtime_mask_store(struct device *dev, struct device_attribute *attr,
+				  const char *buf, size_t count)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	u64 mask;
+	int ret;
+
+	ret = kstrtoull(buf, 16, &mask);
+	if (ret)
+		return ret;
+	mutex_lock(&md->lock);
+	ret = ccci_md_boot_set_feature_mask(md->boot, mask);
+	mutex_unlock(&md->lock);
+	return ret ? ret : count;
+}
+
+static ssize_t runtime_mask_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	u64 mask;
+
+	mutex_lock(&md->lock);
+	mask = ccci_md_boot_feature_mask(md->boot);
+	mutex_unlock(&md->lock);
+	return sysfs_emit(buf, "0x%llx\n", mask);
+}
+static DEVICE_ATTR_RW(runtime_mask);
+
+/* AT/MUX channel counters, with an explicit opt-in for the text preview. */
+static ssize_t md_at_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+
+	return ccci_port_dispatch_at(md->dispatch, buf);
+}
+
+static ssize_t md_at_store(struct device *dev, struct device_attribute *attr,
+			   const char *buf, size_t count)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	bool enable;
+	int ret;
+
+	if (sysfs_streq(buf, "on"))
+		enable = true;
+	else if (sysfs_streq(buf, "off"))
+		enable = false;
+	else
+		return -EINVAL;
+	ret = ccci_port_dispatch_at_preview(md->dispatch, enable);
+	return ret ? ret : count;
+}
+static DEVICE_ATTR_RW(md_at);
+
+/*
  * Printable text of the MD debug region, newest tail first. Binary record
  * fields are dropped rather than hex-dumped so the log stays readable; the
  * caller asked for this content explicitly and it never leaves the machine.
@@ -806,6 +865,7 @@ static struct attribute *md_attrs[] = {
 	&dev_attr_dispatch.attr, &dev_attr_md_ee.attr, &dev_attr_md_ee_raw.attr,
 	&dev_attr_lk_regions.attr, &dev_attr_smem_users.attr,
 	&dev_attr_smem_cache.attr, &dev_attr_smem_clear.attr,
+	&dev_attr_runtime_mask.attr, &dev_attr_md_at.attr,
 	&dev_attr_md_dbg.attr, &dev_attr_md_dfd_info.attr, NULL,
 };
 

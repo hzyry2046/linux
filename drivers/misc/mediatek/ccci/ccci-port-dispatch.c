@@ -27,6 +27,15 @@ enum dispatch_state {
 	DISPATCH_FAILED,
 };
 
+/* Same-board AT/MUX channels: UART2 is the ttyC0 path used by the RIL. */
+#define CCCI_AT_RX	10
+#define CCCI_AT_TX	12
+#define CCCI_AT_PREVIEW	48
+/* System channel: CCISM owns 0x11a/0x11b, everything else is observed only. */
+#define CCCI_SYSTEM_RX	2
+/* Highest defined MD channel id in the same-board enum (CCCI_MAX_CH_NUM). */
+#define CCCI_PORT_MAX	258
+
 struct ccci_port_dispatch {
 	struct device *dev;
 	/* Parent lock may nest this mutex, callbacks never take the parent lock. */
@@ -43,7 +52,67 @@ struct ccci_port_dispatch {
 	bool attempted;
 	bool fault_closed;
 	bool ex_ack_logged;
+	/* AT channel observation: counts always, payload only when enabled. */
+	u32 at_frames;
+	u32 at_bytes;
+	u32 at_last_channel;
+	u32 at_last_size;
+	u32 at_preview_len;
+	u8 at_preview[CCCI_AT_PREVIEW];
+	bool at_preview_enabled;
+	/*
+	 * Every other MD port seen after HS2: one bit per channel below 64 plus
+	 * a counter for the rest, so the boot order is visible without a reply.
+	 */
+	u64 observed;
+	u32 observed_other;
+	u32 last_channel;
+	u32 last_size;
 };
+
+/*
+ * Count every AT frame; keep a bounded printable preview only on request.
+ * Nothing is transmitted back: the RIL owns this channel, not this driver.
+ */
+static void dispatch_at_record(struct ccci_port_dispatch *dispatch,
+			       const struct ccci_ccif_event *event)
+{
+	const u8 *bytes = event->data;
+	u32 start = CCCI_CCIF_HEADER_SIZE;
+	u32 len = 0;
+
+	dispatch->at_frames++;
+	dispatch->at_bytes += event->size;
+	dispatch->at_last_channel = event->header.channel;
+	dispatch->at_last_size = event->size;
+	if (!dispatch->at_preview_enabled || event->size <= start) {
+		dispatch->at_preview_len = 0;
+		return;
+	}
+	while (start + len < event->size && len < CCCI_AT_PREVIEW) {
+		u8 c = bytes[start + len];
+
+		if (c < 0x20 || c >= 0x7f)
+			break;
+		len++;
+	}
+	memcpy(dispatch->at_preview, bytes + start, len);
+	dispatch->at_preview_len = len;
+}
+
+/* Record one observed MD port event: channel bit plus the last size. */
+static void dispatch_observe(struct ccci_port_dispatch *dispatch,
+			     const struct ccci_ccif_event *event)
+{
+	u32 channel = event->header.channel;
+
+	if (channel < 64)
+		dispatch->observed |= BIT_ULL(channel);
+	else
+		dispatch->observed_other++;
+	dispatch->last_channel = channel;
+	dispatch->last_size = event->size;
+}
 
 static void dispatch_fault(void *context, int error)
 {
@@ -156,8 +225,29 @@ static int dispatch_port(void *context, const struct ccci_ccif_event *event)
 		ret = dispatch->state == DISPATCH_WAIT_HS1 ? -EPROTO :
 			ccci_service_endpoint_receive(dispatch->endpoint,
 						      dispatch->generation, event);
-	} else if (header.channel == 2 && dispatch->state == DISPATCH_HS2) {
+	} else if (header.channel == CCCI_SYSTEM_RX && dispatch->state == DISPATCH_HS2) {
 		ret = ccci_ccism_bridge_port(dispatch->bridge, event);
+		if (ret == -EOPNOTSUPP) {
+			/* Not CCISM: observe it, keep the generation, answer nothing. */
+			dispatch_observe(dispatch, event);
+			ret = 0;
+		}
+	} else if ((header.channel == CCCI_AT_RX || header.channel == CCCI_AT_TX) &&
+		   dispatch->state == DISPATCH_HS2) {
+		/*
+		 * The MD opens the AT/MUX channel right after HS2. Record it and
+		 * keep the generation alive; nothing is answered for the RIL here.
+		 */
+		dispatch_at_record(dispatch, event);
+		dispatch_observe(dispatch, event);
+	} else if (dispatch->state == DISPATCH_HS2 && header.channel < CCCI_PORT_MAX) {
+		/*
+		 * Any other defined MD port opened after HS2. Observe the channel
+		 * and size, then keep the generation: no reply is invented for a
+		 * port this driver does not own, and the MD is not killed for
+		 * opening it. Ids outside the same-board enum still fail closed.
+		 */
+		dispatch_observe(dispatch, event);
 	} else {
 		/* No silent consumption or fake reply for an unimplemented port. */
 		ret = -EOPNOTSUPP;
@@ -268,11 +358,42 @@ ssize_t ccci_port_dispatch_status(struct ccci_port_dispatch *dispatch, char *buf
 		return -EOPNOTSUPP;
 	mutex_lock(&dispatch->lock);
 	ret = sysfs_emit(buf,
-			 "state=%u generation=%llu error=%d attempted=%u cpu_release_issued=0 service_ready=0\n",
+			 "state=%u generation=%llu error=%d attempted=%u at_frames=%u at_bytes=%u at_last_channel=%u at_last_size=%u observed=0x%llx observed_other=%u last_channel=%u last_size=%u cpu_release_issued=0 service_ready=0\n",
 			 dispatch->state, dispatch->generation, READ_ONCE(dispatch->error),
-			 dispatch->attempted);
+			 dispatch->attempted, dispatch->at_frames, dispatch->at_bytes,
+			 dispatch->at_last_channel, dispatch->at_last_size,
+			 dispatch->observed, dispatch->observed_other,
+			 dispatch->last_channel, dispatch->last_size);
 	mutex_unlock(&dispatch->lock);
 	return ret;
+}
+
+ssize_t ccci_port_dispatch_at(struct ccci_port_dispatch *dispatch, char *buf)
+{
+	ssize_t ret;
+
+	if (!dispatch)
+		return -EOPNOTSUPP;
+	mutex_lock(&dispatch->lock);
+	ret = sysfs_emit(buf,
+			 "preview=%u frames=%u bytes=%u last_channel=%u last_size=%u text=%.*s\n",
+			 dispatch->at_preview_enabled, dispatch->at_frames, dispatch->at_bytes,
+			 dispatch->at_last_channel, dispatch->at_last_size,
+			 dispatch->at_preview_len, dispatch->at_preview);
+	mutex_unlock(&dispatch->lock);
+	return ret;
+}
+
+int ccci_port_dispatch_at_preview(struct ccci_port_dispatch *dispatch, bool enable)
+{
+	if (!dispatch)
+		return -EINVAL;
+	mutex_lock(&dispatch->lock);
+	dispatch->at_preview_enabled = enable;
+	if (!enable)
+		dispatch->at_preview_len = 0;
+	mutex_unlock(&dispatch->lock);
+	return 0;
 }
 
 static void dispatch_cleanup(void *context)

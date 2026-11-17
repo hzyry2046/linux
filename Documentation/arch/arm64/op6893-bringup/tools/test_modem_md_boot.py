@@ -32,6 +32,7 @@ TEST = r'''
 #define __CCCI_PORT_DISPATCH_H
 
 #define BIT(n) (1UL << (n))
+#define BIT_ULL(n) (1ULL << (n))
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #define __iomem
 #define SMCCC_RET_NOT_SUPPORTED (~0UL)
@@ -445,6 +446,10 @@ static void test_boot(void)
 	assert(smc_calls == 1);
 	assert(smc_seen[1] == 6 && smc_seen[2] == 0);
 	assert(ccci_md_boot_release(f.boot) == -EALREADY);
+
+	/* Operator mask: frozen after the attempt, applied before publication. */
+	assert(ccci_md_boot_set_feature_mask(f.boot, BIT_ULL(0)) == -EBUSY);
+	assert(ccci_md_boot_feature_mask(f.boot) == 0);
 	assert(ccci_md_boot_status(f.boot, buf) > 0);
 	assert(strstr(buf, "state=released") && strstr(buf, "released=1") &&
 	       strstr(buf, "boot_status0=0x11") && strstr(buf, "cpu_release") == NULL);
@@ -465,6 +470,15 @@ static void test_boot(void)
 	assert(ccci_md_boot_status(f.boot, buf) > 0 && strstr(buf, "state=stopped"));
 	assert(ccci_md_boot_stop(f.boot, true) == 0);
 	assert(!strcmp(order, "CMRPST"));
+	boot_free(&f);
+
+	/* The mask reaches publication: exactly the selected offers are dropped. */
+	boot_init(&f, CCCI_RUNTIME_CRYSTAL_ABSENT);
+	assert(ccci_md_boot_set_feature_mask(f.boot, BIT_ULL(0) | BIT_ULL(27)) == 0);
+	assert(ccci_md_boot_feature_mask(f.boot) == (BIT_ULL(0) | BIT_ULL(27)));
+	assert(ccci_md_boot_prepare(f.boot, &f.layout, 0x1234, CCCI_RUNTIME_CRYSTAL_ABSENT) == 0);
+	assert(!f.boot->offers[0].supported && !f.boot->offers[0].length);
+	assert(!f.boot->offers[27].supported);
 	boot_free(&f);
 
 	/* Each preparation failure stops at the failing stage. */

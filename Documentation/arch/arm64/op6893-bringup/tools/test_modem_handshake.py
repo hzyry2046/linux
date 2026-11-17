@@ -70,6 +70,8 @@ static u64 now_ms;
 static u64 ktime_get_boottime(void){return now_ms;}
 #define ktime_to_ms(n) (n)
 #define sysfs_emit(b,...) snprintf(b,4096,__VA_ARGS__)
+#include <linux/time.h>
+struct timezone sys_tz = { 0, 0 };
 static void mb(void){fences++;}
 static void memset_io(void *p,int v,size_t n){
  assert(p==rt_pages+0x800 && !v && n==4096);memset(p,v,n);rt_zeros++;
@@ -387,8 +389,20 @@ def main(extra_test='', extra_units=()):
         (inc/'string.h').write_text('#include <string.h>\n')
         (inc/'kernel.h').write_text('#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))\n'
                                   '#define ALIGN(n,a) (((n)+(a)-1)&~((a)-1))\n'
-                                  '#define min(a,b) ((a)<(b)?(a):(b))\n')
+                                  '#define min(a,b) ((a)<(b)?(a):(b))\n'
+                                  '#define lower_32_bits(n) ((u32)((n) & 0xffffffffULL))\n'
+                                  '#define upper_32_bits(n) ((u32)(((n) >> 32) & 0xffffffffULL))\n')
         (inc/'bitops.h').write_text('#ifndef BIT\n#define BIT(n) (1U<<(n))\n#endif\n')
+        (inc/'random.h').write_text('#pragma once\n#include <linux/types.h>\n'
+                                  '/* Harness model: a fixed seed keeps record bytes comparable. */\n'
+                                  'static inline u32 get_random_u32(void) { return 0x5a5a1234U; }\n')
+        (inc/'time.h').write_text('#pragma once\n'
+                                'struct timezone { int tz_minuteswest; int tz_dsttime; };\n'
+                                'extern struct timezone sys_tz;\n')
+        (inc/'timekeeping.h').write_text('#pragma once\n'
+                                       'struct timespec64 { long long tv_sec; long tv_nsec; };\n'
+                                       'static inline void ktime_get_real_ts64(struct timespec64 *ts)\n'
+                                       '{ ts->tv_sec = 1700000000LL; ts->tv_nsec = 0; }\n')
         for name in ('device.h', 'err.h', 'interrupt.h', 'io.h', 'slab.h', 'spinlock.h',
                      'workqueue.h', 'kconfig.h', 'ioport.h', 'jiffies.h', 'ktime.h', 'mutex.h', 'sysfs.h'):
             (inc/name).write_text('/* Models supplied by the harness. */\n')

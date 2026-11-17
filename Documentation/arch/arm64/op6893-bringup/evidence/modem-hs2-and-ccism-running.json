@@ -1,0 +1,75 @@
+{
+ "date": "2026-11-17",
+ "scope": "What actually blocked HS2. The runtime feature set, not the NVRAM cache, the DBM area or any single payload field, decided whether the MD ever reached HS2.",
+ "images": [
+  {
+   "dist": "dist/19944ab87390/boot.img",
+   "release": "7.3.0-op6893-d1-19944ab87390+",
+   "sha256": "78dcfa77274b198dabffc982964097e780ea9e89d2ce787472fb7774a06a263f",
+   "content": "first extended feature set (26 granted); MD reaches ccci_shm_bm instead of MPU_NOT_ALLOW"
+  },
+  {
+   "dist": "dist/2a7ed5e6a8be/boot.img",
+   "release": "7.3.0-op6893-d1-2a7ed5e6a8be+",
+   "sha256": "b73e6cb99f492ba876c03cdf6e67c96d7af01e574f7ebe1906061a02630d639a",
+   "content": "adds LWA and MD_USIP"
+  },
+  {
+   "dist": "dist/2cfc8943f254/boot.img",
+   "release": "7.3.0-op6893-d1-2cfc8943f254+",
+   "sha256": "81c3e18381584702e16302821556f2af587a674d51c73f323899c2d933bfecac",
+   "content": "baseline: HS2 reached, CCISM RUNNING, no MD exception"
+  }
+ ],
+ "feature_set": {
+  "before": "9 granted (0,1,2,6,14,27,28,36,38); the MD always died in MPU_NOT_ALLOW after the NVRAM pass",
+  "after": "28 granted (0,1,2,5,6,7,8,9,10,11,12,14,16,17,18,19,20,25,26,27,28,30,31,32,35,36,38 plus 15 suppressed)",
+  "added_payloads": {
+   "5 MISC_INFO_HIF_DMA_REMAP": "16 zero bytes, exactly as config_ap_runtime_data_v2_1() leaves it",
+   "7 MISC_INFO_RANDOM_SEED_NUM": "16 bytes, first word a random seed",
+   "8 MISC_INFO_GPS_COCLOCK": "16 zero bytes",
+   "9 MISC_INFO_SBP_ID": "{0, 0x7d, 0, 0} from this device's own vendor log (sbp=0x0,wmid[0x7d])",
+   "10 MISC_INFO_CCCI": "{3, 0, 0, 0}: sequence check and MD status polling",
+   "11 MISC_INFO_CLIB_TIME": "{tv_sec lo, tv_sec hi, tz_minuteswest, tz_dsttime}",
+   "12 MISC_INFO_C2K": "{0x4, 0, 0, 0} from this device's own vendor log (c2k_flags 0x4)",
+   "16 DHL_RAW_SHARE_MEMORY": "LK CCB aggregate past the 2 MiB CCB window, the vendor split",
+   "17 DT_NETD, 18 DT_USB, 26 AUDIO_RAW, 30 MD_CONSYS, 31 MD_USIP, 35 MD_WIFI_PROXY": "SMEM user md view and size",
+   "19 EE_AFTER_EPOF": "16 zero bytes",
+   "20 AP_CCMNI_MTU": "{3568}: NET_RX_BUF 3584 minus the 16-byte header",
+   "25 LWA_SHARE_MEMORY": "{0, 0}: MUST on the same-board stack even without an LWA user",
+   "32 MD_MTEE": "{0}: no MTEE on this board"
+  },
+  "withheld": {
+   "15 CCB_SHARE_MEMORY": "advertising it makes the MD assert in ccci_shm_bm during boot while no CCB control/port subsystem exists; measured below",
+   "13 MD_IMAGE_START_MEMORY": "needs the MD image size from the image header, which the driver does not parse; a guessed size would be worse than an honest refusal"
+  }
+ },
+ "bisection": {
+  "method": "new sysfs runtime_mask (hex u64, bit N suppresses offer N) applied before the single publication; one image, one reboot per experiment",
+  "0x18000 (15+16)": "no exception at all; MD keeps reading NVRAM (tx 2792, tx_error -16)",
+  "0x8000 (15 only)": "no exception; MD keeps reading NVRAM (tx 2802) and later reaches HS2",
+  "0x0": "MD asserts in ccci_shm_bm (line 615 then 609 with the same module path)",
+  "conclusion": "feature 15 alone is the trigger; DHL_RAW alone is harmless"
+ },
+ "milestone_run": {
+  "sequence": "SCP pin 26m + start, md_power takeover/on, runner, prepare 1, release 1",
+  "timing": "HS1 accepted at 22.1 s, HS2 accepted at 62.5 s (the MD spends about 40 s in its NVRAM pass first)",
+  "handshake": "state=4 (HS2_SEEN) error=0 active=1 bytes=832 rejected=64 hs2_seen=1 dbm=512",
+  "dispatch": "state=4 (HS2) error=0 at_frames=5 observed=0xa00000000000414 observed_other=1",
+  "observed_channels": "2 (system), 4 (PCM), 10 (AT/MUX), 59 and 61 (IMSDC_DL, ICUSB_TX), plus one channel >= 64 (MD_DIRC_RX 200)",
+  "ccism": "state=5 (RUNNING) generation=1 error=0 armed=1 md_open=1 scp_open=1 bridge_touched=1",
+  "services": "connected=1 error=0 tx=6041 tx_error=0 after a transient -EBUSY burst",
+  "md_ee": "present=1 bytes=14336 error=-61: no exception record",
+  "dmesg": "0 port-event rejections"
+ },
+ "port_policy_change": {
+  "before": "any channel other than 0/2/14/32 failed closed with -EOPNOTSUPP, which killed the generation the moment the MD opened its next port",
+  "after": "after HS2, any channel below CCCI_MAX_CH_NUM (258) is counted (bit per channel under 64, counter above) and accepted without a reply; the AT/MUX text preview stays opt-in via md_at",
+  "still_fail_closed": "control-channel messages, FS/RPC semantics, and channel ids outside the same-board enum"
+ },
+ "not_claimed": [
+  "that the modem is radio-ready: no registration, no AT dialogue and no data plane exists yet",
+  "that the NVRAM pass completed before HS2",
+  "that feature 15 will stay harmful once a CCB control/port subsystem exists"
+ ]
+}

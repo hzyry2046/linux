@@ -29,6 +29,7 @@ TEST = r'''
 #define CCCI_FS_RX 14
 #define CCCI_RPC_RX 32
 #define BIT(x) (1U<<(x))
+#define BIT_ULL(x) (1ULL<<(x))
 #define READ_ONCE(x) (x)
 #define container_of(p,t,m) ((t *)((char *)(p)-offsetof(t,m)))
 #define ERR_PTR(e) ((void *)(intptr_t)(e))
@@ -127,6 +128,23 @@ int main(void){
  assert(!consumer(consumer_ctx,&fe));assert(!consumer(consumer_ctx,&re));assert(!consumer(consumer_ctx,&he));
  assert(!strcmp(logbuf,"RBFSAfrHI"));assert(d->state==DISPATCH_HS2);
  assert(!consumer(consumer_ctx,&oe));assert(logbuf[logn-1]=='D');
+ /* AT/MUX frames are observed and counted, never answered and never fatal. */
+ {u8 at[40];struct ccci_ccif_event ae=packet(at,sizeof(at),10,false);
+  memcpy(at+CCCI_CCIF_HEADER_SIZE,"AT+CFUN?\r\n",10);
+  clearlog();assert(!consumer(consumer_ctx,&ae));assert(!logn);
+  assert(d->at_frames==1&&d->at_last_channel==10&&d->at_last_size==sizeof(at));
+  assert(!ccci_port_dispatch_at_preview(d,true));assert(!consumer(consumer_ctx,&ae));
+  assert(ccci_port_dispatch_at(d,status)>0&&strstr(status,"preview=1"));
+  assert(strstr(status,"at_last_size=40")==NULL&&strstr(status,"AT+CFUN?"));
+  assert(!ccci_port_dispatch_at_preview(d,false));
+  assert(ccci_port_dispatch_at(d,status)>0&&strstr(status,"text=\n"));
+  ae=packet(at,sizeof(at),12,false);assert(!consumer(consumer_ctx,&ae));
+  assert(d->at_frames==3&&d->at_last_channel==12);}
+ /* Every other defined MD port after HS2 is observed, never fatal. */
+ {u8 pcm[24];struct ccci_ccif_event pe=packet(pcm,sizeof(pcm),4,false);
+  clearlog();assert(!consumer(consumer_ctx,&pe));assert(!logn);
+  assert(d->observed&(1ULL<<4));assert(d->last_channel==4&&d->last_size==24);
+  assert(!ccci_port_dispatch_status(d,status)||strstr(status,"observed=0x"));}
  unsigned before=logn;assert(ccci_port_dispatch_stop(d,false)==-EBUSY&&logn==before);
  clearlog();assert(!ccci_port_dispatch_stop(d,true));assert(!strcmp(logbuf,"Jebo"));dev.cleanup(dev.context);
  /* FS before runtime/HS1 is terminal, with no synchronous abort I/O. */
@@ -134,7 +152,7 @@ int main(void){
  run_work(&d->fault_work);assert(!strcmp(logbuf,"EC")&&d->state==DISPATCH_FAILED);dispose(d);
  /* Unsupported channel must neither disappear nor produce fake replies. */
  d=running();runtime_published=true;assert(!consumer(consumer_ctx,&hs1_event));assert(!consumer(consumer_ctx,&he));
- oe=packet(other,sizeof(other),99,false);clearlog();assert(consumer(consumer_ctx,&oe)==-EOPNOTSUPP);assert(!logn);
+ oe=packet(other,sizeof(other),300,false);clearlog();assert(consumer(consumer_ctx,&oe)==-EOPNOTSUPP);assert(!logn);
  run_work(&d->fault_work);assert(!strcmp(logbuf,"EC"));dispose(d);
  /* Failed admission never advances dispatcher state or calls the next owner. */
  for(unsigned stage=0;stage<4;stage++){
