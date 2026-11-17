@@ -40,5 +40,15 @@
   "watchdog reset to reach fastboot when a flash is required",
   "fastboot flash boot recovery/android-boot-current.img",
   "fastboot reboot"
- ]
+ ],
+ "hardware_verification": {
+  "performed": "2026-11-17",
+  "steps": [
+   "watchdog reset to fastboot",
+   "fastboot flash boot recovery/android-boot-current.img",
+   "fastboot reboot"
+  ],
+  "result": "Android 16 booted; adb reachable; sys.boot_completed=1; /proc/version equals the kernel version string inside the captured image",
+  "conclusion": "the recovery image is proven to restore a working Android, not just to hash-match the partition"
+ }
 }
