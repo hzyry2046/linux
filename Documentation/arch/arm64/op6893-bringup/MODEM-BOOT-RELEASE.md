@@ -337,3 +337,17 @@ MTCMOS OFF 六寄存器读回 → dispatcher/endpoint 停止。结果
 失败并在 `mcu/service/nvram/src/nvram_io.c:2394` 断言
 （`para=0x1,0x4,0xf008`）。诊断性“假成功 Restore”不改变该断言，说明
 MD 需要真实 NVRAM 内容或 bin-region 备份；按项目约束不导入。
+
+## 操作者备忘：复位与刷机
+
+- 需要 fastboot 时用 watchdog 复位。喂狗进程是 busybox `watchdog`
+  （`/run/op6893-watchdog.pid`，本轮为 285，`/bin/busybox watchdog -F -t 5 -T 30
+  /dev/watchdog0`）。正确做法是 `kill -STOP` 该进程后等硬件超时（本轮约
+  41 秒进入 fastboot）。注意 `/proc` 里还有一个同名的内核线程
+  （PPid 为 2，本轮 PID 64），对它发信号无效，不要误判为“喂狗没停”。
+- 不需要 fastboot 的复位用 `sync` + SysRq `b`，回到同一张主线镜像。
+- 从 Android 回 fastboot 用 `adb reboot bootloader`，不必等 watchdog。
+- `/cache`（`/dev/sdc55`）在主线里挂到 `/run/cache` 且为只读；本轮可用空间
+  125 MB，而 rootfs 为 121 MB，重建并安装新 rootfs 需要先删掉保留的回滚
+  镜像，因此本轮没有为仅含诊断开关的 runner 变化重建 rootfs，跟踪开关是从
+  `/tmp/op6893-modem` 覆盖运行的。
