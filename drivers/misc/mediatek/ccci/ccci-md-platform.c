@@ -3,7 +3,9 @@
 #include <linux/arm-smccc.h>
 #include <linux/bitops.h>
 #include <linux/clk.h>
+#include <linux/debugfs.h>
 #include <linux/delay.h>
+#include <linux/fs.h>
 #include <linux/hex.h>
 #include <linux/mfd/syscon.h>
 #include <linux/mutex.h>
@@ -61,6 +63,9 @@ struct ccci_md_platform {
 	/* Same reservation: the MD writes its own log there; text only. */
 	void __iomem *dbg;
 	size_t dbg_bytes;
+	/* MD DFD log region: much larger than the exception record, streamed. */
+	void __iomem *dfd;
+	size_t dfd_bytes;
 };
 
 /* Independent hardware check also catches a genpd power-off veto/failure. */
@@ -662,6 +667,120 @@ static ssize_t md_dbg_show(struct device *dev, struct device_attribute *attr, ch
 }
 static DEVICE_ATTR_RO(md_dbg);
 
+#define MD_DFD_CHUNK	2048
+
+/*
+ * Convert one window of the MD DFD region to text: printable bytes verbatim,
+ * every other run collapsed to a single newline. State crosses windows so a
+ * chunk boundary never invents or loses a separator.
+ */
+static size_t md_dfd_span(const void __iomem *dfd, loff_t *pos, loff_t end,
+			  char *buf, size_t capacity, bool *nl)
+{
+	size_t n = 0;
+
+	while (n < capacity && *pos < end) {
+		u8 c = readb(dfd + *pos);
+
+		(*pos)++;
+		if (c >= 0x20 && c < 0x7f) {
+			buf[n++] = c;
+			*nl = false;
+		} else if (!*nl) {
+			buf[n++] = '\n';
+			*nl = true;
+		}
+	}
+	return n;
+}
+
+/*
+ * Streaming text view of the MD DFD region. The MD owns this memory, so the
+ * reader keeps no snapshot; it pages by file position.
+ */
+static ssize_t md_dfd_read(struct file *file, char __user *to, size_t count, loff_t *ppos)
+{
+	struct ccci_md_platform *md = file->private_data;
+	loff_t pos = *ppos;
+	size_t n;
+	bool nl;
+	char *buf;
+	int ret;
+
+	if (!md->dfd || !md->dfd_bytes)
+		return -EOPNOTSUPP;
+	if (pos < 0 || pos > md->dfd_bytes)
+		return -EINVAL;
+	if (pos == md->dfd_bytes)
+		return 0;
+	if (count > MD_DFD_CHUNK)
+		count = MD_DFD_CHUNK;
+	buf = kmalloc(count, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+	mutex_lock(&md->lock);
+	if (pos) {
+		u8 prev = readb(md->dfd + pos - 1);
+
+		nl = prev < 0x20 || prev >= 0x7f;
+	} else {
+		nl = true;
+	}
+	n = 0;
+	/* A window of pure padding yields no text but still advances. */
+	while (!n && pos < md->dfd_bytes)
+		n = md_dfd_span(md->dfd, &pos, md->dfd_bytes, buf, count, &nl);
+	mutex_unlock(&md->lock);
+	ret = n;
+	if (n && copy_to_user(to, buf, n))
+		ret = -EFAULT;
+	else
+		*ppos = pos;
+	kfree(buf);
+	return ret;
+}
+
+static const struct file_operations md_dfd_fops = {
+	.owner = THIS_MODULE,
+	.open = simple_open,
+	.read = md_dfd_read,
+	.llseek = default_llseek,
+};
+
+static void md_dfd_debugfs_remove(void *data)
+{
+	debugfs_remove(data);
+}
+
+/* Whole-region scan: tells "no log yet" apart from "log with no text". */
+static ssize_t md_dfd_info_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	size_t nonzero = 0, printable = 0, first = md->dfd_bytes;
+	ssize_t ret;
+
+	if (!md->dfd || !md->dfd_bytes)
+		return -EOPNOTSUPP;
+	mutex_lock(&md->lock);
+	for (size_t i = 0; i < md->dfd_bytes; i++) {
+		u8 c = readb(md->dfd + i);
+
+		if (c) {
+			nonzero++;
+			if (first == md->dfd_bytes)
+				first = i;
+			if (c >= 0x20 && c < 0x7f)
+				printable++;
+		}
+	}
+	mutex_unlock(&md->lock);
+	ret = sysfs_emit(buf, "bytes=%zu nonzero=%zu printable=%zu first=%zd\n",
+			 md->dfd_bytes, nonzero, printable,
+			 first == md->dfd_bytes ? -1 : (ssize_t)first);
+	return ret;
+}
+static DEVICE_ATTR_RO(md_dfd_info);
+
 /* Raw header bytes for offline decode; no payload or core dump is exposed. */
 static ssize_t md_ee_raw_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -687,7 +806,7 @@ static struct attribute *md_attrs[] = {
 	&dev_attr_dispatch.attr, &dev_attr_md_ee.attr, &dev_attr_md_ee_raw.attr,
 	&dev_attr_lk_regions.attr, &dev_attr_smem_users.attr,
 	&dev_attr_smem_cache.attr, &dev_attr_smem_clear.attr,
-	&dev_attr_md_dbg.attr, NULL,
+	&dev_attr_md_dbg.attr, &dev_attr_md_dfd_info.attr, NULL,
 };
 
 static const struct attribute_group md_group = { .attrs = md_attrs };
@@ -811,6 +930,24 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 			}
 		}
 	}
+	if (md->smem.users[CCCI_SMEM_DFD].present) {
+		const struct ccci_smem_region *dfd = &md->smem.users[CCCI_SMEM_DFD];
+		u32 bytes = dfd->size;
+		u64 page = dfd->ap & ~0xfffULL;
+		u64 end = (dfd->ap + bytes + 0xfff) & ~0xfffULL;
+		bool inside = ccci_lk_contains(&md->smem.noncached, page, end - page) ||
+			      ccci_lk_contains(&md->smem.cached, page, end - page);
+
+		if (bytes && inside &&
+		    devm_request_mem_region(dev, page, end - page, "ccci-md-dfd")) {
+			void __iomem *map = devm_ioremap(dev, page, end - page);
+
+			if (map) {
+				md->dfd = map + (dfd->ap - page);
+				md->dfd_bytes = bytes;
+			}
+		}
+	}
 	if (IS_ENABLED(CONFIG_OP6893_CCCI_CCIF)) {
 		md->ccif = ccci_ccif_create(pdev, layout, md->infra);
 		if (IS_ERR(md->ccif))
@@ -877,6 +1014,20 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 		dev_pm_domain_detach(md->domain, false);
 		device_unregister(md->lookup);
 		return ret;
+	}
+	if (md->dfd) {
+		struct dentry *dentry;
+
+		dentry = debugfs_create_file("op6893-md-dfd", 0400, NULL, md, &md_dfd_fops);
+		if (!IS_ERR_OR_NULL(dentry)) {
+			ret = devm_add_action_or_reset(dev, md_dfd_debugfs_remove, dentry);
+			if (ret) {
+				platform_set_drvdata(pdev, NULL);
+				dev_pm_domain_detach(md->domain, false);
+				device_unregister(md->lookup);
+				return ret;
+			}
+		}
 	}
 	dev_info(dev, "MD owner ready: step=%s, SMEM retained, four rails/clocks and MD1 attached; CPU release not issued\n",
 		 md->power.step);

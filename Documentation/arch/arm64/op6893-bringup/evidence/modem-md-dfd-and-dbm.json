@@ -1,0 +1,60 @@
+{
+ "date": "2026-11-17",
+ "scope": "Two AP-side inputs that the same-board vendor stack writes and mainline did not: the MD DFD log region as a read-only diagnostic, and the DBM guard/body pattern in SMEM user 0 before the runtime doorbell.",
+ "images": [
+  {
+   "dist": "dist/0ae342c5bec9/boot.img",
+   "release": "7.3.0-op6893-d1-0ae342c5bec9+",
+   "sha256": "9ecd1858d3c5a72c1c8f0f1c58bb92dceaf7db1c0a962920a45f40d18f67681e",
+   "content": "MD DFD region export only"
+  },
+  {
+   "dist": "dist/12111f9c1462/boot.img",
+   "release": "7.3.0-op6893-d1-12111f9c1462+",
+   "sha256": "21686b185b52c732445c1ce1ba26b63374845d6fbf53f5cb7d4c2265ea27b4ab",
+   "content": "MD DFD export plus DBM pattern written before the runtime doorbell"
+  }
+ ],
+ "new_diagnostics": {
+  "debugfs:op6893-md-dfd": "read-only streaming text view of SMEM user 10 (RAW_DFD, 8 MiB); printable runs verbatim, every other run collapsed to one newline, paged by file position",
+  "md_dfd_info": "read-only whole-region scan: bytes, nonzero byte count, printable byte count and first nonzero offset",
+  "handshake.dbm": "the mapped DBM size, or 0 when the region was not usable"
+ },
+ "dfd_finding": {
+  "before_md_boot": "bytes=8388608 nonzero=0 printable=0 first=-1",
+  "after_fatal": "bytes=8388608 nonzero=0 printable=0 first=-1",
+  "conclusion": "this firmware writes nothing into RAW_DFD, so the region is not an MD-side log source on this board and the MD-side forensics line is closed for now"
+ },
+ "vendor_log_correction": {
+  "observation": "the vendor boot excerpt's [1]NORMAL LOG REGION / CCCI MD INIT REGION sections come from the vendor kernel's own AP-side CCCI log buffers (ccci_private_log.c format_separate_str), not from RAW_DFD",
+  "implication": "the vendor excerpt cannot be used as evidence about MD-internal logging"
+ },
+ "dbm_finding": {
+  "vendor_source": "drivers/misc/mediatek/eccci/modem_sys1.c md_cd_smem_sub_region_init(): SMEM_USER_RAW_DBM gets 0x44444444 at words 0 and 1, a cleared CCCI_SMEM_SIZE_DBM (160) body, then 0x44444444 at the next two words, before the H2D_SRAM doorbell",
+  "mainline_before": "SMEM user 0 was never written",
+  "mainline_after": "handshake reports dbm=512 and the 176-byte pattern is emitted",
+  "first_attempt": "a separate devm_request_mem_region for the DBM page failed with -EBUSY because the runtime reservation already covers 0x8e11e000-0x8e11ffff; the driver now reuses that window instead of claiming a second region",
+  "result": {
+   "fs_requests": 859,
+   "service_tx": 964,
+   "dispatch": "state=3 WAIT_HS2, error=0",
+   "exception": "ex_type=0x1d, pc=0x91823b66, addr=0x90d18620, sp=0x24ab42d0",
+   "conclusion": "the DBM pattern is a real AP-side input we were missing, but writing it changes nothing observable"
+  }
+ },
+ "feature_negotiation_evidence": {
+  "query": "020303...03030301 030303 00...",
+  "negotiated": "020202010101020101010101010102010101010101010101010101020201010101010101020102010101010101 00...",
+  "decoded": {
+   "md_must": ["0 BOOT_INFO"],
+   "md_optional": "every id 1-40 and 42-44 except 41, which is NOT_SUPPORT",
+   "mainline_granted": [0, 1, 2, 6, 14, 27, 28, 36, 38],
+   "vendor_granted": "about 35 ids, because config_ap_side_feature() declares most of them MUST and the MD asks OPTIONAL"
+  },
+  "implication": "the MD tolerates every refusal (it never fails HS1), but mainline is the only stack that grants 9 features; this is now the largest remaining AP-side difference"
+ },
+ "not_claimed": [
+  "that the DFD region is unused by every firmware revision",
+  "that the missing features cause the fault"
+ ]
+}

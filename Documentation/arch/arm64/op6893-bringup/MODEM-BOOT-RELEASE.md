@@ -535,3 +535,69 @@ cache 完全不改变行为，所以"我们每次清零"从来不是决定因素
 
 推论：MD 在选择"先重建再 HS2"还是"直接 HS2"时看的是别的 AP 侧输入，不是
 cache 内容。证据见 `evidence/modem-nvram-cache-persistence.json`。
+
+## MD DFD 区与 DBM 初始化（2026-11-17，镜像 0ae342c5bec9 / 12111f9c1462）
+
+### 1. MD 侧日志：RAW_DFD 在这块固件上是空的
+
+原以为 MD 会把内部日志写进 SMEM user 10（RAW_DFD，8 MiB），因此新增：
+
+- `debugfs:op6893-md-dfd`（只读）：整区流式文本视图，可打印字节原样输出，
+  其余连续段折叠成一个换行，按文件位置分页，8 MiB 不会一次性进内存；
+- `md_dfd_info`（只读）：整区扫描，打印字节数、非零字节数、可打印字节数和
+  首个非零偏移。
+
+真机结果：
+
+```
+MD 启动前： bytes=8388608 nonzero=0 printable=0 first=-1
+异常之后： bytes=8388608 nonzero=0 printable=0 first=-1
+```
+
+**整区全零**。也就是说这块固件不往 RAW_DFD 写日志，MD 侧取证目前没有可读
+来源，这条线关闭。
+
+同时更正一个来源误判：厂商启动摘录里的 `[1]NORMAL LOG REGION`、
+`[1]CCCI MD INIT REGION` 等段落来自厂商**内核自身**的 CCCI 日志缓冲
+（`ccci_private_log.c` 的 `format_separate_str()`），不是 RAW_DFD 内容。
+所以那份摘录不能当作"MD 内部日志"的证据。
+
+### 2. DBM 区：厂商会写，我们从来没写过
+
+对照 `modem_sys1.c` 的 `md_cd_smem_sub_region_init()`：厂商在发 runtime 数据
+之后、拉 `H2D_SRAM` 门铃之前，会往 SMEM user 0（RAW_DBM）写一个完整模式：
+
+```
+[0x44444444][0x44444444][ 160 字节清零主体 ][0x44444444][0x44444444]
+```
+
+我们此前完全没有写这个区域。现在在 `control_publish()` 里、`runtime_send()`
+之前写同一模式，`handshake` 状态多一个字段可验证：
+
+```
+state=3 ... dbm=512 ...
+```
+
+第一次实现踩了一个坑：单独为 DBM 页 `devm_request_mem_region` 会返回 `-EBUSY`，
+因为 runtime 的保留窗口已经是 `0x8e11e000-0x8e11ffff`，DBM 就在里面。改成
+**复用同一窗口**，不再申请第二个区域（`/proc/iomem` 里不会出现 `ccci-dbm`）。
+
+结果：`dbm=512` 确认写入生效，但 MD 行为完全不变——859 请求 / 964 发送 /
+`state=3 WAIT_HS2` / 同一个 `ex_type=0x1d pc=0x91823b66 addr=0x90d18620`。
+DBM 是一个我们确实缺失的 AP 侧输入，但它不是决定因素。
+
+### 3. 剩下的最大差异：协商到的 feature 数量
+
+真机 `handshake` 已经把 MD 的 query 和协商结果整份打印出来，解码后：
+
+| 项 | 结果 |
+|---|---|
+| MD 声明 MUST 的 | 只有 0（BOOT_INFO） |
+| MD 声明 OPTIONAL 的 | 1–40、42–44（41 为 NOT_SUPPORT） |
+| 我们回 MUST 的 | 0、1、2、6、14、27、28、36、38（共 9 个） |
+| 厂商 AP 回 MUST 的 | 约 35 个（`config_ap_side_feature()` 把绝大多数声明为 MUST） |
+
+MD 对每一次拒绝都能容忍（HS1 从未失败），但主线是唯一只给 9 个 feature 的
+协议栈。这已经是 AP 侧最后一个未对齐的大项。
+
+证据见 `evidence/modem-md-dfd-and-dbm.json`。

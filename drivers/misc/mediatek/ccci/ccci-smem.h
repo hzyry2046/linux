@@ -6,7 +6,9 @@
 
 /* Same-board 4.19 wire IDs; CCB is one aggregate until port setup. */
 #define CCCI_SMEM_USERS		42
+#define CCCI_SMEM_DBM		0
 #define CCCI_SMEM_CCB		1
+#define CCCI_SMEM_DFD		10
 #define CCCI_SMEM_RUNTIME		14
 #define CCCI_SMEM_MDSS_DBG	13
 #define CCCI_SMEM_CCISM_SCP	16

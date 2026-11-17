@@ -16,6 +16,10 @@
 #include "ccci-handshake.h"
 #include "ccci-smem.h"
 
+/* Same-board AP-written DBM area: two guards around a cleared body. */
+#define CCCI_DBM_GUARD	0x44444444
+#define CCCI_DBM_BODY	160
+
 struct ccci_ccif_controller {
 	struct device *dev;
 	void __iomem *ap;
@@ -34,6 +38,9 @@ struct ccci_ccif_controller {
 	bool fault_notified;
 	bool active;
 	bool attempted;
+	/* DBM guards and body, written before the runtime doorbell. */
+	void __iomem *dbm;
+	u32 dbm_bytes;
 };
 
 static int control_runtime_write(void *context, u32 offset, u32 value)
@@ -82,8 +89,32 @@ static const struct ccci_ccif_tx_ops control_tx_ops = {
 	.fence = control_fence,
 };
 
+/*
+ * The same-board AP writes two guard words around a cleared 160-byte body in
+ * SMEM user 0 before the runtime doorbell. The pattern is written whole so a
+ * partially initialized area is never visible to the MD.
+ */
+static void control_dbm_pattern(void __iomem *dbm)
+{
+	writel(CCCI_DBM_GUARD, dbm);
+	writel(CCCI_DBM_GUARD, dbm + 4);
+	memset_io(dbm + 8, 0, CCCI_DBM_BODY);
+	writel(CCCI_DBM_GUARD, dbm + 8 + CCCI_DBM_BODY);
+	writel(CCCI_DBM_GUARD, dbm + 12 + CCCI_DBM_BODY);
+}
+
+static void control_dbm_init(struct ccci_ccif_controller *control)
+{
+	if (!control->dbm || control->dbm_bytes < 16 + CCCI_DBM_BODY)
+		return;
+	control_dbm_pattern(control->dbm);
+}
+
 static int control_publish(void *context, const void *runtime, u32 used, const void *upload)
 {
+	struct ccci_ccif_controller *control = context;
+
+	control_dbm_init(control);
 	return ccci_ccif_runtime_send(&control_tx_ops, context, runtime, used, upload);
 }
 
@@ -245,10 +276,10 @@ ssize_t ccci_ccif_control_status(struct ccci_ccif_controller *control, char *buf
 	ccci_runtime_hex(query, control->hs.query);
 	ccci_runtime_hex(negotiated, control->hs.negotiated);
 	ret = sysfs_emit(buf,
-			 "state=%u error=%d active=%u attempted=%u bytes=%u rejected=%u hs2_seen=%u md_head=0x%x md_word1=0x%x cpu_release_issued=0 query=%s negotiated=%s\n",
+			 "state=%u error=%d active=%u attempted=%u bytes=%u rejected=%u hs2_seen=%u dbm=%u md_head=0x%x md_word1=0x%x cpu_release_issued=0 query=%s negotiated=%s\n",
 			 control->hs.state, control->hs.error, control->active, control->attempted,
 			 control->hs.used, control->hs.rejected,
-			 control->hs.hs2_seen,
+			 control->hs.hs2_seen, control->dbm ? control->dbm_bytes : 0,
 			 readl(control->runtime + CCCI_RUNTIME_HALF),
 			 readl(control->runtime + CCCI_RUNTIME_HALF + 4),
 			 query, negotiated);
@@ -283,6 +314,21 @@ struct ccci_ccif_controller *ccci_ccif_control_create(struct device *dev, void _
 	if (!mapping)
 		return ERR_PTR(-ENOMEM);
 	control->runtime = mapping + control->plan.ap - page;
+	if (smem->users[CCCI_SMEM_DBM].present) {
+		const struct ccci_smem_region *dbm = &smem->users[CCCI_SMEM_DBM];
+		u32 bytes = dbm->size;
+
+		/*
+		 * The DBM user sits immediately after the runtime pair, so it is
+		 * already inside this reservation; never claim a second region.
+		 */
+		if (!dbm->cached && !dbm->no_map && bytes >= 16 + CCCI_DBM_BODY &&
+		    dbm->ap >= page && dbm->ap + bytes <= end &&
+		    ccci_lk_contains(&smem->noncached, dbm->ap, bytes)) {
+			control->dbm = mapping + (dbm->ap - page);
+			control->dbm_bytes = bytes;
+		}
+	}
 	control->ap = ap;
 	control->rx = rx;
 	mutex_init(&control->lock);
