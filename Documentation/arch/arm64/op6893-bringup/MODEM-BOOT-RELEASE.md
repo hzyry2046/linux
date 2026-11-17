@@ -156,8 +156,12 @@ rootfs 为 `debian-c45bf71e26f2`。提取与验证方式、逐项结果见
    此前空工作副本下的 `nvram_io.c` 断言消失。
 3. 结束时 MD 在 `Z:\NVRAM\NVD_DATA\MF04_003` 之后抛出致命 CPU 异常
    `ex_type=29`（MPU_NOT_ALLOW，class=fatal，
-   `pc=0x91823b66 addr=0x90d18620`）。`md1rom` 基址为 `0x90000000`，两个地址
-   都落在基带镜像自身，说明不是 FS 应答格式问题。
+   `pc=0x91823b66 addr=0x90d18620`）。当时把 `md1rom` 基址当作
+   `0x90000000` 并据此认为两个地址都在镜像内；后续用 `lk_regions` 查证到
+   真实几何为 `bank0=0xe0000000+0x1e000000`，`md1rom` 分区 200 MB、镜像
+   31.9 MB，而 MD 视图的镜像基址确实是 `0x90000000`（AP 侧偏移
+   `0x50000000`）。因此两个地址仍落在已加载镜像内，但“基址 0x90000000”
+   是 MD 视图而不是 AP 物理地址，不能再当作 AP 侧地址使用。
 4. `handshake` 现在额外输出 HS1 原始 query 与协商结果：MD 只把 feature 0
    标为 must-support，其余全部 optional，因此“缺少 runtime feature”不是
    本轮的阻塞点。
@@ -176,9 +180,99 @@ rootfs 为 `debian-c45bf71e26f2`。提取与验证方式、逐项结果见
 | `8b1f973b5ff2` | 按厂商 `SMF_NCLR_FIRST` 表首次清零 SMEM（75,640,832 字节；排除 CCISM_SCP 与 NVRAM cache） | 异常点不变（`tx=964`） |
 
 两项都通过 prepare 门并正常放行，说明它们自身正确、不破坏启动路径；但都
-没有改变 MPU 异常。LK 还提供 `md_mpu_inf`（216 B，9 条）与 `md_mpu_num`，
-对应厂商用 `mtk_emimpu` 为 MD 编程的 EMI MPU 区域表——这是目前唯一已知的、
-AP 侧尚未实现的同板 MD 保护配置，是下一个候选。
+没有改变 MPU 异常。LK 还提供 `md_mpu_inf`（216 B）与 `md_mpu_num`，
+当时据此把“为 MD 编程 EMI MPU”列为下一个候选。
+
+### 为什么不再把 EMI MPU 当作缺失环节
+
+按“可用工具查证的不靠推理”的要求，后续对这条候选做了三项查证，结论是
+它不构成本轮的阻塞点，因此没有为此改动任何 EMI MPU 寄存器：
+
+1. 异常类型不同。同板 `mdee_dumper_v5.h` 的枚举里 `MPU_NOT_ALLOW = 0x1D`
+   是 CPU 核心异常码（来自 `cause[exccode]`），而 EMI MPU 违规是独立的
+   `EMI_MPU_VIOLATION_EXCEPTION = 0x70`。本轮记录到的始终是 `0x1D`。
+2. 厂商内核不应用这张表。4.19 里 `parse_mpu_setting()` 只把
+   `md_mpu_inf` 读进 `s_g_md_mpu_cfg_list`，唯一消费者
+   `get_mpu_region_cfg_info()` 在全树没有任何调用者；6.6 参考树只保留声明。
+   厂商内核实际编程的只有 AP 自身区域（`protect_ap_region()`）。
+3. 结构大小对不上。`struct _mpu_cfg` 是 20 字节，216 字节既不是它的整数倍，
+   也不能在未解码的情况下当作“9 条区域”使用。真要使用必须先逐条解码并与
+   内存几何核对，而第 2 点已经说明厂商并不需要它。
+
+LK 在主线启动前已经跑过，所以即便 LK 编程过 EMI MPU，该状态在主线里依然
+生效；主线不重配也不会清除它。EMI MPU 属于全 SoC 保护配置，在没有证据
+指向它时改动它的风险远大于收益。
+
+## 审计后的用户 RPC 事实（2026-11-17，镜像 0a007c93dc91）
+
+前一轮停在 88 次发送，原因是 MD 查询 `0x400f`（`IPC_RPC_QUERY_AP_SYS_PROPERTY`）
+时 runner 没有可用的属性事实而关闭端点。为了让 policy 有据可依，而不是
+猜值，本轮按以下顺序取事实：
+
+1. runner 新增显式 `--trace-rpc-names`，只打印请求 operation 与有界可打印
+   的请求名，不打印任何取值；一次运行即得到 MD 的查询序列。
+2. 回 Android 用 `getprop` 核实：`ro.build.version.svn.c`、
+   `ro.build.version.svn`、`ro.build.version.ota` 在本机**不存在**（整个
+   `getprop` 输出里没有任何 `ro.build.version.svn*` 键）。因此 Android
+   `property_get()` 语义下它们的正确答复是长度 0 的空串，而不是“未知”。
+3. 同一次 Android 会话把与 modem/构建相关的属性受控导出到
+   `/data/src/op6893-private/android-props/`（0700/0600，不在任何 git 树内，
+   并已剔除 serialno、IMEI/MEID、ICCID/IMSI、各类 MAC 等身份类键），
+   供后续查询逐条审计。
+4. policy 只包含从该导出核实过的事实：27 条真实取值（含
+   `ro.build.version.release=16`、`ro.vendor.mediatek.version.release`、
+   `ro.product.device=op6893` 等）与 9 条已核实缺失（null）。
+
+结果：同一放行流程下 MD 通过全部属性查询，`services tx=964 tx_error=0`，
+`dispatch state=3 (WAIT_HS2) error=0`，异常点与之前完全相同。也就是说
+**属性查询不再是阻塞点**，阻塞点仍是 MD 自身的 `MPU_NOT_ALLOW`。
+
+### 异常记录解码修正
+
+同板 `ex_overview_t` 的 `ex_info` 位于 `main_reson[core_num]` 之后，而
+`core_num` 是记录里的字段：本机为 12，不是头文件默认的 9。旧实现把偏移
+硬编码为 `cores=12` 时的值，一旦记录里换成别的核心数就会读错字段。现在
+`ccci-md-ee.c` 用纯函数按记录中的核心数推导全部偏移，超出
+`CCCI_MD_EE_MAX_CORES` 或长度不足时返回 `-ENODATA` 而不是继续读。修正后
+同一记录解码为：
+
+```
+version=0xab000005 cores=12 offender=MCU ex_type=29 class=fatal section=0
+cadefa=1 code=0x1d,0x91823b66,0x90b2d7c2
+sp=0x24ab42d0 pc=0x91823b66 lr=0x90b2d7c2 addr=0x90d18620 cause=0x74 status=0x2
+```
+
+`section=0` 表示不属于厂商 `ee_err_sec_str[]` 里任何只读代码段，`cause=0x74`
+的 `exccode` 字段同样是 `0x1D`，与固件自己打印的 AFOUND 文本一致。
+
+### LK 几何与 FS 尾部证据
+
+`lk_regions` 给出本轮实际使用的几何：
+
+```
+bank0=0xe0000000+0x1e000000 noncached=0x8e000000+0x1800000
+cached=0x88000000+0x4960000 users=23 cache_md_base=0x48000000
+cache_gaps=524288 noncache_gaps=15681536
+```
+
+`md1rom` 分区（`/dev/sdc28`，200 MB）的 MTK 头给出镜像大小 `0x01febe00`
+（31.9 MB），故障 `pc` 与 `addr` 分别位于镜像内 +24.1 MB 与 +13.1 MB，
+所以不是“跳到了未加载的地址”。
+
+runner 新增显式 `--trace-fs`（只打印 operation、路径、状态；写负载一律
+折算成字节数，`0x1022` 只打印十个数值参数），得到的尾部序列说明 FS 侧
+没有欠读：对 `MF04_003`（824 字节）的两次 `CMPT_Read` 是
+`offset=0x40 size=0x17c` 与 `offset=0x1bc size=0x17c`，合计正好
+`0x338` 到 EOF；`ICOR_000`/`ICOE_000`（4192 字节）同样以
+`offset=0x40` 起、每块 `0x408` 精确覆盖到 EOF。MD 在把最后一个文件读完
+之后才抛异常。
+
+### 本轮仍未闭合
+
+HS2 仍未到达，因此没有 CCISM 后置协议、没有 radio READY。当前阻塞点是
+MD 内部的内存保护异常，已排除：FS 应答格式、真实 NVRAM 缺失、属性查询、
+feature 38、首启 SMEM 内容、EMI MPU 表。要继续必须取得 MD 侧更多证据
+（例如 MD 自身日志区里除 AFOUND 之外的内容），而不是继续在 AP 侧盲改。
 
 ## 首次上机结果（2026-11-16，镜像 de66138efb8e）
 

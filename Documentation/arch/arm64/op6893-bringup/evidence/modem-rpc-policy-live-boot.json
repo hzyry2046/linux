@@ -1,0 +1,132 @@
+{
+ "date": "2026-11-17",
+ "scope": "Audited user-RPC facts, corrected exception decode and LK geometry for the op6893 MD release sequence. No property value, path list or payload leaves the machine; identity keys were excluded before storage.",
+ "image": {
+  "dist": "dist/0a007c93dc91/boot.img",
+  "release": "7.3.0-op6893-d1-0a007c93dc91+",
+  "sha256": "ffbf0680e21f6c28840879277d2e4f701aae29dac7e5e6324b034648213c9c6c",
+  "build_tests": "modem-release-image.py ran test_modem_md_boot, test_modem_md_ee, test_modem_port_dispatch, test_modem_service_endpoint and test_modem_rpc_board before packaging",
+  "source_restored": true
+ },
+ "rootfs": {
+  "installed_id": "debian-c45bf71e26f2",
+  "runner_used": "/tmp/op6893-modem (current tools directory copied over the read-only rootfs copy for this experiment)",
+  "note": "the installed rootfs still carries the earlier runner modules; the opt-in traces are new and were exercised from /tmp"
+ },
+ "rpc_facts": {
+  "operation": "0x400f IPC_RPC_QUERY_AP_SYS_PROPERTY (userspace-owned, routed by ccci-rpc-protocol.c)",
+  "discovery": "runner --trace-rpc-names printed operation and request name only; no value was logged",
+  "queries_seen": [
+   "ro.build.version.svn.c",
+   "ro.build.version.svn",
+   "ro.build.version.ota"
+  ],
+  "verified_on_android": {
+   "method": "adb shell getprop on the same unit, then a bounded export into /data/src/op6893-private/android-props (0700/0600, outside any git tree)",
+   "absent_keys": [
+    "ro.build.version.svn",
+    "ro.build.version.svn.c",
+    "ro.build.version.ota",
+    "ro.build.version.oplusrom",
+    "ro.build.version.opporom",
+    "ro.build.version.realme",
+    "ro.build.version.ota.version",
+    "ro.oppo.version",
+    "ro.oplus.version"
+   ],
+   "absence_evidence": "the complete getprop output contains no key matching ro.build.version.svn; Android property_get therefore returns a zero-length value",
+   "excluded_from_export": [
+    "serialno",
+    "imei/meid",
+    "iccid/imsi/icid",
+    "mac addresses",
+    "android_id/oaid/guid"
+   ]
+  },
+  "policy": {
+   "location": "/data/src/op6893-private/md-rpc-policy.json (0600, single link, root-owned on the device)",
+   "facts": 34,
+   "present": 25,
+   "proven_absent": 9,
+   "long_values_dropped": [
+    "ro.build.version.known_codenames (>91 bytes, outside PROPERTY_VALUE_MAX)"
+   ],
+   "values_not_recorded_here": true
+  }
+ },
+ "sequence": {
+  "generation": 9607,
+  "scp": "pin=26m, runtime=start, active=1 ready=1 generation=1 error=0",
+  "md_power": "takeover -> cold, on -> powered-cpu-not-released",
+  "prepare": "state=prepared error=0 (cache first clear, runtime offers, dispatch reserve)",
+  "release": "SMC (6,0) boot_ret=0, state=released",
+  "handshake": "state=3 error=0 bytes=632 rejected=64 hs2_seen=0",
+  "services": "connected=1 armed=1 accepting=1 error=0 tx=964 tx_error=0",
+  "dispatch": "state=3 (WAIT_HS2) error=0",
+  "ccism": "state=1 armed=1 md_open=1 scp_open=1 bridge_touched=0",
+  "hs2_seen": false,
+  "difference_from_previous_run": "before the audited policy the same sequence stopped at tx=88 with the endpoint closed on the first property query"
+ },
+ "exception": {
+  "record": "v5 overview, 14336 bytes available, version 0xab000005",
+  "core_count_from_record": 12,
+  "core_count_header_default": 9,
+  "offender": "MCU",
+  "ex_type": 29,
+  "ex_type_name": "MPU_NOT_ALLOW",
+  "class": "fatal",
+  "section": 0,
+  "cadefa": 1,
+  "code": ["0x1d", "0x91823b66", "0x90b2d7c2"],
+  "sp": "0x24ab42d0",
+  "pc": "0x91823b66",
+  "lr": "0x90b2d7c2",
+  "address": "0x90d18620",
+  "cause": "0x74",
+  "status": "0x2",
+  "deterministic": "identical in every run with a released MD CPU",
+  "section_meaning": "0 is the empty string in the vendor ee_err_sec_str table, so this is not one of the read-only code sections"
+ },
+ "lk_geometry": {
+  "source": "read-only lk_regions attribute on 10209000.modem-platform",
+  "bank0": {"base": "0xe0000000", "size": "0x1e000000"},
+  "noncached": {"base": "0x8e000000", "size": "0x1800000"},
+  "cached": {"base": "0x88000000", "size": "0x4960000"},
+  "smem_users": 23,
+  "cache_md_base": "0x48000000",
+  "cache_gap_bytes": 524288,
+  "noncache_gap_bytes": 15681536,
+  "md1rom_partition": {"device": "/dev/sdc28", "size": "200 MiB", "header_magic": "0x58881688", "image_bytes": "0x01febe00 (31.9 MiB)"},
+  "md_view_note": "the MD view of the image bank is 0x90000000 while its AP view is 0xe0000000, so an MD-view address must not be compared with AP-side reserved memory directly"
+ },
+ "fs_tail": {
+  "method": "runner --trace-fs; operation, path and status only, write payloads reduced to byte counts, 0x1022 reduced to its ten numeric words",
+  "last_file": "Z:\\NVRAM\\NVD_DATA\\MF04_003",
+  "file_bytes": 824,
+  "reads": [
+   {"offset": "0x40", "size": "0x17c"},
+   {"offset": "0x1bc", "size": "0x17c"}
+  ],
+  "coverage": "0x40 + 2 * 0x17c = 0x338 = 824 = EOF, so the MD received the whole file before it faulted",
+  "comparison": "ICOR_000 and ICOE_000 (4192 bytes) are read from 0x40 in 0x408-byte chunks that also land exactly on EOF",
+  "conclusion": "no short read, no over-read and no reply-format mismatch at the failure point"
+ },
+ "emi_mpu_candidate_rejected": {
+  "exception_type": "MPU_NOT_ALLOW is 0x1D from cause[exccode]; EMI MPU violations are the separate EMI_MPU_VIOLATION_EXCEPTION 0x70 in the same vendor enum",
+  "vendor_kernel_usage": "4.19 parse_mpu_setting() stores md_mpu_inf but get_mpu_region_cfg_info() has no caller in the whole tree; the 6.6 reference keeps only the declaration; the vendor kernel programs only the AP region (protect_ap_region)",
+  "size_mismatch": "struct _mpu_cfg is 20 bytes, so 216 bytes is not an integer number of entries",
+  "lk_timing": "LK runs before the mainline kernel, so any EMI MPU programming it performs is already in effect when the MD is released",
+  "decision": "no EMI MPU register was written; the risk of a SoC-wide protection change is not justified by the evidence"
+ },
+ "conclusions": [
+  "the MD's user-RPC property queries are answered from audited facts and no longer stop the sequence",
+  "the exception record is decoded with offsets derived from its own core count",
+  "the FS tail is exact to EOF, so the remaining failure is inside the MD image",
+  "EMI MPU programming is not the missing AP-side step for this exception type"
+ ],
+ "not_claimed": [
+  "HS2, CCISM post-handshake protocol or radio readiness",
+  "that the MD is healthy or that the exception is understood at source level",
+  "any EMI MPU or partition change"
+ ]
+}

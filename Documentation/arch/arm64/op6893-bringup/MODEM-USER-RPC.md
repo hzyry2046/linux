@@ -155,3 +155,25 @@ providers, malformed frames, immutable facts, and packet identity. It also
 compiles the actual `ccci-rpc-protocol.c` under ASan/UBSan and validates five
 Python-produced request/reply pairs against the kernel decoder and reply
 validator. No device, identity or real property values are used.
+
+## Observed queries and audited facts
+
+The runner can print the request operation and a bounded printable request
+name with the explicit `--trace-rpc-names` flag. It prints no value, writes no
+reply, and is off by default; it exists so a policy can be authored from the
+MD's real queries instead of guesses. `--trace-fs` does the same for the file
+service and reduces every write payload to a byte count.
+
+On this unit the MD asked `0x400f` for `ro.build.version.svn.c`,
+`ro.build.version.svn` and `ro.build.version.ota`. All three are absent from the
+device's own `getprop` output, so the Android `property_get()` answer is a
+zero-length value, which the policy expresses as an explicit `null` fact rather
+than an unknown key. The export used to establish that is kept outside any git
+tree with identity keys removed; only the keys the MD actually asks for are
+copied into the policy.
+
+Answering those queries moved the same release sequence from `tx=88` (endpoint
+closed on the first query) to `tx=964 tx_error=0`, with the exception point
+unchanged. See
+[the release log](MODEM-BOOT-RELEASE.md) and
+`evidence/modem-rpc-policy-live-boot.json`.
