@@ -29,6 +29,7 @@
 #include "ccci-rpc-op6893.h"
 #include "ccci-md-power.h"
 #include "ccci-smem.h"
+#include "ccci-smem-clear.h"
 
 #define MD_FLIGHT_MODE	7
 #define MD_POWER_CONFIG	6
@@ -559,6 +560,64 @@ static ssize_t smem_users_show(struct device *dev, struct device_attribute *attr
 static DEVICE_ATTR_RO(smem_users);
 
 /*
+ * Header-only view of the NVRAM cache region: enough to tell whether the vendor
+ * stack left a populated cache behind. Bounded to 64 bytes and read-only.
+ */
+#define MD_CACHE_HEAD	64
+
+static ssize_t smem_cache_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	const struct ccci_smem_region *region = &md->smem.users[CCCI_SMEM_NVRAM];
+	ssize_t ret = 0;
+	void __iomem *map;
+	u64 page;
+	u32 bytes;
+
+	mutex_lock(&md->lock);
+	if (!region->present || region->size < MD_CACHE_HEAD) {
+		ret = sysfs_emit(buf, "present=%u\n", region->present ? 1 : 0);
+		goto out;
+	}
+	page = region->ap & ~0xfffULL;
+	map = ioremap(page, region->ap - page + MD_CACHE_HEAD);
+	if (!map) {
+		ret = -ENOMEM;
+		goto out;
+	}
+	ret = sysfs_emit(buf, "ap=0x%llx md=0x%x size=0x%x head=", region->ap,
+			 region->md, region->size);
+	for (bytes = 0; bytes < MD_CACHE_HEAD && ret < PAGE_SIZE - 8; bytes++)
+		ret += sysfs_emit_at(buf, ret, "%02x", readb(map + region->ap - page + bytes));
+	ret += sysfs_emit_at(buf, ret, "\n");
+	iounmap(map);
+out:
+	mutex_unlock(&md->lock);
+	return ret;
+}
+static DEVICE_ATTR_RO(smem_cache);
+
+/* Explicit operator policy for the first-start clear; default keeps clearing. */
+static ssize_t smem_clear_store(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	if (sysfs_streq(buf, "clear"))
+		ccci_smem_clear_policy(true);
+	else if (sysfs_streq(buf, "skip"))
+		ccci_smem_clear_policy(false);
+	else
+		return -EINVAL;
+	return count;
+}
+
+static ssize_t smem_clear_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return sysfs_emit(buf, "%s\n",
+			  ccci_smem_clear_policy_enabled() ? "clear" : "skip");
+}
+static DEVICE_ATTR_RW(smem_clear);
+
+/*
  * Printable text of the MD debug region, newest tail first. Binary record
  * fields are dropped rather than hex-dumped so the log stays readable; the
  * caller asked for this content explicitly and it never leaves the machine.
@@ -627,6 +686,7 @@ static struct attribute *md_attrs[] = {
 	&dev_attr_handshake.attr, &dev_attr_ccism.attr, &dev_attr_services.attr,
 	&dev_attr_dispatch.attr, &dev_attr_md_ee.attr, &dev_attr_md_ee_raw.attr,
 	&dev_attr_lk_regions.attr, &dev_attr_smem_users.attr,
+	&dev_attr_smem_cache.attr, &dev_attr_smem_clear.attr,
 	&dev_attr_md_dbg.attr, NULL,
 };
 

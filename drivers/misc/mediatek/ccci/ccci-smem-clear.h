@@ -11,4 +11,8 @@ struct ccci_smem_layout;
  */
 int ccci_smem_clear_first(struct device *dev, const struct ccci_smem_layout *smem);
 
+/* Explicit operator policy; the default keeps the same-board behaviour. */
+void ccci_smem_clear_policy(bool clear);
+bool ccci_smem_clear_policy_enabled(void);
+
 #endif

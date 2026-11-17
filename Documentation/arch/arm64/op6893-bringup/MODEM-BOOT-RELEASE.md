@@ -495,3 +495,43 @@ MD **完全静默**：不再发任何 FS 请求，也不写异常记录。说明
 （859 请求 / `tx=964` / 同一故障点 `pc=0x91823b66 addr=0x90d18620`）。
 
 证据见 `evidence/modem-vendor-boot-comparison.json`。
+
+## NVRAM cache 是否影响 MD 走快路径（2026-11-17，镜像 f6b889ccba7f）
+
+厂商 1.7 秒到 HS2、且启动期没有长时间 NVRAM 扫描，而我们的 MD 每次先做 859
+个请求的重建。一个自然的假设是：厂商基带在 Android 启动时留下的有效 cache
+会让 MD 跳过重建。为此加了两个入口：
+
+- `smem_cache`（只读）：打印 NVRAM cache 区的 AP/MD 视图、大小和前 64 字节；
+- `smem_clear`（读写）：首启清零策略，`clear`（默认）或 `skip`。
+
+### 观测
+
+先刷恢复镜像让 Android 跑约 44 秒，再刷回主线、**在任何 prepare 之前**读
+`smem_cache`：
+
+```
+ap=0x88180000 md=0x48180000 size=0x700000 head=
+0a020000 20000000 00a20000 c0a20000 40ae0000 000b0000 40b90000 00283300 ...
+```
+
+非零且结构化（形如 offset/size 对：0x20、0xa200、0xa2c0、0xae40、0xb00、
+0xb940、0x332800），说明厂商确实留下了已填充的 cache。
+
+### 结果：假设不成立
+
+把 `smem_clear` 设为 `skip`（驱动完全不清零）后跑完整放行：
+
+| 项 | 值 |
+|---|---|
+| 跑完后 cache 头 | **全零**（64 字节全是 0） |
+| FS 请求 / 发送 | 859 / 964 |
+| dispatch | `state=3 WAIT_HS2 error=0` |
+| 异常 | `ex_type=0x1d pc=0x91823b66 addr=0x90d18620` |
+
+也就是说：**MD 自己在启动时把 cache 清零并从文件服务重建**。保留厂商填充的
+cache 完全不改变行为，所以"我们每次清零"从来不是决定因素，重建也不是 HS2
+不来的原因。这条线索关闭。
+
+推论：MD 在选择"先重建再 HS2"还是"直接 HS2"时看的是别的 AP 侧输入，不是
+cache 内容。证据见 `evidence/modem-nvram-cache-persistence.json`。

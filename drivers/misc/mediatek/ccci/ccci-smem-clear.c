@@ -21,6 +21,22 @@ static const u8 clear_noncached[] = { 0, 7, 8, 10, 12, 13, 14, 15, 18, 27, 31, 3
 static const u8 clear_cached[] = { CCCI_SMEM_CCB };
 
 static bool cleared;
+/*
+ * Operator-selectable policy, defaulting to the same-board behaviour. A caller
+ * that wants to keep whatever the vendor stack left behind (for example a NVRAM
+ * cache populated during an Android boot) sets this to false before prepare.
+ */
+static bool clear_enabled = true;
+
+void ccci_smem_clear_policy(bool clear)
+{
+	clear_enabled = clear;
+}
+
+bool ccci_smem_clear_policy_enabled(void)
+{
+	return clear_enabled;
+}
 
 static int clear_region(const struct ccci_smem_region *region)
 {
@@ -69,6 +85,11 @@ int ccci_smem_clear_first(struct device *dev, const struct ccci_smem_layout *sme
 		return -EINVAL;
 	if (cleared)
 		return 0;
+	if (!clear_enabled) {
+		cleared = true;
+		dev_info(dev, "SMEM first-start clear: skipped by policy\n");
+		return 0;
+	}
 	ret = clear_list(dev, smem, clear_noncached, ARRAY_SIZE(clear_noncached), &bytes);
 	if (!ret)
 		ret = clear_list(dev, smem, clear_cached, ARRAY_SIZE(clear_cached), &bytes);

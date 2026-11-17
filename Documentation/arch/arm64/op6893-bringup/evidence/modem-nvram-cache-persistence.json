@@ -1,0 +1,37 @@
+{
+ "date": "2026-11-17",
+ "scope": "Whether a vendor-populated NVRAM cache lets the MD skip its NVRAM rebuild. Read-only diagnostics plus one explicit operator policy switch.",
+ "image": {
+  "dist": "dist/f6b889ccba7f/boot.img",
+  "release": "7.3.0-op6893-d1-f6b889ccba7f+",
+  "sha256": "8e4e9a1e46ca1df7fc4d49a9930bf7dec6607142a199aa66cb4f18fd6e9d35d2"
+ },
+ "new_diagnostics": {
+  "smem_cache": "read-only, prints the NVRAM cache region AP/MD view, size and the first 64 bytes as hex",
+  "smem_clear": "read-write policy for the first-start clear; accepts clear (default) or skip"
+ },
+ "observation_after_android_boot": {
+  "sequence": "boot the recovery image, let Android run ~44 s, then flash mainline and read smem_cache before any prepare",
+  "cache_head": "0a0200002000000000a20000c0a2000040ae0000000b000040b900000028330002000000000000000200000080000000000000000000000000000000503a5c4e",
+  "interpretation": "non-zero and structured (offset/size-like pairs, e.g. 0x20, 0xa200, 0xa2c0, 0xae40, 0xb00, 0xb940, 0x332800), so the vendor stack does leave a populated cache behind"
+ },
+ "experiment": {
+  "policy": "smem_clear=skip, so the driver performed no first-start clear",
+  "result": {
+   "cache_head_after": "all zeros for the full 64 bytes",
+   "fs_requests": 859,
+   "service_tx": 964,
+   "dispatch": "state=3 WAIT_HS2, error=0",
+   "exception": "ex_type=0x1d, pc=0x91823b66, addr=0x90d18620, sp=0x24ab42d0"
+  },
+  "conclusion": "the MD itself zeroes the NVRAM cache and rebuilds it from the file service at boot; preserving a vendor-populated cache changes nothing, so the first-start clear was never the deciding factor and the rebuild is not what keeps HS2 away"
+ },
+ "implication": {
+  "vendor_timeline": "the vendor reaches HS2 about 1.7 s after MD start, and its long NVRAM pass is a separate post-boot activity, so the ordering difference is real but is not explained by cache validity",
+  "next_lever": "the MD chooses to rebuild before HS2 regardless of cache content, which points at an AP-side input that decides the boot phase rather than at the cache"
+ },
+ "not_claimed": [
+  "that the rebuild is required or unnecessary",
+  "that the fault is explained"
+ ]
+}
