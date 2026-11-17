@@ -1,0 +1,46 @@
+{
+  "date": "2026-11-17",
+  "scope": "Portability assessment only, no porting started: is the 6.6 vendor tree a better base for the op6893 CCMNI data path than the 4.19 one, and how close is mainline's t7xx DPMAIF to this board's hardware.",
+  "findings": {
+    "six_six_is_already_an_op6893_port": {
+      "evidence": "145 files in the 6.6 tree mention op6893, and the CCCI code carries explicit bring-up notes",
+      "examples": [
+        "hif/ccci_dpmaif_com.c: 'op6893 6.6 bring-up: 4.19 DTB has no dpmaif-ver; MT6893 is v2'",
+        "hif/ccci_dpmaif_com.c: 'op6893 6.6 bring-up: the preserved 4.19 boot DT's dpmaif node carries no dpmaif-infracfg phandle ... without it the probe returns -1, so ccmni_ops.send_skb is never assigned, and every ccmni TX is dropped'",
+        "hif/ccci_dpmaif_com.c: 'op6893 6.6 bring-up: 4.19 DTB has no dpmaif-cap ... MT6893 official value 0x4'",
+        "fsm/md_sys1_platform.c: md_gen forced to 6297 and ap_plat_info to 6893 because the 4.19 DTB has neither",
+        "fsm/ccci_fsm_ioctl.c: 'md_gen = 6297; op6893 6.6 bring-up: 4.19 DTB has no md-generation'"
+      ],
+      "reading": "the 6.6 tree is not a foreign reference; it is an existing op6893 port whose DPMAIF path is reported working, so its DPMAIF layer has already been reconciled with this board's DTB and power/clock plumbing"
+    },
+    "op6893_is_dpmaif_v2": {
+      "vendor": "hif/ccci_dpmaif_com.c dpmaif_probe(): g_dpmf_ver defaults to 2 when the property is absent; 6.6 mt6833.dts declares mediatek,dpmaif-ver = <2>",
+      "address_map_identical": "6.6 mt6833.dts dpmaif node is AO_UL 0x10014000, PD_UL 0x1022d000, PD_MD_MISC 0x1022c000, SRAM 0x1022e000, GIC_SPI 209, clocks CLK_IFRAO_DPMAIF_MAIN + CLK_IFRAO_CLDMA_BCLK -- the same map as mt6893.dts in the 4.19 tree",
+      "capability": "6.6 mt6833 declares dpmaif-cap 6; the op6893 fallback in the 6.6 port uses 0x4; the 4.19 mt6893 node declares dpmaif_capability 14, which is a differently encoded property"
+    },
+    "register_agreement": {
+      "method": "every '#define NRL2_DPMAIF_* (BASE_x + 0xNN)' offset parsed from each header and compared by name",
+      "four_nineteen_vs_six_six": "178 names in common, 178 identical offsets, 0 differences (6.6 defines 305, a strict superset)",
+      "four_nineteen_vs_t7xx": "25 names in common after normalising the missing NRL2_ prefix, 21 identical, 4 different: AO_UL_CH0_STA 0x0 vs 0x70, AO_UL_CHNL0_CON0 0x20 vs 0x10, CON1 0x24 vs 0x14, CON2 0x28 vs 0x18",
+      "reading": "the 6.6 register layer is drop-in compatible with this board; t7xx shares the UL/DL BAT and interrupt layout but has moved the per-channel uplink status and configuration registers, so it is the same family with a different revision"
+    },
+    "attachment_shape": {
+      "six_six": "hif/ccci_dpmaif_com.c does 'ccmni_ops.send_skb = &dpmaif_tx_send_skb_to_md' and the netdev calls it directly; there is no net port table and no port_proxy chain (port_cfg.c in that tree has no CCMNI entries at all)",
+      "four_nineteen": "port_net.c -> ccmni_send_pkt -> port_proxy port_get_queue_no -> ccci_hif_send_skb -> DPMAIF, i.e. a port table, a proxy and per-port queue state notifications",
+      "reading": "the 6.6 shape is markedly simpler and fits a mainline netdev directly"
+    },
+    "ccb_not_required_for_data": {
+      "evidence": "none of the 6.6 DPMAIF files or ccmni.c reference ccci_shm_bm or CCB; the CCB users are separate CCIF char ports (SMEM_USER_RAW_DBM, SMEM_USER_CCB_DHL, SMEM_USER_RAW_NETD) in port_cfg.c",
+      "reading": "the earlier ccci_shm_bm assertion caused by advertising feature 15 is a different subsystem from the CCMNI data path, so the DPMAIF data path does not have to wait for CCB"
+    },
+    "size": {
+      "six_six_dpmaif_module": "ccci_dpmaif_com.c 3571, ccci_dpmaif_drv_v3.c 1864, ccci_dpmaif_drv_v2.c 1300, ccci_dpmaif_bat.c 1236, ccci_dpmaif_drv_v1.c 759, plus debug/resv/page_pool ~1000; only the v2 driver and the shared files matter here",
+      "four_nineteen_monolithic": "ccci_hif_dpmaif.c 4903 + dpmaif_drv.c 1835"
+    }
+  },
+  "conclusion": {
+    "six_six_is_the_better_base": "yes, on four independent grounds: it is already an op6893 port, it selects DPMAIF v2 exactly as this board does, its register layer is 178/178 identical to the 4.19 one, and it attaches a netdev to DPMAIF with a single function pointer instead of a port/proxy chain",
+    "t7xx_is_a_cousin_not_a_match": "t7xx agrees on the BAT and interrupt register layout but differs on the per-channel uplink registers, and it is PCIe/BAR based with T700-specific flows; useful as documentation of the protocol, not as a drop-in",
+    "not_started": "no porting, no new driver and no kernel change was made in this step"
+  }
+}

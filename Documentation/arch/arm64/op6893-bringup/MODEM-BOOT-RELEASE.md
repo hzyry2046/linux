@@ -884,3 +884,80 @@ SWVersion: NR15.R3.TC16.S.PR2.SP K6893V1_64_K419_20615S
 接入方式不同。这是一个新的子系统工程，不是一次补丁。
 
 证据见 `evidence/modem-ccmni-lhif-remap-and-dpmaif.json`。
+
+---
+
+# DPMAIF 移植可行性考察（只考察，未开始移植）
+
+结论先给：**6.6 那套明显更好移植**，而且它不是"别的板子的参考"，**它本身就已经是
+op6893 的移植树**。
+
+## 1. 6.6 树已经是 op6893 的移植树
+
+6.6 树里有 145 个文件提到 `op6893`，CCCI 里带明确的 bring-up 注释，例如
+`hif/ccci_dpmaif_com.c`：
+
+```
+op6893 6.6 bring-up: 4.19 DTB has no dpmaif-ver; MT6893 is v2
+op6893 6.6 bring-up: ... without it the probe returns -1, so
+    ccmni_ops.send_skb is never assigned, and every ccmni TX is dropped
+op6893 6.6 bring-up: 4.19 DTB has no dpmaif-cap ... MT6893 official value 0x4
+```
+
+`fsm/md_sys1_platform.c` 把 `md_gen` 钉成 6297、`ap_plat_info` 钉成 6893，
+`fsm/ccci_fsm_ioctl.c` 也写着 `md_gen = 6297`。也就是说这棵树已经把 DPMAIF 和
+本板的 DTB、电源/时钟打通了。
+
+## 2. 本板是 DPMAIF v2
+
+- 6.6 `dpmaif_probe()` 在没有 `mediatek,dpmaif-ver` 时默认 `g_dpmf_ver = 2`；
+- 6.6 `mt6833.dts` 的 dpmaif 节点与本板 `mt6893.dts` **地址映射完全相同**：
+  AO_UL `0x10014000`、PD_UL `0x1022d000`、PD_MD_MISC `0x1022c000`、
+  SRAM `0x1022e000`、`GIC_SPI 209`、clock `CLK_IFRAO_DPMAIF_MAIN` + `CLK_IFRAO_CLDMA_BCLK`；
+- 6.6 该节点声明 `mediatek,dpmaif-ver = <2>`。
+
+## 3. 寄存器一致率（脚本比对，按名字对齐偏移）
+
+| 对比 | 公共名字 | 偏移相同 | 不同 |
+|---|---|---|---|
+| 4.19 vs 6.6 | 178 | **178** | 0 |
+| 4.19 vs t7xx（补 `NRL2_` 前缀后） | 25 | 21 | 4 |
+
+6.6 共定义 305 个 `NRL2_DPMAIF_*`，是 4.19 那 180 个的严格超集。
+
+t7xx 的 4 处差异都在**上行每通道**寄存器：
+
+| 寄存器 | 厂商 | t7xx |
+|---|---|---|
+| `AO_UL_CH0_STA` | `0x00` | `0x70` |
+| `AO_UL_CHNL0_CON0` | `0x20` | `0x10` |
+| `AO_UL_CHNL0_CON1` | `0x24` | `0x14` |
+| `AO_UL_CHNL0_CON2` | `0x28` | `0x18` |
+
+也就是：t7xx 与厂商共享 UL/DL BAT 与中断寄存器布局，但每通道上行寄存器被挪过，
+是**同族不同修订**，不能直接当同款用。
+
+## 4. 接入形态：6.6 简单得多
+
+| | 4.19 | 6.6 |
+|---|---|---|
+| 挂接 | `port_net.c` → `ccmni_send_pkt` → `port_proxy` 取队列 → `ccci_hif_send_skb` → DPMAIF | `ccmni_ops.send_skb = &dpmaif_tx_send_skb_to_md`，一行函数指针 |
+| 端口表 | 有（`port_cfg.c` 里 21 个 ccmni 端口） | **没有**（该树 `port_cfg.c` 里根本没有 CCMNI 条目） |
+
+对我们来说这更贴合：我们已经有 netdev，只差一个 `send_skb` 实现。
+
+## 5. 顺带一个好消息：数据面不需要 CCB
+
+6.6 的 DPMAIF 与 `ccmni.c` 都**不引用** `ccci_shm_bm` / CCB；CCB 的使用者是另外
+几个 CCIF 字符端口（`SMEM_USER_RAW_DBM`、`SMEM_USER_CCB_DHL`、`SMEM_USER_RAW_NETD`）。
+
+也就是说，之前 feature 15 触发的 `ccci_shm_bm` 断言属于另一个子系统，
+**DPMAIF 数据面不必等 CCB 解开**。
+
+## 6. 规模
+
+6.6 的 DPMAIF 是独立模块：`ccci_dpmaif_com.c` 3571、`drv_v3` 1864、`drv_v2` 1300、
+`bat` 1236、`drv_v1` 759，加 debug/resv/page_pool 约 1000。本板只需要 **v2 + 共享部分**，
+v1/v3 可以整块不带。4.19 则是单体 `ccci_hif_dpmaif.c` 4903 + `dpmaif_drv.c` 1835。
+
+证据见 `evidence/modem-dpmaif-portability.json`。
