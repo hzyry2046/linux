@@ -356,3 +356,56 @@ line 2394 (`para=0x1,0x4,0xf008`) once `NV0S_000` cannot be read or restored.
 A diagnostic run that reported `Restore` success without creating the file
 produced the same assert, so the MD needs real NVRAM content or a real
 bin-region backup. Importing either is outside this project's constraints.
+
+## Live MD wire results with real NVRAM (2026-11-17, image 6fd303197419)
+
+The operator then authorised a read-only extraction of this device's own
+NVRAM. `/mnt/vendor/{nvdata,protect_f,protect_s}/md` and `/mnt/vendor/nvcfg`
+were streamed off the running Android through `adb exec-out tar` (no
+device-side staging file, source trees only read), mapped to the `Z:`, `X:`,
+`Y:` and `S:` drive directories of the marked private working copy, and every
+file was verified against a pre-extraction device SHA256 manifest. The MD then
+ran its complete startup scan against that copy.
+
+### What the real data changed
+
+- The `nvram_io.c` line 2394 assert disappeared. The MD read 105 distinct
+  paths, wrote 84 chunks back into the copy, and passed the `NV0S_000`
+  `Restore` step.
+- All 171 `CMPT_Read` calls used mask `0x1f` with flags `0x700`. Every file is
+  read as a 64-byte LDI header plus `ceil((size-64)/chunk)` reads; the wire
+  control word `w5` advances by exactly the previous chunk length, which
+  confirms the seek/`SEEK_CUR` interpretation in this adapter.
+- `GetFileDetail` was called 24 times on absent OTA files and answered with
+  `(-9, 24 zero bytes)` without complaint.
+- Three `0x400f` property queries arrived (`ro.build.version.svn.c`,
+  `ro.build.version.svn`, `ro.build.version.ota`). The production runner
+  refuses them without an audited policy; a diagnostic runner answered the
+  vendor's proven empty result and the MD continued.
+
+### Where it now stops
+
+The MD issues its last `CMPT_Read` on `Z:\NVRAM\NVD_DATA\MF04_003` and then
+raises a fatal CPU exception instead of the next request the vendor trace
+shows (`UM12_005`):
+
+```
+version=0xab000005 cores=12 offender=MCU ex_type=29 (MPU_NOT_ALLOW) class=fatal
+sp=0x24ab42d0 pc=0x91823b66 lr=0x90b2d7c2 addr=0x90d18620 cause=0x74
+```
+
+`md1rom` loads at `0x90000000`, so both the program counter and the faulting
+address are inside the modem image itself. This is not an FS reply-shape or
+operation-support failure: the same run answered every request with the
+vendor's four-argument `CMPT_Read` layout, exact chunk offsets and identical
+completion masks, and the MD accepted all of them (`tx=964`, `tx_error=0`).
+
+### Feature negotiation is not the gap
+
+The handshake status now prints the raw HS1 query and the negotiated masks.
+The MD asks for feature 0 (`BOOT_INFO`) as *must support* and marks every other
+feature as *optional*. The AP supports 0, 1, 2, 6, 14, 27, 28 and 36; the
+remaining answers are a protocol-legal "not supported" that the MD itself
+declared optional. Missing runtime features are therefore not a violation, and
+completing them is not the next required step.
+

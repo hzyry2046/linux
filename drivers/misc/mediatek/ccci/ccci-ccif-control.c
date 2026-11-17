@@ -238,16 +238,20 @@ int ccci_ccif_control_error(struct ccci_ccif_controller *control)
 
 ssize_t ccci_ccif_control_status(struct ccci_ccif_controller *control, char *buf)
 {
+	char query[CCCI_RUNTIME_FEATURES * 2 + 1], negotiated[CCCI_RUNTIME_FEATURES * 2 + 1];
 	ssize_t ret;
 
 	mutex_lock(&control->lock);
+	ccci_runtime_hex(query, control->hs.query);
+	ccci_runtime_hex(negotiated, control->hs.negotiated);
 	ret = sysfs_emit(buf,
-			 "state=%u error=%d active=%u attempted=%u bytes=%u rejected=%u hs2_seen=%u md_head=0x%x md_word1=0x%x cpu_release_issued=0\n",
+			 "state=%u error=%d active=%u attempted=%u bytes=%u rejected=%u hs2_seen=%u md_head=0x%x md_word1=0x%x cpu_release_issued=0 query=%s negotiated=%s\n",
 			 control->hs.state, control->hs.error, control->active, control->attempted,
 			 control->hs.used, control->hs.rejected,
 			 control->hs.hs2_seen,
 			 readl(control->runtime + CCCI_RUNTIME_HALF),
-			 readl(control->runtime + CCCI_RUNTIME_HALF + 4));
+			 readl(control->runtime + CCCI_RUNTIME_HALF + 4),
+			 query, negotiated);
 	mutex_unlock(&control->lock);
 	return ret;
 }

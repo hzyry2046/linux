@@ -96,6 +96,7 @@ int ccci_handshake_consume(struct ccci_handshake *hs, const struct ccci_ccif_eve
 		ret = ccci_ccif_hs1_decode(event->data, event->size, query);
 		if (!ret) {
 			hs->hs1_seen = true;
+			memcpy(hs->query, query, sizeof(hs->query));
 			ret = ccci_runtime_encode(query, hs->offers, hs->runtime,
 						  sizeof(hs->runtime), &hs->used,
 						  hs->negotiated, &hs->rejected);

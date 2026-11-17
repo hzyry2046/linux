@@ -1,0 +1,94 @@
+{
+  "date": "2026-11-17",
+  "image": {
+    "dist": "dist/6fd303197419/boot.img",
+    "release": "7.3.0-op6893-d1-6fd303197419+",
+    "sha256": "c24d346c7b90af5f4b41b4a191583590ce9c8afb57568b8e1b30e9c3686b6619",
+    "previous_image": {
+      "dist": "dist/34d323c82594/boot.img",
+      "sha256": "f03a5c398c07418bdbdb9668615f512c67201d003a52ab44e822041ea2da61ee"
+    }
+  },
+  "rootfs": {
+    "id": "debian-c45bf71e26f2",
+    "sha256": "3f6938ff0debacad7205cf3d69961a5d158c725112101fae8d23139be1e0353e",
+    "bytes": 121339904,
+    "installed_rollback_kept": "debian-5f8741f4101a.squashfs",
+    "runner_modules_from": "Documentation/arch/arm64/op6893-bringup/tools",
+    "identity_now_covers_runner": true
+  },
+  "nvram_source": {
+    "method": "adb exec-out tar of the mounted vendor trees, read-only; no device-side staging file",
+    "trees": ["/mnt/vendor/nvdata/md", "/mnt/vendor/protect_f/md",
+              "/mnt/vendor/protect_s/md", "/mnt/vendor/nvcfg"],
+    "files": 453,
+    "bytes": 10087370,
+    "content_verified": "sha256 of every file compared against a pre-extraction device manifest; identical",
+    "private_copy": "/data/src/op6893-private/nvram-working-copy (0700, marked, outside any git tree)",
+    "source_written": false,
+    "note": "the source trees were only read while Android was running; the device has since booted mainline, so no later write path existed"
+  },
+  "sequence": {
+    "generation": 8200,
+    "fs_requests": 859,
+    "fs_tx": 964,
+    "fs_tx_error": 0,
+    "distinct_paths": 105,
+    "by_operation": {
+      "0x1022 CMPT_Read": 171,
+      "0x1001 Open": 154,
+      "0x1005 Close": 153,
+      "0x1002 Seek": 110,
+      "0x1004 Write": 84,
+      "0x1003 Read": 77,
+      "0x1009 GetFileSize": 76,
+      "0x1025 GetFileDetail": 24,
+      "0x1010 GetAttributes": 8,
+      "0x100e GetDiskInfo": 1,
+      "0x1007 CreateDir": 1
+    },
+    "rpc": {
+      "requests": 3,
+      "operation": "0x400f property query",
+      "keys": ["ro.build.version.svn.c", "ro.build.version.svn", "ro.build.version.ota"],
+      "answer": "diagnostic empty value; the production runner needs an explicit audited policy"
+    },
+    "cmp_reads_are_chunked": "every file is read as a 64-byte LDI header plus ceil((size-64)/chunk) reads; offsets advance exactly (verified from the wire control word w5)"
+  },
+  "handshake": {
+    "hs1_bytes": 584,
+    "rejected": 64,
+    "state": 3,
+    "hs2_seen": false,
+    "md_requests_must_support_only": [0],
+    "md_requests_optional_for_all_others": true,
+    "supported_by_ap": [0, 1, 2, 6, 14, 27, 28, 36],
+    "conclusion": "the MD itself marks every unimplemented feature optional, so the missing features are not a protocol violation"
+  },
+  "exception": {
+    "record": "v5 overview, 4096 bytes, version 0xab000005, cores 12",
+    "offender": "MCU",
+    "ex_type": 29,
+    "ex_type_name": "MPU_NOT_ALLOW",
+    "class": "fatal",
+    "sp": "0x24ab42d0",
+    "pc": "0x91823b66",
+    "lr": "0x90b2d7c2",
+    "address": "0x90d18620",
+    "cause": "0x74",
+    "status": "0x2",
+    "timing": "immediately after the second CMPT_Read of Z:\\NVRAM\\NVD_DATA\\MF04_003; the vendor trace continues with UM12_005 at the same point",
+    "md1rom_base": "0x90000000 (from the userspace analysis), so pc is image+0x1823b66 and the fault address is image+0xd18620"
+  },
+  "stop": {
+    "md_power_off_after_exception": "-EIO",
+    "reset": "sync + SysRq reboot",
+    "state_after_reset": "state=lk-on step=lk-on-held error=0"
+  },
+  "conclusions": [
+    "real NVRAM content removes the previous nvram_io.c assert; the MD now completes the whole startup scan",
+    "the remaining failure is an MD CPU MPU exception inside its own image, not an FS protocol or reply-shape error",
+    "the FS replies are byte-identical in shape to the vendor trace: four CMPT arguments, 0x1f completion, exact chunk offsets",
+    "further progress needs MD-internal evidence (exception payload or MD debug ring), which is private modem content"
+  ]
+}

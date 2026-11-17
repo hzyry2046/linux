@@ -53,6 +53,7 @@ int ccci_runtime_bootstrap(const struct ccci_smem_layout *smem,
 
 int ccci_runtime_plan(const struct ccci_smem_layout *smem, struct ccci_runtime_plan *plan);
 int ccci_runtime_validate(const struct ccci_runtime_offer offers[CCCI_RUNTIME_FEATURES]);
+void ccci_runtime_hex(char *out, const u8 masks[CCCI_RUNTIME_FEATURES]);
 /* Separate input/output storage; valid output spans are cleared before negotiation. */
 int ccci_runtime_encode(const u8 query[CCCI_RUNTIME_FEATURES],
 			const struct ccci_runtime_offer offers[CCCI_RUNTIME_FEATURES],

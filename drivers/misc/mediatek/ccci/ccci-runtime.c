@@ -66,6 +66,17 @@ static int runtime_length(u32 id)
 	}
 }
 
+void ccci_runtime_hex(char *out, const u8 masks[CCCI_RUNTIME_FEATURES])
+{
+	static const char digits[] = "0123456789abcdef";
+
+	for (u32 i = 0; i < CCCI_RUNTIME_FEATURES; i++) {
+		out[i * 2] = digits[masks[i] >> 4];
+		out[i * 2 + 1] = digits[masks[i] & 0xf];
+	}
+	out[CCCI_RUNTIME_FEATURES * 2] = '\0';
+}
+
 int ccci_runtime_validate(const struct ccci_runtime_offer offers[CCCI_RUNTIME_FEATURES])
 {
 	if (!offers)

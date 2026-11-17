@@ -503,8 +503,18 @@ static ssize_t md_ee_show(struct device *dev, struct device_attribute *attr, cha
 	}
 	if (md->ee_bytes >= 0x1a4)
 		line = readl(md->ee + 0x1a0);
+	/* maincontent_type 0 is assert (file/line/params), 1 is fatal (pc/address). */
+	if (md->ee_bytes >= 0xd4 && readb(md->ee + 0x9b) == 1) {
+		ret = sysfs_emit(buf,
+				 "present=1 bytes=%zu version=%#x cores=%u offender=%s ex_type=%u class=fatal sp=%#x pc=%#x lr=%#x addr=%#x cause=%#x status=%#x\n",
+				 md->ee_bytes, version, cores, core, ex_type,
+				 readl(md->ee + 0xc0), readl(md->ee + 0xc4),
+				 readl(md->ee + 0xc8), readl(md->ee + 0xcc),
+				 readl(md->ee + 0xd0), readl(md->ee + 0xbc));
+		goto out;
+	}
 	ret = sysfs_emit(buf,
-			 "present=1 bytes=%zu version=%#x cores=%u offender=%s ex_type=%u line=%u path=%s para=%#x,%#x,%#x lr=%#x\n",
+			 "present=1 bytes=%zu version=%#x cores=%u offender=%s ex_type=%u class=assert line=%u path=%s para=%#x,%#x,%#x lr=%#x\n",
 			 md->ee_bytes, version, cores, core, ex_type, line, path,
 			 md->ee_bytes >= 0x1a8 ? readl(md->ee + 0x1a4) : 0,
 			 md->ee_bytes >= 0x1ac ? readl(md->ee + 0x1a8) : 0,

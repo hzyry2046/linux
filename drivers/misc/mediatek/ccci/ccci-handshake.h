@@ -35,6 +35,7 @@ struct ccci_handshake {
 	struct ccci_runtime_plan plan;
 	u8 runtime[CCCI_RUNTIME_HALF];
 	u8 upload[CCCI_RUNTIME_UPLOAD];
+	u8 query[CCCI_RUNTIME_FEATURES];
 	u8 negotiated[CCCI_RUNTIME_FEATURES];
 	u64 last_ms;
 	u64 deadline_ms;

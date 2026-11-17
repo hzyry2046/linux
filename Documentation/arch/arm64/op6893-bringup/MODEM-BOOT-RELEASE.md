@@ -93,16 +93,17 @@ RX 关闭、controller 故障、generation 变化或 SPM 单 bit 都不被接受
 `mediatek,no-external-32k`，initramfs 的 `debian.sha256` 已指向新 rootfs。
 尚未刷入。
 
-目标端 runner：已在当前 `debian/tree`（`debian-5499c9f794dd` 基座）安装
-`python3 3.13.5`，并把四个 runner 脚本放到
-`/usr/local/lib/op6893-modem/`，提供
-`/usr/local/sbin/op6893-modem-fs-runner` 包装。重建的 rootfs 为
-`debian-5f8741f4101a`，squashfs SHA256
-`e8887c17ca596999697220c5dce17b37dfd8d0b807d997c3ac1ee894c76587aa`
-（121,364,480 字节），`initramfs/debian.sha256` 已更新。该镜像尚未安装到
-设备；安装后仍需由操作者准备私有工作副本。
+目标端 runner：rootfs 现在由 `debian/finish.py` 直接从版本化的
+`Documentation/arch/arm64/op6893-bringup/tools/` 取四个模块与
+`op6893-modem-fs-runner` 包装，并把它们的 SHA256 计入内容寻址身份——否则
+更新 runner 不会改变 rootfs id。当前镜像为 `debian-c45bf71e26f2`，squashfs
+SHA256 `3f6938ff0debacad7205cf3d69961a5d158c725112101fae8d23139be1e0353e`
+（121,339,904 字节），已安装到 `/cache/mainline/debian.squashfs`；旧回滚
+`debian-5f8741f4101a.squashfs` 保留，更早的两个回滚按操作者授权删除。
+`initramfs/debian.sha256` 已更新。
 
-工作副本只接受显式空目录或调用者自己的数据，禁止导入真实 NVRAM：
+工作副本只接受显式空目录或调用者自己的数据；真实 NVRAM 仅在操作者明确
+授权时以只读方式提取到标记的私有副本，且不得进入任何 git 树：
 
 ```sh
 install -d -m 0700 /tmp/op6893-fs
@@ -136,6 +137,32 @@ runner 用法：
 - 真实用户 property/SAR 策略与私有工作副本内容需操作者准备，内核不猜。
 - SCP/CCISM 真机状态、MD 固件 HS1/HS2、DPMAIF 与 radio 能力全部未验证。
 - 活动 unbind 仍不支持；cache/boot 无回调，devres 清理直接释放。
+
+## 真实 NVRAM 上机结果（2026-11-17，镜像 6fd303197419）
+
+操作者授权以只读方式提取本机 NVRAM 后，设备刷入
+`dist/6fd303197419/boot.img`（SHA256
+`c24d346c7b90af5f4b41b4a191583590ce9c8afb57568b8e1b30e9c3686b6619`），
+rootfs 为 `debian-c45bf71e26f2`。提取与验证方式、逐项结果见
+[FS 语义](MODEM-FS-SEMANTICS.md) 与 `evidence/modem-nvram-live-boot.json`。
+
+要点：
+
+1. 453 个文件、10,087,370 字节经 `adb exec-out tar` 只读导出，逐文件 SHA256
+   与提取前的设备清单一致；原始来源没有任何写入。
+2. 同一放行流程（SCP ready → takeover/on → prepare → release → SMC `(6,0)`
+   `boot_ret=0`）到达 HS1，随后 MD 用真实数据完成整个启动扫描：
+   859 个 FS 请求、964 次发送、`tx_error=0`、105 个不同路径、84 次写回。
+   此前空工作副本下的 `nvram_io.c` 断言消失。
+3. 结束时 MD 在 `Z:\NVRAM\NVD_DATA\MF04_003` 之后抛出致命 CPU 异常
+   `ex_type=29`（MPU_NOT_ALLOW，class=fatal，
+   `pc=0x91823b66 addr=0x90d18620`）。`md1rom` 基址为 `0x90000000`，两个地址
+   都落在基带镜像自身，说明不是 FS 应答格式问题。
+4. `handshake` 现在额外输出 HS1 原始 query 与协商结果：MD 只把 feature 0
+   标为 must-support，其余全部 optional，因此“缺少 runtime feature”不是
+   本轮的阻塞点。
+5. 异常后 `md_power=off` 返回 `-EIO`（boot owner 拒绝停止已故障的活跃状态），
+   用 `sync + SysRq` 复位；复位后 `state=lk-on`，设备停在干净状态。
 
 ## 首次上机结果（2026-11-16，镜像 de66138efb8e）
 

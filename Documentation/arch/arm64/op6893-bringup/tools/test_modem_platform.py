@@ -129,6 +129,8 @@ typedef uint32_t u32;
 #define MTK_SIP_KERNEL_CCCI_CONTROL 0xc2000505UL
 #define SMCCC_RET_NOT_SUPPORTED (-1)
 struct mutex { int unused; };
+/* The owner keeps an optional read-only exception header pointer. */
+#define __iomem
 struct ccci_smem_layout { int unused; };
 struct clk_bulk_data { int unused; };
 struct regmap { u32 words[0x1000/4]; };
