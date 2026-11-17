@@ -14,6 +14,7 @@
 #include "ccci-nvram-cache.h"
 #include "ccci-port-dispatch.h"
 #include "ccci-runtime.h"
+#include "ccci-smem-clear.h"
 #include "ccci-smem.h"
 
 #define MD_POWER_CONFIG		6
@@ -31,6 +32,7 @@ enum boot_state {
 struct ccci_md_boot {
 	/* Parent lifecycle lock; no callback re-enters this owner. */
 	struct mutex lock;
+	struct device *dev;
 	struct ccci_ccif *ccif;
 	struct ccci_port_dispatch *dispatch;
 	struct ccci_nvram_cache *cache;
@@ -84,6 +86,8 @@ int ccci_md_boot_prepare(struct ccci_md_boot *boot, const struct ccci_smem_layou
 		ret = ccci_nvram_cache_prepare(boot->cache);
 	if (!ret)
 		boot->cache_prepared = true;
+	if (!ret)
+		ret = ccci_smem_clear_first(boot->dev, smem);
 	if (!ret)
 		ret = ccci_runtime_bootstrap(smem, &info, boot->offers);
 	if (!ret)
@@ -240,6 +244,7 @@ ccci_md_boot_create(struct device *dev, struct ccci_ccif *ccif,
 	if (!boot)
 		return ERR_PTR(-ENOMEM);
 	mutex_init(&boot->lock);
+	boot->dev = dev;
 	boot->ccif = ccif;
 	boot->dispatch = dispatch;
 	boot->cache = cache;

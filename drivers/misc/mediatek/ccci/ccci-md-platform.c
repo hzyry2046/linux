@@ -56,6 +56,9 @@ struct ccci_md_platform {
 	/* Read-only MD exception record header, mapped only when LK exported it. */
 	void __iomem *ee;
 	size_t ee_bytes;
+	/* Same reservation: the MD writes its own log there; text only. */
+	void __iomem *dbg;
+	size_t dbg_bytes;
 };
 
 /* Independent hardware check also catches a genpd power-off veto/failure. */
@@ -526,6 +529,51 @@ out:
 }
 static DEVICE_ATTR_RO(md_ee);
 
+/*
+ * Printable text of the MD debug region, newest tail first. Binary record
+ * fields are dropped rather than hex-dumped so the log stays readable; the
+ * caller asked for this content explicitly and it never leaves the machine.
+ */
+#define MD_DBG_TEXT_MAX	3200
+
+static ssize_t md_dbg_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	size_t len = 0, start = 0;
+	char *text;
+	ssize_t ret;
+
+	if (!md->dbg || !md->dbg_bytes)
+		return -EOPNOTSUPP;
+	text = kvmalloc(md->dbg_bytes + 1, GFP_KERNEL);
+	if (!text)
+		return -ENOMEM;
+	mutex_lock(&md->lock);
+	for (size_t i = 0; i < md->dbg_bytes; i++) {
+		u8 c = readb(md->dbg + i);
+
+		if (c >= 0x20 && c < 0x7f)
+			text[len++] = c;
+		else if (len && text[len - 1] != '\n')
+			text[len++] = '\n';
+	}
+	mutex_unlock(&md->lock);
+	while (len && text[len - 1] == '\n')
+		len--;
+	if (len > MD_DBG_TEXT_MAX) {
+		const char *nl;
+
+		start = len - MD_DBG_TEXT_MAX;
+		nl = memchr(text + start, '\n', len - start);
+		start = nl ? nl - text + 1 : start;
+	}
+	ret = sysfs_emit(buf, "bytes=%zu shown=%zu\n%.*s\n", md->dbg_bytes,
+			 len - start, (int)(len - start), text + start);
+	kvfree(text);
+	return ret;
+}
+static DEVICE_ATTR_RO(md_dbg);
+
 /* Raw header bytes for offline decode; no payload or core dump is exposed. */
 static ssize_t md_ee_raw_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -548,7 +596,8 @@ static DEVICE_ATTR_RO(md_ee_raw);
 static struct attribute *md_attrs[] = {
 	&dev_attr_md_power.attr, &dev_attr_md_boot.attr, &dev_attr_ccif.attr,
 	&dev_attr_handshake.attr, &dev_attr_ccism.attr, &dev_attr_services.attr,
-	&dev_attr_dispatch.attr, &dev_attr_md_ee.attr, &dev_attr_md_ee_raw.attr, NULL,
+	&dev_attr_dispatch.attr, &dev_attr_md_ee.attr, &dev_attr_md_ee_raw.attr,
+	&dev_attr_md_dbg.attr, NULL,
 };
 
 static const struct attribute_group md_group = { .attrs = md_attrs };
@@ -654,7 +703,7 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 		return dev_err_probe(dev, ret, "cold rail baseline unavailable/unstable\n");
 	if (md->smem.users[CCCI_SMEM_MDSS_DBG].present) {
 		const struct ccci_smem_region *ee = &md->smem.users[CCCI_SMEM_MDSS_DBG];
-		u32 bytes = min_t(u32, ee->size, 0x1000);
+		u32 bytes = ee->size;
 		u64 page = ee->ap & ~0xfffULL;
 		u64 end = (ee->ap + bytes + 0xfff) & ~0xfffULL;
 		bool inside = ccci_lk_contains(&md->smem.noncached, page, end - page) ||
@@ -666,6 +715,9 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 			if (map) {
 				md->ee = map + (ee->ap - page);
 				md->ee_bytes = bytes;
+				/* Same reservation: the MD also writes its log here. */
+				md->dbg = md->ee;
+				md->dbg_bytes = bytes;
 			}
 		}
 	}

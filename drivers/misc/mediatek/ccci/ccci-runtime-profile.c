@@ -94,5 +94,24 @@ int ccci_runtime_bootstrap(const struct ccci_smem_layout *smem,
 	if (boot->crystal == CCCI_RUNTIME_CRYSTAL_ABSENT)
 		profile_offer(&offers[6], 16, 0, 0);
 	offers[27].supported = true;
+	/* MD_MEM_AP_VIEW_INF: bank0, noncached bank4, cached bank4 as 16B entries. */
+	if (smem->bank0.size) {
+		u8 *view = offers[38].data;
+
+		put_unaligned_le32(0, view);
+		put_unaligned_le32(smem->bank0.size, view + 4);
+		put_unaligned_le32(smem->bank0.base, view + 8);
+		put_unaligned_le32(smem->bank0.base >> 32, view + 12);
+		put_unaligned_le32(plan.noncache_md, view + 16);
+		put_unaligned_le32(plan.noncache_size, view + 20);
+		put_unaligned_le32(smem->noncached.base, view + 24);
+		put_unaligned_le32(smem->noncached.base >> 32, view + 28);
+		put_unaligned_le32(plan.cache_md, view + 32);
+		put_unaligned_le32(plan.cache_size, view + 36);
+		put_unaligned_le32(smem->cached.base, view + 40);
+		put_unaligned_le32(smem->cached.base >> 32, view + 44);
+		offers[38].supported = true;
+		offers[38].length = 48;
+	}
 	return 0;
 }

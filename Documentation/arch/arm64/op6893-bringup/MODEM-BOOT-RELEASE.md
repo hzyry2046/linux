@@ -164,6 +164,22 @@ rootfs 为 `debian-c45bf71e26f2`。提取与验证方式、逐项结果见
 5. 异常后 `md_power=off` 返回 `-EIO`（boot owner 拒绝停止已故障的活跃状态），
    用 `sync + SysRq` 复位；复位后 `state=lk-on`，设备停在干净状态。
 
+### 两个同板有据的补齐与负结果
+
+操作者授权读取 MD 调试区后，`md_dbg` 给出 MD 自己的 AFOUND 记录，与
+`md_ee` 一致（`Fatal Error (0x1d, 0x91823b66, 0x90b2d7c2)`，6.26 s）。随后
+按同板行为补了两项并各上机一次：
+
+| 镜像 | 变更 | 结果 |
+|---|---|---|
+| `966546053c61` | 新增 feature 38 `MD_MEM_AP_VIEW_INF`，bank0 取自 LK `hdr_tbl_inf` | runtime 584→632 B，异常点不变（`tx=964`） |
+| `8b1f973b5ff2` | 按厂商 `SMF_NCLR_FIRST` 表首次清零 SMEM（75,640,832 字节；排除 CCISM_SCP 与 NVRAM cache） | 异常点不变（`tx=964`） |
+
+两项都通过 prepare 门并正常放行，说明它们自身正确、不破坏启动路径；但都
+没有改变 MPU 异常。LK 还提供 `md_mpu_inf`（216 B，9 条）与 `md_mpu_num`，
+对应厂商用 `mtk_emimpu` 为 MD 编程的 EMI MPU 区域表——这是目前唯一已知的、
+AP 侧尚未实现的同板 MD 保护配置，是下一个候选。
+
 ## 首次上机结果（2026-11-16，镜像 de66138efb8e）
 
 设备从 Android 经 watchdog 重启、拦截 fastboot 后刷入

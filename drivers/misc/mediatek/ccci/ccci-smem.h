@@ -29,6 +29,8 @@ struct ccci_smem_region {
 struct ccci_smem_layout {
 	struct ccci_lk_region noncached;
 	struct ccci_lk_region cached;
+	/* MD RO+RW image region from LK hdr_tbl_inf; MD view base is 0. */
+	struct ccci_lk_region bank0;
 	struct ccci_smem_region users[CCCI_SMEM_USERS];
 	u32 cache_md_base;
 	u32 cache_gap_bytes;

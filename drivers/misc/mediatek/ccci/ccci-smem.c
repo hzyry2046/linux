@@ -179,7 +179,8 @@ int ccci_smem_parse(const struct ccci_lk_header *header, const void *data, size_
 	struct ccci_smem_layout result = {};
 	struct ccci_lk_layout coarse;
 	const u8 *nc_count, *ext, *info, *items, *cache_offset;
-	u32 bytes, count, ext_size, info_size, items_size, offset_size;
+	const u8 *bank, *count_tag;
+	u32 bytes, count, ext_size, info_size, items_size, offset_size, count_size;
 	u64 md_base;
 	int ret;
 
@@ -243,6 +244,19 @@ int ccci_smem_parse(const struct ccci_lk_header *header, const void *data, size_
 	ret = ccci_smem_gaps(&result);
 	if (ret)
 		return ret;
+	/* LK hdr_tbl_inf: one 24-byte {base,size,id,errno,type,ver,reserved[2]}. */
+	bank = ccci_smem_tag(header, data, workspace, "hdr_tbl_inf", &bytes);
+	count_tag = ccci_smem_tag(header, data, workspace, "hdr_count", &count_size);
+	if (bank && count_tag && count_size == 4 && bytes == 24 &&
+	    get_unaligned_le32(count_tag) == 1) {
+		u64 base = get_unaligned_le64(bank);
+		u32 size = get_unaligned_le32(bank + 8);
+
+		if (!base || !size || (base | size) & 3 ||
+		    base + size > 0x100000000ULL)
+			return -ERANGE;
+		result.bank0 = (struct ccci_lk_region) { .base = base, .size = size };
+	}
 	*layout = result;
 	return 0;
 }

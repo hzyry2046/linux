@@ -1,13 +1,9 @@
 {
   "date": "2026-11-17",
   "image": {
-    "dist": "dist/6fd303197419/boot.img",
-    "release": "7.3.0-op6893-d1-6fd303197419+",
-    "sha256": "c24d346c7b90af5f4b41b4a191583590ce9c8afb57568b8e1b30e9c3686b6619",
-    "previous_image": {
-      "dist": "dist/34d323c82594/boot.img",
-      "sha256": "f03a5c398c07418bdbdb9668615f512c67201d003a52ab44e822041ea2da61ee"
-    }
+    "dist": "dist/8b1f973b5ff2/boot.img",
+    "release": "7.3.0-op6893-d1-8b1f973b5ff2+",
+    "sha256": "22e0c930dca2a5e9ab3df6837a9bcb8250b712aa79f23958a41116963d6db109"
   },
   "rootfs": {
     "id": "debian-c45bf71e26f2",
@@ -19,8 +15,12 @@
   },
   "nvram_source": {
     "method": "adb exec-out tar of the mounted vendor trees, read-only; no device-side staging file",
-    "trees": ["/mnt/vendor/nvdata/md", "/mnt/vendor/protect_f/md",
-              "/mnt/vendor/protect_s/md", "/mnt/vendor/nvcfg"],
+    "trees": [
+      "/mnt/vendor/nvdata/md",
+      "/mnt/vendor/protect_f/md",
+      "/mnt/vendor/protect_s/md",
+      "/mnt/vendor/nvcfg"
+    ],
     "files": 453,
     "bytes": 10087370,
     "content_verified": "sha256 of every file compared against a pre-extraction device manifest; identical",
@@ -50,7 +50,11 @@
     "rpc": {
       "requests": 3,
       "operation": "0x400f property query",
-      "keys": ["ro.build.version.svn.c", "ro.build.version.svn", "ro.build.version.ota"],
+      "keys": [
+        "ro.build.version.svn.c",
+        "ro.build.version.svn",
+        "ro.build.version.ota"
+      ],
       "answer": "diagnostic empty value; the production runner needs an explicit audited policy"
     },
     "cmp_reads_are_chunked": "every file is read as a 64-byte LDI header plus ceil((size-64)/chunk) reads; offsets advance exactly (verified from the wire control word w5)"
@@ -60,9 +64,20 @@
     "rejected": 64,
     "state": 3,
     "hs2_seen": false,
-    "md_requests_must_support_only": [0],
+    "md_requests_must_support_only": [
+      0
+    ],
     "md_requests_optional_for_all_others": true,
-    "supported_by_ap": [0, 1, 2, 6, 14, 27, 28, 36],
+    "supported_by_ap": [
+      0,
+      1,
+      2,
+      6,
+      14,
+      27,
+      28,
+      36
+    ],
     "conclusion": "the MD itself marks every unimplemented feature optional, so the missing features are not a protocol violation"
   },
   "exception": {
@@ -90,5 +105,46 @@
     "the remaining failure is an MD CPU MPU exception inside its own image, not an FS protocol or reply-shape error",
     "the FS replies are byte-identical in shape to the vendor trace: four CMPT arguments, 0x1f completion, exact chunk offsets",
     "further progress needs MD-internal evidence (exception payload or MD debug ring), which is private modem content"
-  ]
+  ],
+  "follow_up_experiments": [
+    {
+      "image": "dist/966546053c61",
+      "change": "offer MD_MEM_AP_VIEW_INF (feature 38) with bank0 from LK hdr_tbl_inf",
+      "runtime_bytes": "632 (was 584)",
+      "result": "identical exception at the same point (tx=964)"
+    },
+    {
+      "image": "dist/8b1f973b5ff2",
+      "change": "clear the SMEM users the same-board vendor clears on the first MD boot (75,640,832 bytes; CCISM_SCP and NVRAM cache excluded)",
+      "result": "identical exception at the same point (tx=964)"
+    }
+  ],
+  "lk_tags_available": [
+    "md1img",
+    "md1_chk",
+    "retrieve0..3",
+    "nc_smem_info_ext(_num)",
+    "hdr_count",
+    "hdr_tbl_inf (24 B = one MD1 RO+RW region)",
+    "md1_bank4_cache_info",
+    "md1_bank4_cache_layout",
+    "md1_smem_cahce_offset",
+    "ccb_info",
+    "smem_layout",
+    "md_mpu_inf (216 B)",
+    "md_mpu_num (4 B)",
+    "free_in_kernel"
+  ],
+  "md_debug_region": {
+    "attribute": "md_dbg",
+    "bytes": 14336,
+    "content": "AFOUND exception record plus firmware version strings; no MD log lines",
+    "record": [
+      "ExceptionSource: MCU",
+      "BriefException: [EX Early Stage][core3,vpe0,tc0(vpe9)] Fatal Error (0x1d, 0x91823b66, 0x90b2d7c2)",
+      "2_OffendingAddress: 0x91823b66",
+      "5_ExtraInfo: RA=0x90b2d7c2",
+      "ExceptionTimestamp: 6263995"
+    ]
+  }
 }

@@ -28,4 +28,4 @@ op6893-ccci-lk-$(CONFIG_OP6893_CCCI_SERVICES) += ccci-fs-protocol.o ccci-rpc-pro
 	ccci-service-router.o ccci-service-session.o ccci-service-endpoint.o ccci-rpc-provider.o ccci-rpc-op6893.o
 op6893-ccci-lk-$(CONFIG_OP6893_CCCI_DISPATCH) += ccci-port-dispatch.o
 op6893-ccci-lk-$(CONFIG_OP6893_CCCI_NVRAM_CACHE) += ccci-nvram-cache.o
-op6893-ccci-lk-$(CONFIG_OP6893_CCCI_MD_BOOT) += ccci-md-boot.o ccci-rtc32k.o
+op6893-ccci-lk-$(CONFIG_OP6893_CCCI_MD_BOOT) += ccci-md-boot.o ccci-rtc32k.o ccci-smem-clear.o
