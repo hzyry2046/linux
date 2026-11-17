@@ -197,6 +197,35 @@ def _word(value):
     return struct.pack('<I', value & 0xffffffff)
 
 
+# Argument positions that carry a path, used only by the opt-in trace so a
+# write payload is never mistaken for text.
+_PATH_ARG = {0x1001: (0,), 0x1007: (0,), 0x100c: (0, 1), 0x1010: (0,),
+             0x100e: (0,), 0x1018: (0,), 0x1012: (0,), 0x1025: (0,),
+             0x1022: (0,)}
+
+
+def request_summary(op, args):
+    """Content-free description of one decoded FS request for the opt-in trace.
+
+    Path arguments are shown; every other byte string is reduced to its length.
+    """
+    paths = _PATH_ARG.get(op, ())
+    parts = []
+    for index, arg in enumerate(args):
+        if index in paths and isinstance(arg, bytes):
+            parts.append(''.join(chr(byte) if 0x20 <= byte < 0x7f else '.'
+                                 for byte in arg))
+        elif op == 0x1022 and index == 1 and isinstance(arg, bytes) and len(arg) == 40:
+            # The ten request words are numeric metadata, never file content.
+            parts.append('words=' + ','.join('%#x' % value
+                                             for value in struct.unpack('<10I', arg)))
+        elif type(arg) is bytes:
+            parts.append('<%d bytes>' % len(arg))
+        else:
+            parts.append(str(arg))
+    return 'op=%#06x %s' % (op, ' '.join(parts))
+
+
 def _reply_args(op, result):
     if not isinstance(result, tuple):
         raise ValueError('backend response must be a tuple')
@@ -253,17 +282,21 @@ def _reply_args(op, result):
     raise UnsupportedOperation('operation reply schema unresolved')
 
 
-def respond(backend, generation, packet):
+def respond(backend, generation, packet, trace=None):
     """Execute one complete request serially against an already-open work copy.
 
     The caller owns generation leases, admission, duplicate suppression, and
     stop synchronization. Lifecycle rejection never fabricates a wire response.
+    ``trace`` receives the content-free request summary and the backend status.
     """
     request = decode_request(packet)
     op, args = _operation(request)
     if not backend.active or generation != backend.generation:
         raise StaleGeneration('working-copy generation revoked')
     result = backend.operate(generation, op, *args)
+    if trace is not None:
+        status = result[0] if isinstance(result, tuple) else result
+        trace(request_summary(op, args), status)
     values = _reply_args(op, result)
     # The MD strips the response prefix on TX but requires it on every reply.
     body = bytearray(struct.pack('<II', request.operation | 0xffff0000, len(values)))

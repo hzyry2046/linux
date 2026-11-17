@@ -16,9 +16,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 from modem_fs_backend import ACKNOWLEDGEMENT, MARKER, WorkingCopy
-from modem_fs_wire import StaleGeneration, UnsupportedOperation
+from modem_fs_wire import StaleGeneration, UnsupportedOperation, request_summary
 from modem_service_backend import (FS, HEADER, RECORD_MAX, RPC, VERSION,
-                                   RecordError, decode_record, load_rpc_policy, main, serve)
+                                   RecordError, decode_record, load_rpc_policy, main,
+                                   rpc_request_name, serve)
 
 
 def word(value):
@@ -244,6 +245,67 @@ class ServiceTest(unittest.TestCase):
         handler.assert_not_called()
         self.assert_closed(fd)
 
+    def test_rpc_name_trace_is_opt_in_bounded_and_name_only(self):
+        path = self.policy({'version': 1, 'properties': {'known': 'value'}})
+        rpc = load_rpc_policy(path)
+        request = record(self.rpc_packet(0x400f, (b'known\0',)), kind=RPC, slot=2)
+        seen = []
+        fd = self.descriptor()
+        writer = Mock(side_effect=lambda unused_fd, data: len(data))
+        self.assertEqual(serve(self.backend, 19, fd, rpc=rpc, trace=seen.append,
+                               reader=Mock(side_effect=[request, b'']), writer=writer), 1)
+        self.assertEqual(seen, [request[HEADER.size:]])
+        self.assert_closed(fd)
+        self.assertEqual(rpc_request_name(self.rpc_packet(0x400f, (b'known\0',), slot=2)),
+                         (0x400f, 'known'))
+        # Non-printable bytes are hidden and the name is bounded, never a value.
+        hostile = bytes(range(0x20)) * 8
+        operation, name = rpc_request_name(self.rpc_packet(0x4010, (hostile,), slot=2))
+        self.assertEqual(operation, 0x4010)
+        self.assertEqual(name, '.' * 64)
+        self.assertEqual(rpc_request_name(self.rpc_packet(0x4010, (), slot=2)), (0x4010, ''))
+        # An FS record is never traced, and a provider-less RPC record is
+        # traced once before the endpoint closes without a reply.
+        fd = self.descriptor()
+        writer = Mock(side_effect=lambda unused_fd, data: len(data))
+        self.assertEqual(serve(self.backend, 19, fd, rpc=rpc, trace=seen.append,
+                               reader=Mock(side_effect=[record(), b'']), writer=writer), 1)
+        self.assertEqual(len(seen), 1)
+        self.assert_closed(fd)
+        fd = self.descriptor()
+        writer = Mock()
+        with self.assertRaises(UnsupportedOperation):
+            serve(self.backend, 19, fd, trace=seen.append,
+                  reader=Mock(side_effect=[request]), writer=writer)
+        self.assertEqual(seen, [request[HEADER.size:], request[HEADER.size:]])
+        writer.assert_not_called()
+        self.assert_closed(fd)
+
+    def test_fs_trace_is_opt_in_and_never_prints_payload(self):
+        seen = []
+        fd = self.descriptor()
+        writer = Mock(side_effect=lambda unused_fd, data: len(data))
+        request = record(packet(0x1001, (b'Z:\\NVRAM\\x', word(0)), slot=4))
+        self.assertEqual(serve(self.backend, 19, fd, fs_trace=lambda s, st: seen.append((s, st)),
+                               reader=Mock(side_effect=[request, b'']), writer=writer), 1)
+        self.assert_closed(fd)
+        self.assertEqual(seen[0][0], 'op=0x1001 Z:\\NVRAM\\x 0')
+        # A write payload is reduced to its length, never its bytes.
+        payload = b'PRIVATE-CONTENT'
+        write = record(packet(0x1004, (word(1), payload, word(len(payload))), slot=4))
+        summary = request_summary(0x1004, (1, payload, len(payload)))
+        self.assertNotIn('PRIVATE', summary)
+        self.assertIn('<%d bytes>' % len(payload), summary)
+        fd = self.descriptor()
+        self.assertEqual(serve(self.backend, 19, fd, fs_trace=lambda s, st: seen.append((s, st)),
+                               reader=Mock(side_effect=[write, b'']),
+                               writer=Mock(side_effect=lambda unused_fd, data: len(data))), 1)
+        self.assert_closed(fd)
+        self.assertNotIn('PRIVATE', seen[-1][0])
+        # A non-scalar status is reduced to its type name, never printed.
+        self.assertEqual(request_summary(0x1010, (b'Z:\\a',)), 'op=0x1010 Z:\\a')
+        self.assertEqual(request_summary(0x1010, (None,)), 'op=0x1010 None')
+
     def test_policy_schema_rejects_ambiguous_or_unproven_facts(self):
         invalid = [[], {}, {'version': True}, {'version': 1, 'extra': 2},
                    {'version': 1, 'properties': []},
@@ -292,7 +354,8 @@ class ServiceTest(unittest.TestCase):
         with contextlib.redirect_stderr(output):
             self.assertEqual(main(['--endpoint', str(endpoint), '--root', str(self.root),
                                    '--generation', '19']), 1)
-        self.assertEqual(output.getvalue(), 'modem backend stopped after an error\n')
+        self.assertEqual(output.getvalue(),
+                         'modem backend stopped after an error (RecordError)\n')
         fd = self.descriptor()
         backend = Mock()
         backend.shutdown.return_value = -18
@@ -319,7 +382,9 @@ class ServiceTest(unittest.TestCase):
                 result = main(['--endpoint', '/private/endpoint', '--root', '/private/root',
                                '--generation', '19'])
         self.assertEqual(result, 1)
-        self.assertEqual(output.getvalue(), 'modem backend stopped after an error\n')
+        self.assertEqual(output.getvalue(),
+                         'modem backend stopped after an error (RuntimeError)\n')
+        self.assertNotIn('private payload', output.getvalue())
         output = io.StringIO()
         with contextlib.redirect_stderr(output):
             with self.assertRaises(SystemExit) as result:

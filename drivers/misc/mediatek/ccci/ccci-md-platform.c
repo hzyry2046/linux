@@ -21,6 +21,7 @@
 #include "ccci-ccif.h"
 #include "ccci-ccism-bridge.h"
 #include "ccci-md-boot.h"
+#include "ccci-md-ee.h"
 #include "ccci-nvram-cache.h"
 #include "ccci-rtc32k.h"
 #include "ccci-service-endpoint.h"
@@ -467,67 +468,69 @@ static ssize_t dispatch_show(struct device *dev, struct device_attribute *attr, 
 static DEVICE_ATTR_RO(dispatch);
 
 /* Bounded decode of the v5 exception overview header, never the payload. */
+#define MD_EE_RAW_MAX	(8 + CCCI_MD_EE_MAX_CORES * 12 + 0x11c)
+
 static ssize_t md_ee_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct ccci_md_platform *md = dev_get_drvdata(dev);
-	char core[12] = {}, path[64] = {};
-	u32 version = 0, cores = 0, line = 0, ex_type = 0;
-	ssize_t ret;
+	struct ccci_md_ee ee;
+	u8 raw[MD_EE_RAW_MAX];
+	size_t bytes;
+	int ret;
 
 	mutex_lock(&md->lock);
-	if (!md->ee || md->ee_bytes < 0xa4) {
+	if (!md->ee || md->ee_bytes < 8) {
 		ret = sysfs_emit(buf, "present=%u\n", md->ee ? 1 : 0);
 		goto out;
 	}
-	version = readl(md->ee);
-	cores = readl(md->ee + 4);
-	if (cores > 12)
-		cores = 12;
-	for (u32 i = 0; i < cores; i++) {
-		u32 base = 8 + i * 12;
-
-		if (base + 12 > md->ee_bytes)
-			break;
-		if (!readb(md->ee + base + 11))
-			continue;
-		for (u32 j = 0; j < 11; j++)
-			core[j] = readb(md->ee + base + j);
-		break;
-	}
-	ex_type = readw(md->ee + 0x98);
-	if (md->ee_bytes >= 0xa4) {
-		for (u32 i = 0; i < sizeof(path) - 1 && 0xa0 + i < md->ee_bytes; i++) {
-			u8 c = readb(md->ee + 0xa0 + i);
-
-			if (!c)
-				break;
-			path[i] = (c >= 0x20 && c < 0x7f) ? c : '.';
-		}
-	}
-	if (md->ee_bytes >= 0x1a4)
-		line = readl(md->ee + 0x1a0);
-	/* maincontent_type 0 is assert (file/line/params), 1 is fatal (pc/address). */
-	if (md->ee_bytes >= 0xd4 && readb(md->ee + 0x9b) == 1) {
-		ret = sysfs_emit(buf,
-				 "present=1 bytes=%zu version=%#x cores=%u offender=%s ex_type=%u class=fatal sp=%#x pc=%#x lr=%#x addr=%#x cause=%#x status=%#x\n",
-				 md->ee_bytes, version, cores, core, ex_type,
-				 readl(md->ee + 0xc0), readl(md->ee + 0xc4),
-				 readl(md->ee + 0xc8), readl(md->ee + 0xcc),
-				 readl(md->ee + 0xd0), readl(md->ee + 0xbc));
+	bytes = min_t(size_t, md->ee_bytes, sizeof(raw));
+	for (size_t i = 0; i < bytes; i++)
+		raw[i] = readb(md->ee + i);
+	ret = ccci_md_ee_decode(raw, bytes, &ee);
+	if (ret) {
+		ret = sysfs_emit(buf, "present=1 bytes=%zu error=%d\n", md->ee_bytes, ret);
 		goto out;
 	}
-	ret = sysfs_emit(buf,
-			 "present=1 bytes=%zu version=%#x cores=%u offender=%s ex_type=%u class=assert line=%u path=%s para=%#x,%#x,%#x lr=%#x\n",
-			 md->ee_bytes, version, cores, core, ex_type, line, path,
-			 md->ee_bytes >= 0x1a8 ? readl(md->ee + 0x1a4) : 0,
-			 md->ee_bytes >= 0x1ac ? readl(md->ee + 0x1a8) : 0,
-			 md->ee_bytes >= 0x1b0 ? readl(md->ee + 0x1ac) : 0,
-			 md->ee_bytes >= 0x1b4 ? readl(md->ee + 0x1b0) : 0);
+	/* core count is a record field, so every later offset derives from it. */
+	if (ee.content_type == 1)
+		ret = sysfs_emit(buf,
+				 "present=1 bytes=%zu version=%#x cores=%u offender=%s ex_type=%u class=fatal section=%u cadefa=%u code=%#x,%#x,%#x sp=%#x pc=%#x lr=%#x addr=%#x cause=%#x status=%#x\n",
+				 md->ee_bytes, ee.version, ee.cores, ee.core, ee.ex_type,
+				 ee.section, ee.cadefa, ee.code[0], ee.code[1], ee.code[2],
+				 ee.sp, ee.pc, ee.lr, ee.addr, ee.cause, ee.status);
+	else
+		ret = sysfs_emit(buf,
+				 "present=1 bytes=%zu version=%#x cores=%u offender=%s ex_type=%u class=assert line=%u path=%s para=%#x,%#x,%#x lr=%#x\n",
+				 md->ee_bytes, ee.version, ee.cores, ee.core, ee.ex_type,
+				 ee.line, ee.path, ee.para[0], ee.para[1], ee.para[2], ee.lr);
 out:
 	mutex_unlock(&md->lock);
 	return ret;
 }
 static DEVICE_ATTR_RO(md_ee);
+
+/*
+ * Read-only LK geometry: the MD image window (hdr_tbl_inf) and the shared
+ * regions this driver already validated. Names and numbers only.
+ */
+static ssize_t lk_regions_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	const struct ccci_smem_layout *smem = &md->smem;
+	ssize_t ret;
+
+	mutex_lock(&md->lock);
+	ret = sysfs_emit(buf,
+			 "bank0=0x%llx+0x%llx noncached=0x%llx+0x%llx cached=0x%llx+0x%llx users=%u cache_md_base=0x%x cache_gaps=%u noncache_gaps=%u\n",
+			 smem->bank0.base, smem->bank0.size,
+			 smem->noncached.base, smem->noncached.size,
+			 smem->cached.base, smem->cached.size,
+			 smem->count, smem->cache_md_base, smem->cache_gap_bytes,
+			 smem->noncache_gap_bytes);
+	mutex_unlock(&md->lock);
+	return ret;
+}
+static DEVICE_ATTR_RO(lk_regions);
 
 /*
  * Printable text of the MD debug region, newest tail first. Binary record
@@ -597,6 +600,7 @@ static struct attribute *md_attrs[] = {
 	&dev_attr_md_power.attr, &dev_attr_md_boot.attr, &dev_attr_ccif.attr,
 	&dev_attr_handshake.attr, &dev_attr_ccism.attr, &dev_attr_services.attr,
 	&dev_attr_dispatch.attr, &dev_attr_md_ee.attr, &dev_attr_md_ee_raw.attr,
+	&dev_attr_lk_regions.attr,
 	&dev_attr_md_dbg.attr, NULL,
 };
 

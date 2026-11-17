@@ -2,7 +2,7 @@
 obj-$(CONFIG_OP6893_CCCI_LK_INSPECT) += op6893-ccci-lk.o
 op6893-ccci-lk-y := ccci-lk.o ccci-lk-inspect.o
 op6893-ccci-lk-$(CONFIG_OP6893_CCCI_SMEM) += ccci-smem.o
-op6893-ccci-lk-$(CONFIG_OP6893_CCCI_MD_PLATFORM) += ccci-md-power.o ccci-md-platform.o
+op6893-ccci-lk-$(CONFIG_OP6893_CCCI_MD_PLATFORM) += ccci-md-power.o ccci-md-platform.o ccci-md-ee.o
 op6893-ccci-lk-$(CONFIG_OP6893_CCCI_CCIF) += ccci-ccif.o ccci-ccif-ring.o ccci-ccif-hw.o \
 	ccci-ccif-protocol.o ccci-ccif-rx.o
 op6893-ccci-lk-$(CONFIG_OP6893_CCCI_HANDSHAKE) += ccci-runtime.o ccci-runtime-profile.o ccci-ccif-tx.o \
