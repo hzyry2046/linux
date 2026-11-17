@@ -961,3 +961,75 @@ t7xx 的 4 处差异都在**上行每通道**寄存器：
 v1/v3 可以整块不带。4.19 则是单体 `ccci_hif_dpmaif.c` 4903 + `dpmaif_drv.c` 1835。
 
 证据见 `evidence/modem-dpmaif-portability.json`。
+
+---
+
+# DPMAIF 只读核对：DT 与时钟依赖
+
+在写任何驱动之前，先把 6.6 那套 DPMAIF 对 DT / 时钟的要求逐项查清，再和我们
+现有的 mainline 树对比。
+
+## 1. capability = 0x4，很多依赖因此不需要
+
+6.6 `dpmaif_init_cap()` 在缺少 `mediatek,dpmaif-cap` 时回落到 **0x4**，注释写明
+这是 MT6893 官方值；而 4.19 的 `mediatek,dpmaif_capability = <14>` **根本没有被
+4.19 的 DPMAIF 驱动读取**（`ccci_hif_dpmaif.c` 里没有对应的 `of_property_read`）。
+
+`mtk_ccci_common.h`：`0x4` = `MODEM_CAP_SGIO`（bit 2）。于是：
+
+| 位 | 状态 | 后果 |
+|---|---|---|
+| `MODEM_CAP_LRO` (1<<4) | 关 | 单 RX 队列 |
+| `MODEM_CAP_2RXQ` (1<<5) | 关 | `real_rxq_num = 1`、`max_pit_seq = 0xFE` |
+| `MODEM_CAP_USE_RESV_MEM` (1<<6) | 关 | **不需要任何 reserved-memory 节点** |
+| `MODEM_CAP_USE_MAX_BAT` (1<<7) | 关 | 分配阈值保持默认 |
+
+也就是说 `mediatek,dpmaif-resv-cache-mem` / `-nocache-mem` 这两个节点**不用加**，
+`ccci_dpmaif_resv_mem_init()` 会直接返回。
+
+## 2. v2 初始化序列（6.6 `dpmaif_init_com`）
+
+```
+wakeup_source_register
+dpmaif_init_register      iomap reg0=AO_UL, ao_dl=AO_UL+0x400, reg1=PD_UL, + infracfg regmap
+dpmaif_init_cap           capability / rxq / max_pit_seq / dl_bat_entry_size
+dpmaif_init_rx_irq_and_tasklet
+ccci_dl_pool_init(real_rxq_num)
+ccci_dpmaif_bat_init
+ccci_dpmaif_debug_init, dma mask/parms
+ccci_dpmaif_drv2_init
+ccci_dpmaif_resv_mem_init   ← capability 0x4 时直接返回
+dpmaif_init_clk
+spd qos, ccci_hif_register, ccmni_ops.send_skb = dpmaif_tx_send_skb_to_md, net_speed
+```
+
+`ccci_dpmaif_drv2_init()` 本身只是**接线**：设三个派生基址
+（`ao_md_dl = AO_UL+0x800`、`pd_rdma = PD_UL+0x200`、`pd_wdma = PD_UL+0x300`）
+再挂一串函数指针，没有板级寄存器序列。真正的工作量在共享的 `com` / `bat` 里。
+
+## 3. DT 依赖与我们的差距
+
+| 项 | 6.6/4.19 需要 | mainline 现状 |
+|---|---|---|
+| dpmaif 节点 | 4 段寄存器（AO_UL `0x10014000`、PD_UL `0x1022d000`、PD_MD_MISC `0x1022c000`、SRAM `0x1022e000`）+ `GIC_SPI 209` | **不存在** |
+| infracfg regmap | 写 `INFRA_DPMAIF_CTRL_REG`（`0xC00`）：置 `DPMAIF_IP_BUSY_MASK`（`0x3<<12`）、清 bit13（MD→AP wakeup） | 可复用 modem 节点已有的 `mediatek,infracfg = <&ufs_infracfg>` |
+| 时钟门 `CLK_IFRAO_DPMAIF` | ifrao3 bank（`0xa4/0xa8/0xac`）shift 3，parent `axi_ck` | **缺** |
+| 时钟门 `CLK_IFRAO_DPMAIF_MAIN` | ifrao4 bank（`0xc0/0xc4/0xc8`）shift 26，parent `dpmaif_main_ck` | **缺** |
+| topckgen | `CLK_TOP_DPMAIF_MAIN`(171)、`_SEL`(243) | **缺** |
+| `mediatek,mddriver` 查询 | 取 md_generation / ccci-infracfg | 不适用：我们是 `realme,op6893-modem-platform`，generation 已知为 6297 |
+
+## 4. 时钟偏移的来源已经交叉验证
+
+mainline `clk-mt6893-pmif.c` 现有 `ccif_gate_regs = {0x88, 0x8c, 0x94}`，
+与 4.19 `clk-mt6885.c` 的 `ifrao1_cg_regs` **完全一致**。这说明 mainline 的偏移
+就是从同一张厂商表推出来的，因此 DPMAIF 的两个门可以直接按 ifrao3/ifrao4 落位。
+
+现有门策略是 `mtk_clk_gate_ops_setclr` + `CLK_IGNORE_UNUSED`（保留 LK 状态、
+不主动关断），DPMAIF 的门可以沿用，不需要动 SCP 拥有的门状态。
+
+## 5. 结论
+
+**不需要引入新的子系统**：只差一个 DT 节点和两个时钟门，数字全部有来源。
+真正的移植工作量在 `ccci_dpmaif_com.c` / `bat.c` 的共享逻辑，而不是板级适配。
+
+证据见 `evidence/modem-dpmaif-dt-and-init-audit.json`。

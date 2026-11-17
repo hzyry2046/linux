@@ -1,0 +1,78 @@
+{
+  "date": "2026-11-18",
+  "scope": "Read-only audit of what the 6.6 DPMAIF layer needs from the device tree and from the clock tree on op6893, and what this mainline tree already provides. No driver was written and no kernel behaviour changed.",
+  "capability": {
+    "value": "0x4",
+    "source": "hif/ccci_dpmaif_com.c dpmaif_init_cap() falls back to 0x4 when mediatek,dpmaif-cap is absent, annotated as the MT6893 official value; the 4.19 mt6893.dts property mediatek,dpmaif_capability = <14> is not read by the 4.19 DPMAIF driver at all (no of_property_read for it in ccci_hif_dpmaif.c)",
+    "decoded": "mtk_ccci_common.h: 0x4 is MODEM_CAP_SGIO (1 << 2)",
+    "consequences": [
+      "MODEM_CAP_LRO (1 << 4) off and MODEM_CAP_2RXQ (1 << 5) off, so real_rxq_num = 1 and max_pit_seq = 0xFE",
+      "MODEM_CAP_USE_RESV_MEM (1 << 6) off, so ccci_dpmaif_resv_mem_init() returns immediately and no mediatek,dpmaif-resv-cache-mem / mediatek,dpmaif-resv-nocache-mem nodes are required",
+      "MODEM_CAP_USE_MAX_BAT (1 << 7) off, so the alloc threshold stays at its default"
+    ]
+  },
+  "v2_init_order": [
+    "wakeup_source_register",
+    "dpmaif_init_register: of_iomap reg 0 as ao_ul_base, ao_dl_base = ao_ul_base + 0x400, reg 1 as pd_ul_base, plus the infracfg regmap",
+    "dpmaif_init_cap: capability, rxq count, max_pit_seq, dl_bat_entry_size (0 when absent)",
+    "dpmaif_init_rx_irq_and_tasklet",
+    "ccci_dl_pool_init(real_rxq_num)",
+    "ccci_dpmaif_bat_init",
+    "ccci_dpmaif_debug_init, dma mask and dma_parms",
+    "ccci_dpmaif_drv2_init",
+    "ccci_dpmaif_resv_mem_init (no-op at capability 0x4)",
+    "dpmaif_init_clk",
+    "spd qos init, ccci_hif_register, ccmni_ops.send_skb = dpmaif_tx_send_skb_to_md, net_speed init"
+  ],
+  "drv2_is_thin": {
+    "what_it_does": "sets three derived bases and wires function pointers; no board-specific register sequence",
+    "bases": "ao_md_dl_base = ao_ul_base + 0x800, pd_rdma_base = pd_ul_base + 0x200, pd_wdma_base = pd_ul_base + 0x300",
+    "reading": "the v2 file is wiring, not policy; the shared com/bat files carry the real work"
+  },
+  "dt_dependencies": {
+    "dpmaif_node": {
+      "needed": "four register ranges (AO_UL 0x10014000, PD_UL 0x1022d000, PD_MD_MISC 0x1022c000, SRAM 0x1022e000) and GIC_SPI 209",
+      "mainline_state": "absent; no dpmaif node exists anywhere in arch/arm64/boot/dts/mediatek/mt6893*"
+    },
+    "infracfg_regmap": {
+      "needed_for": "INFRA_DPMAIF_CTRL_REG at 0xC00 in infracfg_ao: set DPMAIF_IP_BUSY_MASK (0x3 << 12) and clear bit 13 (MD to AP wakeup); identical in 4.19 and 6.6",
+      "mainline_state": "the modem node already carries mediatek,infracfg = <&ufs_infracfg> (syscon@10001000, mediatek,mt6893-infracfg_ao), so a dpmaif node can point at the same phandle; no new node needed"
+    },
+    "clocks": {
+      "vendor_needs": [
+        "CLK_IFRAO_DPMAIF (4.19 id 39): gate ifrao_dpmaif_ck, parent axi_ck, ifrao3 bank shift 3",
+        "CLK_IFRAO_DPMAIF_MAIN (4.19 id 74): gate ifrao_dpmaif_main, parent dpmaif_main_ck, ifrao4 bank shift 26",
+        "CLK_TOP_DPMAIF_MAIN (4.19 id 171) and CLK_TOP_DPMAIF_MAIN_SEL (4.19 id 243) for the mux behind dpmaif_main_ck"
+      ],
+      "gate_register_offsets": "ifrao3 set/clr/sta = 0xa4/0xa8/0xac, ifrao4 = 0xc0/0xc4/0xc8 (clk-mt6885.c, same infracfg_ao block)",
+      "mainline_state": "none of these exist: include/dt-bindings/clock/mt6893-clk.h has no CLK_IFRAO_DPMAIF, no CLK_IFRAO_DPMAIF_MAIN and no CLK_TOP_DPMAIF_MAIN, and drivers/clk/mediatek/clk-mt6893-pmif.c has no DPMAIF gate entry",
+      "reading": "this is the one real gap on the clock side: two gate entries, two mtk_gate_regs tables and three binding IDs, all with known numbers"
+    },
+    "vendor_lookups_that_do_not_apply": {
+      "mediatek,mddriver": "both 4.19 and 6.6 read md_generation and ccci-infracfg from a mediatek,mddriver node; this tree has realme,op6893-modem-platform instead and already knows the generation is 6297",
+      "dl_bat_entry_size": "absent, so the driver uses DPMAIF_DL_BAT_ENTRY_SIZE"
+    }
+  },
+  "salvaged_artifacts": {
+    "reason": "these existed only under /tmp and are the only copies",
+    "files": [
+      {
+        "path": "/data/src/mainline/mt6893-direct/md-firmware/md1img-head-64k.bin",
+        "sha256": "99e69ed3a020a70e7ce6362134c906e8d2cb80a1f0555a1ca7dc41d3be3c45e9",
+        "bytes": 65536,
+        "content": "first 64 KiB of the md1img partition; FILE_INFO names k6893v1_64_k419_20615S_MDBIN_PCB01_MT6893_S00.MOLY_NR15_R3_TC16_S_PR2_SP_V2_P88.bin, which matches the SWVersion in the MD's own exception dump"
+      },
+      {
+        "path": "/data/src/mainline/mt6893-direct/recovery/android-boot-raw-capture.img",
+        "sha256": "6868ed3aea06bc6c88db96ddc199ee4d5feef70350769978fb459ea9ffeb76e6",
+        "bytes": 33554517,
+        "content": "the untruncated adb dd stream, including the toybox record summary; recovery/android-boot-current.img (d8c9c35f...) is the truncated 32 MiB form already documented in android-boot-recovery.json"
+      }
+    ]
+  },
+  "conclusion": {
+    "portable_without_new_subsystems": "yes; the only missing pieces are a device tree node and two clock gates, both with numbers taken from the same-board trees",
+    "not_needed": "reserved-memory regions, a second RX queue, LRO, and the MAX_BAT threshold",
+    "gate_model_fits": "resolved during the audit: the mainline ccif_gate_regs pair 0x88/0x8c/0x94 is exactly the 4.19 ifrao1_cg_regs, so the two DPMAIF gates follow the same table as ifrao3 0xa4/0xa8/0xac and ifrao4 0xc0/0xc4/0xc8, and the existing CLK_IGNORE_UNUSED + observed-parent policy covers them without changing any SCP-owned gate state"
+  }
+}
