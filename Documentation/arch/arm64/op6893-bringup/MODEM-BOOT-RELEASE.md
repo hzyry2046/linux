@@ -372,3 +372,11 @@ MD 需要真实 NVRAM 内容或 bin-region 备份；按项目约束不导入。
 `MD_PLATFORM/MD_BOOT/SERVICES/DISPATCH/HANDSHAKE/SMEM` 全部未启用，
 构建日志 0 error），`out/.config` 也随之回到基线配置。
 详见 `evidence/modem-source-recheck-and-baseline.json`。
+
+验证约定：`modem-release-image.py` 调用 `build.py` 时带 `OP6893_BUILD_FOCUSED=scp-initial`，
+该模式会跳过与本次构建无关的回归日志，因此**不能只看构建是否通过**。收尾时
+必须单独跑全量 `Documentation/arch/arm64/op6893-bringup/tools/test_modem_*.py`
+（当前 52 组），本轮就是这样发现两个自早期提交起就失效的 harness：服务发送
+模型缺少诊断引入的 printk，SCP owner harness 仍断言“完全不存在 RX start”
+且仍从 `.c` 里取结构体。两者都已修好，并顺带修掉了发送忙路径上多读一次 AP
+寄存器的问题。
