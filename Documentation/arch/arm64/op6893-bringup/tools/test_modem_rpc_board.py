@@ -18,6 +18,7 @@ TEST = r'''
 #include <linux/errno.h>
 #include <linux/unaligned.h>
 #include "ccci-rpc-op6893.h"
+#include "ccci-rpc-lhif.h"
 #include "ccci-rpc-provider.h"
 static u8 packet[2048],reply[2048];
 static const struct ccci_rpc_provider *board;
@@ -124,8 +125,21 @@ int main(void){
  assert(ccci_rpc_provider_available(board,0x400e)==1);
  assert(!ccci_rpc_provider_available(board,0x4003));
  gpio_queries();eint_queries();dtsi_queries();
+ /* 0x400d is a command: A records the remap and always replies two zeros. */
+ {
+  u8 map[8];u32 q=0;
+  ccci_rpc_lhif_reset();
+  put_unaligned_le32(0,map);put_unaligned_le32(2,map+4);
+  struct ccci_rpc_arg a={map,8};
+  scalars(request(0x400d,&a,1),0,0);
+  assert(ccci_rpc_lhif_queue(0,&q)&&q==0);
+  put_unaligned_le32(3,map+4);
+  scalars(request(0x400d,&a,1),0,0);
+  assert(ccci_rpc_lhif_queue(0,&q)&&q==3);
+  ccci_rpc_lhif_reset();
+ }
  /* No ADC namespace, GPIO/ADC sampling, secure operation or RF-clock success is invented. */
- const u32 blocked[]={0x4001,0x4003,0x4004,0x4006,0x4009,0x400b,0x400c,0x400d};
+ const u32 blocked[]={0x4001,0x4003,0x4004,0x4006,0x4009,0x400b,0x400c};
  for(unsigned i=0;i<sizeof(blocked)/sizeof(blocked[0]);i++)unavailable(blocked[i]);
  puts("PASS: ADC and unavailable hardware services remain unsupported with unchanged output");
  return 0;
@@ -145,6 +159,12 @@ def main():
             'errno.h': '#include <asm-generic/errno.h>\n',
             'string.h': '#include <string.h>\n',
             'kernel.h': '#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))\n',
+            'spinlock.h': '''#pragma once
+typedef struct { int unused; } spinlock_t;
+#define DEFINE_SPINLOCK(name) spinlock_t name
+#define spin_lock_irqsave(l, f) do { (void)(l); (f) = 0; } while (0)
+#define spin_unlock_irqrestore(l, f) do { (void)(l); (void)(f); } while (0)
+''',
             'unaligned.h': '''#pragma once
 #include <linux/types.h>
 static inline u32 get_unaligned_le32(const void *p) {
@@ -162,7 +182,8 @@ static inline void put_unaligned_le32(u32 v,void *p) {
                         '-fsanitize=address,undefined', '-fno-sanitize-recover=all',
                         '-no-pie', '-I' + str(tmp), '-I' + str(SRC),
                         str(SRC / 'ccci-rpc-protocol.c'), str(SRC / 'ccci-rpc-provider.c'),
-                        str(SRC / 'ccci-rpc-op6893.c'), str(tmp / 'test.c'),
+                        str(SRC / 'ccci-rpc-op6893.c'), str(SRC / 'ccci-rpc-lhif.c'),
+                        str(tmp / 'test.c'),
                         '-o', str(tmp / 'test')], check=True)
         subprocess.run([str(tmp / 'test')], check=True)
 

@@ -4,6 +4,13 @@
  * CCCI header and the netdev plumbing; nothing here invents a packet, and the
  * transmit path defers to a workqueue because ndo_start_xmit is atomic while
  * the CCIF transmit takes the owner mutex.
+ *
+ * The same-board ABI carries CCMNI over DPMAIF on MD_GENERATION 6297
+ * (ccci_hif.h: MD1_NET_HIF is DPMAIF unless the generation is 6293), and the MD
+ * asserts in its nccci service on any CCIF channel-22 frame, on the shared queue
+ * and on the remapped one alike. This path therefore stays behind the operator
+ * gate as a probe; it is not the data transport and no packet is claimed to
+ * have reached the MD.
  */
 #include <linux/device.h>
 #include <linux/etherdevice.h>
@@ -18,8 +25,11 @@
 
 #include "ccci-ccif.h"
 #include "ccci-md-net.h"
+#include "ccci-rpc-lhif.h"
 
-/* Same-board CCMNI1: RX 20, TX 22, shared control queue 0, index 0. */
+/* Same-board CCMNI1: RX 20, TX 22, index 0; the uplink queue comes from the
+ * MD's own LHIF remap request and defaults to the shared control queue.
+ */
 #define CCCI_NET_RX_CHANNEL	20
 #define CCCI_NET_INDEX		0
 #define CCCI_NET_QUEUE_DEPTH	64
@@ -72,9 +82,14 @@ static void net_tx_work(struct work_struct *work)
 		ret = net->error;
 		if (!ret && !net->hs2)
 			ret = -ENOTCONN;
-		if (!ret)
-			ret = ccci_ccif_net_send(net->ccif, CCCI_NET_INDEX,
+		if (!ret) {
+			/* Only a resolved remap replaces the shared queue default. */
+			u32 queue = CCCI_CCIF_NET_QUEUE;
+
+			ccci_rpc_lhif_queue(CCCI_NET_INDEX, &queue);
+			ret = ccci_ccif_net_send(net->ccif, CCCI_NET_INDEX, queue,
 						 skb->data, skb->len);
+		}
 		if (ret == -EBUSY) {
 			/* Backpressure: keep the packet for the next doorbell. */
 			net->tx_busy++;
@@ -211,6 +226,8 @@ int ccci_md_net_hs2(struct ccci_md_net *net)
 {
 	if (!net)
 		return 0;
+	/* Queue remaps describe one MD generation; the MD asks again after HS2. */
+	ccci_rpc_lhif_reset();
 	mutex_lock(&net->lock);
 	if (!net->error)
 		net->hs2 = true;
@@ -297,14 +314,31 @@ int ccci_md_net_enable(struct ccci_md_net *net, bool enable)
 
 ssize_t ccci_md_net_status(struct ccci_md_net *net, char *buf, size_t size)
 {
+	struct ccci_rpc_lhif_state lhif;
+	u32 queue = CCCI_CCIF_NET_QUEUE;
+	size_t used;
+	int ret;
+
 	if (!net || !buf || !size)
 		return -EOPNOTSUPP;
-	return scnprintf(buf, size,
-			 "hs2=%u opened=%u enabled=%u stopped=%u error=%d queued=%u tx=%u tx_bytes=%u tx_busy=%u tx_dropped=%u rx=%u rx_bytes=%u rx_dropped=%u\n",
-			 net->hs2, net->opened, net->enabled, net->stopped, net->error,
-			 skb_queue_len(&net->tx_queue), net->tx_packets, net->tx_bytes,
-			 net->tx_busy, net->tx_dropped, net->rx_packets, net->rx_bytes,
-			 net->rx_dropped);
+	ccci_rpc_lhif_state(&lhif);
+	ccci_rpc_lhif_queue(CCCI_NET_INDEX, &queue);
+	ret = scnprintf(buf, size,
+			"hs2=%u opened=%u enabled=%u stopped=%u error=%d queued=%u tx=%u tx_bytes=%u tx_busy=%u tx_dropped=%u rx=%u rx_bytes=%u rx_dropped=%u tx_queue=%u lhif_requests=%u lhif_malformed=%u lhif_unknown=%u lhif_ports=%u\n",
+			net->hs2, net->opened, net->enabled, net->stopped, net->error,
+			skb_queue_len(&net->tx_queue), net->tx_packets, net->tx_bytes,
+			net->tx_busy, net->tx_dropped, net->rx_packets, net->rx_bytes,
+			net->rx_dropped, queue, lhif.requests, lhif.malformed,
+			lhif.unknown, lhif.ports);
+	if (ret < 0 || (size_t)ret >= size)
+		return ret;
+	used = ret;
+	for (u32 i = 0; i < lhif.ports && used < size; i++)
+		used += scnprintf(buf + used, size - used,
+				  "lhif%u net_if=%u lhif_q=%u queue=%u\n", i,
+				  lhif.port[i].net_if, lhif.port[i].lhif_q,
+				  lhif.port[i].queue);
+	return used;
 }
 
 static void net_unregister(void *context)

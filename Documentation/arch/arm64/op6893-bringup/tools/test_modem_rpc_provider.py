@@ -13,6 +13,7 @@ TEST = r'''
 #include <stdio.h>
 #include <string.h>
 #include <linux/unaligned.h>
+#include "ccci-rpc-lhif.h"
 #include "ccci-rpc-provider.h"
 /* A port_rpc.h:221 / V port_rpc.h:242: implicit values INCREASE from -13. */
 enum source_eint_error { SOURCE_EINT_NULL=-13, SOURCE_EINT_TYPE, SOURCE_EINT_NAME };
@@ -78,8 +79,37 @@ int main(void){
  /* Every declared/reserved A/V ID is unavailable without audited facts. */
  for(unsigned op=0x4001;op<=0x4017;op++){
   assert(ccci_rpc_provider_known(op));
-  if(op==0x4007)continue;
+  if(op==0x4007||op==0x400d)continue;
   n=make(op,NULL,0);unchanged(-EOPNOTSUPP,NULL,n);
+ }
+ /* 0x400d: A records the LHIF remap and always replies two zero words. */
+ {
+  u8 map[8];u32 q=0xdead;struct ccci_rpc_lhif_state st;
+  ccci_rpc_lhif_reset();ccci_rpc_lhif_state(&st);
+  assert(!st.requests&&!st.ports&&!ccci_rpc_lhif_queue(0,&q)&&q==0xdead);
+  put_unaligned_le32(0,map);put_unaligned_le32(2,map+4);
+  struct ccci_rpc_arg a={map,8};
+  n=make(0x400d,&a,1);scalars(NULL,n,0,0,2);
+  ccci_rpc_lhif_state(&st);assert(st.requests==1&&st.ports==1&&!st.unknown);
+  assert(st.port[0].net_if==0&&st.port[0].lhif_q==2&&st.port[0].queue==0);
+  assert(ccci_rpc_lhif_queue(0,&q)&&q==0);
+  put_unaligned_le32(3,map+4);n=make(0x400d,&a,1);scalars(NULL,n,0,0,2);
+  ccci_rpc_lhif_state(&st);assert(st.requests==2&&st.ports==1&&st.port[0].queue==3);
+  assert(ccci_rpc_lhif_queue(0,&q)&&q==3);
+  /* A rejects a queue it does not map, but the MD still sees two zeros. */
+  put_unaligned_le32(4,map+4);n=make(0x400d,&a,1);scalars(NULL,n,0,0,2);
+  ccci_rpc_lhif_state(&st);assert(st.requests==3&&st.unknown==1&&st.port[0].queue==3);
+  put_unaligned_le32(1,map);put_unaligned_le32(3,map+4);
+  n=make(0x400d,&a,1);scalars(NULL,n,0,0,2);
+  ccci_rpc_lhif_state(&st);assert(st.ports==2&&ccci_rpc_lhif_queue(1,&q)&&q==3);
+  assert(!ccci_rpc_lhif_queue(2,&q)&&q==3);
+  /* Shape errors use A's -2 pair and never touch the recorded mapping. */
+  a.size=4;n=make(0x400d,&a,1);scalars(NULL,n,-2,-2,2);
+  struct ccci_rpc_arg pair[2]={a,a};
+  n=make(0x400d,pair,2);scalars(NULL,n,-2,-2,2);
+  n=make(0x400d,NULL,0);scalars(NULL,n,-2,-2,2);
+  ccci_rpc_lhif_state(&st);assert(st.requests==4&&st.malformed==3&&st.ports==2);
+  ccci_rpc_lhif_reset();ccci_rpc_lhif_state(&st);assert(!st.requests&&!st.ports);
  }
  /* 0x4007 emits A's unavailable-value reply: get_md_adc_val() returns -1. */
  {
@@ -127,6 +157,12 @@ def main():
         (inc / 'types.h').write_text('#pragma once\n#include <stdint.h>\n#include <stddef.h>\n#include <stdbool.h>\ntypedef uint8_t u8; typedef uint32_t u32; typedef int32_t s32;\n')
         (inc / 'errno.h').write_text('#include <asm-generic/errno.h>\n')
         (inc / 'string.h').write_text('#include <string.h>\n')
+        (inc / 'spinlock.h').write_text('''#pragma once
+typedef struct { int unused; } spinlock_t;
+#define DEFINE_SPINLOCK(name) spinlock_t name
+#define spin_lock_irqsave(l, f) do { (void)(l); (f) = 0; } while (0)
+#define spin_unlock_irqrestore(l, f) do { (void)(l); (void)(f); } while (0)
+''')
         (inc / 'unaligned.h').write_text('''#pragma once
 #include <linux/types.h>
 static inline u32 get_unaligned_le32(const void *p) {
@@ -140,7 +176,8 @@ static inline void put_unaligned_le32(u32 v,void *p) {
         subprocess.run(['cc', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
                         '-fsanitize=address,undefined', '-fno-sanitize-recover=all',
                         '-no-pie', '-I' + str(tmp), '-I' + str(SRC),
-                        str(SRC / 'ccci-rpc-protocol.c'), str(SRC / 'ccci-rpc-provider.c'), str(tmp / 'test.c'),
+                        str(SRC / 'ccci-rpc-protocol.c'), str(SRC / 'ccci-rpc-provider.c'),
+                        str(SRC / 'ccci-rpc-lhif.c'), str(tmp / 'test.c'),
                         '-o', str(tmp / 'test')], check=True)
         subprocess.run([str(tmp / 'test')], check=True)
 

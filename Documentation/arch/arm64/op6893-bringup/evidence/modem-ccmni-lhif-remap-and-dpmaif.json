@@ -1,0 +1,64 @@
+{
+  "date": "2026-11-17",
+  "scope": "RPC 0x400d (LHIF uplink remap) implemented and exercised on hardware, the PDP activation sequence that precedes it, and the transport finding that closes the CCIF channel-22 data path for this board.",
+  "images": [
+    {
+      "dist": "dist/b2652556550f/boot.img",
+      "sha256": "276cb99cb92c2dc551e2fb0cc81d1638ad1acf76042346a21fc822460d501078",
+      "content": "answers RPC 0x400d, records the requested LHIF queue, and transmits CCMNI on the MD-selected queue"
+    }
+  ],
+  "vendor_reference": {
+    "rpc_id": "port_rpc.h: IPC_RPC_CCCI_LHIF_MAPPING = 0x400D",
+    "rpc_payload": "struct ccci_rpc_queue_mapping { u32 net_if; u32 lhif_q; } -- one 8-byte argument",
+    "lhif_enum": "LHIF_HWQ_SW_DL=0, LHIF_HWQ_SW_UL=1, LHIF_HWQ_AP_UL_Q0=2, LHIF_HWQ_AP_UL_Q1=3",
+    "rpc_handler": "port_rpc.c ccci_rpc_remap_queue(): Q0 -> txq_index 0, txq_exp_index 0xF1; Q1 -> txq_index 3, txq_exp_index 0xF3; anything else only logs; the return value is discarded and the reply is two zero words",
+    "default_queues": "port_cfg.c: for MD_GENERATION >= 6293 (6297 here) DATA_TX_Q = DATA_RX_Q = 0 and DATA_TX_ACK_Q = 1; the 3/3/4 values belong to generations <= 6292",
+    "net_transport": "inc/ccci_hif.h: MD1_NET_HIF is DPMAIF_HIF_ID for every generation except 6293, so the CCMNI port is carried by DPMAIF, not by CCIF",
+    "generation": "mt6885/ccci_config.h: MD_GENERATION 6297 with DEBUG_FOR_CCB, DPMAIF_PKT_SIZE/DPMAIF_FRG_SIZE and HW_FRG_FEATURE_ENABLE",
+    "dpmaif_dt": "mt6893.dts dpmaif: AO_UL 0x10014000, PD_UL 0x1022D000, PD_MD_MISC 0x1022C000, SRAM 0x1022E000, GIC_SPI 209, capability 14, clocks CLK_IFRAO_DPMAIF_MAIN and CLK_IFRAO_DPMAIF"
+  },
+  "implementation": {
+    "ccci-rpc-lhif.c": "single record of the MD's uplink remap requests, keyed by CCMNI index, with request/malformed/unknown/dropped counters; reset per generation",
+    "ccci-rpc-provider.c": "0x400d is a command, not a fact lookup: one 8-byte argument is recorded, a malformed shape replies A's -2 pair, and every other case replies two zeros exactly as A does",
+    "ccci-ccif.c": "ccci_ccif_net_send() takes the queue from the caller instead of a fixed constant",
+    "ccci-md-net.c": "transmit uses the queue the MD selected for this port, defaulting to the shared queue when no remap arrived; status exposes the recorded remap",
+    "ccci-service-session.c": "a rejected service request now logs the first argument head, so one unsupported operation is fully identified in a single cycle"
+  },
+  "hardware": {
+    "ordered_run": {
+      "dispatch": "state=4 generation=1 error=0 attempted=1 hs2_seen=1",
+      "ccism": "state=5 (RUNNING)",
+      "at_first_write": "the first AT+CFUN=1 after a fresh generation produced no reply in three of three runs; the immediate retry returned OK with the full URC burst",
+      "radio": "AT+CPIN? READY, AT+CSQ 17, +CEREG: 3,1,\"9A17\",\"03C341C3\",7,0,0, AT+CGATT? 1",
+      "pdp_activation": "AT+CGACT=1,0 ERROR; AT+CGACT=1,1 OK; AT+CGACT? reports cid 1 active",
+      "pdp_address": "+CGCONTRDP: 1,6,\"sos.mnc011.mcc460.gprs\",...,\"36.14.0.102.216.0.0.0.0.0.0.0.0.0.0.33\",\"36.14.0.102.223.0.0.0.0.0.0.0.0.0.0.1\" -- read as 16 decimal bytes these are 240e:66:d800::21 and 240e:66:df00::1, so the activated context is IPv6 and used the emergency APN",
+      "remap_observed": "md_net reports lhif_requests=1, lhif0 net_if=0 lhif_q=3 queue=3, so the MD asked for the AP uplink Q1 (IMS) queue for CCMNI0 and the reply was accepted without disturbing the generation"
+    },
+    "first_frame_run": {
+      "action": "gate opened, ccmni0 brought up with IPv6 suppressed, two stack frames sent on the MD-selected queue 3",
+      "ap_side": "tx=2 tx_bytes=140 tx_busy=3, no AP-side fault, dispatch stayed at state=4 error=0",
+      "md_side": "exception record version=0xab000005 cores=12 offender=MCU ex_type=80 class=assert line=1574 path=mcu/service/hif/nccci/src/ccci_apis.c para=0x16,0x0,0x0 lr=0x90f0cbf8",
+      "md_own_dump": "BriefException: [EX Early Stage][core0,vpe0,tc0(vpe0)] Assert fail: ccci_apis.c 1574 0x16 0x0 0x0; SWVersion NR15.R3.TC16.S.PR2.SP K6893V1_64_K419_20615S"
+    },
+    "single_variable_run": {
+      "action": "same image, but the radio never came up (the first AT+CFUN=1 write was swallowed again), so no PDP and no remap; one synthetic 60-byte Ethernet frame was injected on the default queue 0",
+      "ap_side": "tx=1 tx_bytes=60 tx_queue=0 lhif_requests=0",
+      "md_side": "the same exception at ccci_apis.c:1574 with para=0x16, and the AT queue 5 then stayed busy for the rest of the generation",
+      "reading": "0x16 is 22, the CCMNI transmit channel, so the rejection does not depend on the queue or on a PDP being active"
+    }
+  },
+  "conclusion": {
+    "established": [
+      "RPC 0x400d must be answered or the generation dies with -EOPNOTSUPP; it is now answered exactly as the same-board AP does and the MD accepts it",
+      "the MD selects the CCMNI uplink queue at runtime and asked for the AP uplink Q1 queue on this board, so a fixed queue is not correct",
+      "every AP to MD frame on CCIF channel 22 is rejected by this MD with an assert in the nccci service, on queue 0 and on queue 3, with and without an active PDP"
+    ],
+    "not_established": [
+      "that any CCMNI payload can be delivered to this MD over CCIF at all",
+      "the meaning of the CGCONTRDP address field beyond its 16-byte width; the IPv6 reading is an interpretation, not a decoded specification",
+      "that the activated context (emergency APN) is representative of an operator data context"
+    ],
+    "next_transport": "the same-board ABI selects DPMAIF for CCMNI on MD_GENERATION 6297, and the MD's nccci service asserts on CCIF channel 22; the data path therefore has to be implemented over the DPMAIF block at 0x10014000/0x1022D000/0x1022C000/0x1022E000 on GIC_SPI 209"
+  }
+}

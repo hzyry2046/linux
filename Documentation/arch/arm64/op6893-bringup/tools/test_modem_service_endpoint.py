@@ -389,8 +389,20 @@ def main():
         for name in ('capability.h', 'device.h', 'fs.h', 'kref.h', 'miscdevice.h',
                      'poll.h', 'uaccess.h', 'kconfig.h', 'sysfs.h'):
             (inc / name).write_text('')
+        # The LHIF record is its own translation unit and needs a spinlock model.
+        (inc / 'spinlock.h').write_text('''#pragma once
+#include <stdbool.h>
+#ifndef CCCI_TEST_SPINLOCK_MODEL
+#define CCCI_TEST_SPINLOCK_MODEL 1
+typedef struct { bool held; } spinlock_t;
+#define DEFINE_SPINLOCK(name) spinlock_t name
+#define spin_lock_irqsave(l, f) do { (void)(l); (f) = 0; } while (0)
+#define spin_unlock_irqrestore(l, f) do { (void)(l); (void)(f); } while (0)
+#endif
+''')
         # Header supplies portable little-endian 32-bit helpers before shim 64-bit helpers.
-        (root / 'test.c').write_text(PREFIX + '\n#include <linux/unaligned.h>\n' + SHIM + TEST)
+        (root / 'test.c').write_text('#define CCCI_TEST_SPINLOCK_MODEL 1\n' + PREFIX +
+                                     '\n#include <linux/unaligned.h>\n' + SHIM + TEST)
         source = K / 'drivers/misc/mediatek/ccci'
         subprocess.run(['cc', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
                         '-Wno-unused-parameter', '-Wno-unused-function', '-Wno-unused-variable',
@@ -399,7 +411,7 @@ def main():
                         '-I'+str(root), '-I'+str(source),
                         str(source/'ccci-fs-protocol.c'), str(source/'ccci-rpc-protocol.c'),
                         str(source/'ccci-service-router.c'), str(source/'ccci-rpc-provider.c'),
-                        str(root/'test.c'),
+                        str(source/'ccci-rpc-lhif.c'), str(root/'test.c'),
                         '-o', str(root/'test')], check=True)
         subprocess.run([str(root/'test')], check=True)
 

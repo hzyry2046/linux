@@ -501,17 +501,18 @@ int ccci_ccif_at_send(struct ccci_ccif *ccif, const void *payload, u32 size,
 }
 
 /*
- * CCMNI payload on the net channel (22, shared control queue 0). The header is
- * built here exactly as the same-board net port does: data[0] is the CCMNI
- * index and data[1] the total length including the header.
+ * CCMNI payload on the net channel (22, queue chosen by the MD's LHIF remap).
+ * The header is built here exactly as the same-board net port does: data[0] is
+ * the CCMNI index and data[1] the total length including the header.
  */
-int ccci_ccif_net_send(struct ccci_ccif *ccif, u32 index, const void *payload, u32 size)
+int ccci_ccif_net_send(struct ccci_ccif *ccif, u32 index, u32 queue,
+		       const void *payload, u32 size)
 {
 	u8 *copy;
 	int ret;
 
 	if (!ccif || !payload || size < CCCI_CCIF_NET_MIN || size > CCCI_CCIF_NET_MAX ||
-	    index > CCCI_CCIF_NET_INDEX_MAX)
+	    index > CCCI_CCIF_NET_INDEX_MAX || queue >= CCCI_CCIF_QUEUES)
 		return -EINVAL;
 	copy = kmalloc(CCCI_CCIF_HEADER + size, GFP_KERNEL);
 	if (!copy)
@@ -522,7 +523,7 @@ int ccci_ccif_net_send(struct ccci_ccif *ccif, u32 index, const void *payload, u
 	put_unaligned_le32(0, copy + 12);
 	memcpy(copy + CCCI_CCIF_HEADER, payload, size);
 	ret = ccif_transmit(ccif, copy, CCCI_CCIF_HEADER + size, CCCI_CCIF_NET_CHANNEL,
-			    CCCI_CCIF_NET_QUEUE, 3, true);
+			    queue, 3, true);
 	kfree_sensitive(copy);
 	return ret;
 }

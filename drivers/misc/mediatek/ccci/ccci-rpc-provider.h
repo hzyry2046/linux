@@ -49,6 +49,8 @@ int ccci_rpc_provider_available(const struct ccci_rpc_provider *provider, u32 op
  * Complete RX32 request -> complete TX33 reply bytes, no allocation or I/O.
  * Known unavailable returns -EOPNOTSUPP, never a fake success or unknown-op
  * reply. Truly unknown IDs return the vendor's single s32 NO_OP=-1 argument.
+ * 0x400d is a command, not a fact lookup: it records the requested LHIF queue
+ * remap and replies A's two zeros without reporting whether it was applied.
  * Any error leaves output unchanged. NULL provider has no available services.
  */
 int ccci_rpc_provider_reply(const struct ccci_rpc_provider *provider,

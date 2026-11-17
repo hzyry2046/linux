@@ -3,6 +3,7 @@
 #include <linux/string.h>
 #include <linux/unaligned.h>
 
+#include "ccci-rpc-lhif.h"
 #include "ccci-rpc-provider.h"
 
 #define RPC_PARAM_ERROR	(-2)
@@ -159,6 +160,26 @@ int ccci_rpc_provider_reply(const struct ccci_rpc_provider *provider,
 		if (request.argc != 1 || request.args[0].size != sizeof(u32))
 			goto scalar_reply;
 		put_unaligned_le32(0xffffffff, scalar);
+		return ccci_rpc_encode_reply(&request, args, 2, reply, capacity);
+	}
+	if (operation == 0x400d) {
+		/*
+		 * A requires exactly one argument and reads it as one packed
+		 * {net_if, lhif_q} pair; a bad shape replies -2 twice, and a
+		 * rejected remap is still reported to the MD as two zeros.
+		 */
+		if (request.argc != 1 || request.args[0].size != 8) {
+			ccci_rpc_lhif_malformed();
+			put_unaligned_le32(RPC_PARAM_ERROR, scalar);
+			args[0] = (struct ccci_rpc_arg){scalar, sizeof(scalar)};
+			args[1] = args[0];
+			return ccci_rpc_encode_reply(&request, args, 2, reply, capacity);
+		}
+		ccci_rpc_lhif_report(get_unaligned_le32(request.args[0].data),
+				     get_unaligned_le32(request.args[0].data + 4));
+		put_unaligned_le32(0, scalar);
+		args[0] = (struct ccci_rpc_arg){scalar, sizeof(scalar)};
+		args[1] = args[0];
 		return ccci_rpc_encode_reply(&request, args, 2, reply, capacity);
 	}
 	if (!ret) {

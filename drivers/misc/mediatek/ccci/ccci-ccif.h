@@ -55,14 +55,17 @@ int ccci_ccif_at_send(struct ccci_ccif *ccif, const void *payload, u32 size,
 		      bool hs2_seen);
 /*
  * CCMNI data payload only; builds the same-board net header for channel 22 on
- * the shared control queue 0. Same admission rules as the service sender.
+ * the queue the MD selected for this port. Same admission rules as the
+ * service sender. Channel 22 is not this board's data transport -- see
+ * ccci-md-net.c -- so callers keep it behind an explicit operator gate.
  */
 #define CCCI_CCIF_NET_CHANNEL	22
 #define CCCI_CCIF_NET_QUEUE	0
 #define CCCI_CCIF_NET_MIN	14
 #define CCCI_CCIF_NET_MAX	(1500 + 128)
 #define CCCI_CCIF_NET_INDEX_MAX	20
-int ccci_ccif_net_send(struct ccci_ccif *ccif, u32 index, const void *payload, u32 size);
+int ccci_ccif_net_send(struct ccci_ccif *ccif, u32 index, u32 queue,
+		       const void *payload, u32 size);
 /* Sleepable: close TX/RX admission without waiting on consumer or parent lock. */
 void ccci_ccif_abort(struct ccci_ccif *ccif, int error);
 int ccci_ccif_stop(struct ccci_ccif *ccif);

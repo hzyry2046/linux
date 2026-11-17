@@ -266,6 +266,7 @@ static void service_work(struct work_struct *work)
 				const u8 *raw = event->packet;
 				u32 argc = get_unaligned_le32(raw + 20);
 				u32 end = 24, first = 0, i;
+				u32 head[2] = { 0, 0 };
 
 				for (i = 0; i < argc && i < 6 && end + 4 <= event->length; i++) {
 					u32 size = get_unaligned_le32(raw + end);
@@ -274,11 +275,17 @@ static void service_work(struct work_struct *work)
 						first = size;
 					end += 4 + ((size + 3) & ~3U);
 				}
-				pr_err("ccci: service request rejected: queue=%u length=%u data0=0x%x wire_len=%u channel_seq=0x%x slot=%u op=0x%x argc=%u arg0=%u strict_end=%u wire_ok=%u chan_ok=%u slot_ok=%u argc_ok=%u op_ok=%u end_ok=%u error=%d\n",
+				/* First argument head, so one rejected op is fully identified. */
+				if (argc && first >= 4 && event->length >= 32)
+					head[0] = get_unaligned_le32(raw + 28);
+				if (argc && first >= 8 && event->length >= 36)
+					head[1] = get_unaligned_le32(raw + 32);
+				pr_err("ccci: service request rejected: queue=%u length=%u data0=0x%x wire_len=%u channel_seq=0x%x slot=%u op=0x%x argc=%u arg0=%u arg0_hex=%08x,%08x strict_end=%u wire_ok=%u chan_ok=%u slot_ok=%u argc_ok=%u op_ok=%u end_ok=%u error=%d\n",
 				       event->queue, event->length,
 				       get_unaligned_le32(raw), get_unaligned_le32(raw + 4),
 				       get_unaligned_le32(raw + 8), get_unaligned_le32(raw + 12),
-				       get_unaligned_le32(raw + 16), argc, first, end,
+				       get_unaligned_le32(raw + 16), argc, first,
+				       head[0], head[1], end,
 				       get_unaligned_le32(raw + 4) == event->length,
 				       (get_unaligned_le32(raw + 8) & 0xffff) == 14 ||
 					       (get_unaligned_le32(raw + 8) & 0xffff) == 32,

@@ -781,3 +781,106 @@ fallback 的 LTE-only 附着下是预期的。
 语音/SMS 同样没有。下一步就是 CCB 控制区 + CCMNI netdev。
 
 证据见 `evidence/modem-radio-registered.json`。
+
+---
+
+# CCMNI：LHIF 队列重映射与数据面传输的结论
+
+本轮把「CCMNI 数据面为什么不通」查到了一个确定的答案，并且顺手补上了一个
+必须应答的 RPC。
+
+## 1. RPC 0x400d（LHIF 上行队列重映射）
+
+`AT+CGACT=1,1` 成功之后，MD 通过 RPC 发来 `0x400d`，要求把 CCMNI0 的上行
+映射到某个 LHIF 硬件队列。此前我们不认识这个 op，按 fail-closed 以
+`-EOPNOTSUPP` 拒绝，整个 generation 直接以 `-95` 结束。
+
+厂商语义（`port_rpc.c` / `port_rpc.h`）：
+
+| 字段 | 值 |
+|---|---|
+| op | `IPC_RPC_CCCI_LHIF_MAPPING = 0x400D` |
+| 载荷 | 一个 8 字节参数 `{u32 net_if; u32 lhif_q;}` |
+| `LHIF_HWQ_AP_UL_Q0` = 2 | `txq_index = 0`，`txq_exp_index = 0xF1` |
+| `LHIF_HWQ_AP_UL_Q1` = 3 | `txq_index = 3`，`txq_exp_index = 0xF3` |
+| 非法队列 | 只打日志，**返回值被丢弃** |
+| 应答 | 两个 0（`{0,0}`），MD 无法得知 AP 是否真的应用了 |
+
+现在按同样方式应答，并把请求记录成一份可读状态（`md_net` 里的
+`lhif_requests` / `lhif_ports` / `lhif0 net_if=… lhif_q=… queue=…`）。
+
+真机上 MD 实际请求的是：`net_if=0, lhif_q=3` → **queue 3（AP 上行 Q1）**。
+这也印证了队列是 MD 在运行时选的，不能写死。
+
+顺带纠正一个数字：`port_cfg.c` 里 `DATA_TX_Q = DATA_RX_Q = 0`、
+`DATA_TX_ACK_Q = 1` 是 `MD_GENERATION >= 6293`（本板 6297）的默认值；`3/3/4`
+那组属于 ≤6292。所以默认队列 0 是对的，重映射是运行时的额外决定。
+
+## 2. 决定性结论：本板的 CCMNI 不走 CCIF
+
+`inc/ccci_hif.h`：
+
+```c
+#if (MD_GENERATION == 6293)
+#define MD1_NET_HIF   CLDMA_HIF_ID
+#else
+#define MD1_NET_HIF   DPMAIF_HIF_ID     /* 本板 6297 走这条 */
+#endif
+```
+
+也就是：**net 端口（CCMNI）的 HIF 是 DPMAIF**，CCIF 只承载 FS/RPC/AT/系统
+消息这类"控制面"。这与 `mt6885/ccci_config.h` 里的 `DPMAIF_PKT_SIZE`、
+`HW_FRG_FEATURE_ENABLE`、`DEBUG_FOR_CCB` 一致。
+
+硬件上两边都验证过：
+
+| 实验 | 队列 | PDP | 结果 |
+|---|---|---|---|
+| 放行 → 激活 PDP → 开闸 → 拉起网卡 | 3（MD 重映射后） | 已激活 | MD 在 `ccci_apis.c:1574` 断言，`para=0x16` |
+| 无射频、无 PDP、无重映射 → 注入**单帧** 60 字节 | 0 | 无 | **同样**在同一行断言，`para=0x16` |
+
+`0x16` 就是 22，CCMNI 发送通道。两次独立实验说明：**任何一帧走 CCIF
+channel 22 都会被这个 MD 拒绝**，与队列和 PDP 状态无关。
+
+MD 自己的转储：
+
+```
+BriefException: [EX Early Stage][core0,vpe0,tc0(vpe0)]
+                Assert fail: ccci_apis.c 1574 0x16 0x0 0x0
+SWVersion: NR15.R3.TC16.S.PR2.SP K6893V1_64_K419_20615S
+```
+
+所以上一轮"CCMNI 数据端口已经打通"的说法要收窄：**发送路径确实到达了 MD，
+但 MD 不接受这条通道**。代码保留，但仍在 `md_net` 闸门之后，并在注释里写明
+它不是本板的数据传输通道。
+
+## 3. 顺序实验拿到的其它事实
+
+- `AT+CFUN=1` 在一个新 generation 里的**第一次写入会被吞掉**（三次实验都是），
+  紧接着重试即返回 `OK` 加完整 URC 串；这不是缺陷，是 MD 侧的行为。
+- 射频打开后：`+CPIN: READY`、`+CSQ: 17`、`+CEREG: 3,1,"9A17","03C341C3",7`、
+  `+CGATT: 1`，与上一轮一致。
+- `AT+CGACT=1,0` → `ERROR`；`AT+CGACT=1,1` → `OK`，`+CGACT?` 显示 cid 1 已激活。
+- `+CGCONTRDP` 显示激活出来的 APN 是 `sos.mnc011.mcc460.gprs`（应急 APN），
+  地址字段是 16 个十进制字节；按字节读是 `240e:66:d800::21`，也就是**IPv6 上下文**。
+  这一点只是按字节解读，没有规范层面的确认。
+
+## 4. 下一步：DPMAIF
+
+数据面必须实现在 DPMAIF 上。本板参数（`mt6893.dts`）：
+
+| 项 | 值 |
+|---|---|
+| AO_UL | `0x10014000` |
+| PD_UL | `0x1022D000` |
+| PD_MD_MISC | `0x1022C000` |
+| SRAM | `0x1022E000` |
+| IRQ | `GIC_SPI 209` |
+| capability | 14 |
+| clocks | `CLK_IFRAO_DPMAIF_MAIN`, `CLK_IFRAO_DPMAIF` |
+
+厂商侧这部分是 `ccci_hif_dpmaif.c` + `dpmaif_drv.c` 约 6.7k 行；mainline 里
+已有同族实现 `drivers/net/wwan/t7xx/`（T700，PCIe 形态），寄存器语义可参考但
+接入方式不同。这是一个新的子系统工程，不是一次补丁。
+
+证据见 `evidence/modem-ccmni-lhif-remap-and-dpmaif.json`。
