@@ -436,3 +436,62 @@ md1_smem_cahce_offset=134217728 (0x8000000)  md_mpu_num=9  free_in_kernel=0
 MD 的只读/可写段划分由 LK 决定，内核侧拿不到，因此"故障地址属于代码段还是
 数据段"这条无法用现有元数据判定。证据见
 `evidence/modem-snapshot-ab-and-lk-scalars.json`。
+
+## 与厂商自身启动日志的对照（2026-11-17）
+
+设备在 Android 时可直接读厂商内核的运行时状态。两份既有采集提供了地面真相：
+`/data/src/reverse-analysis/modem-runtime/ccci_dump-boot-excerpt.txt`（厂商 4.19
+启动日志）与 `ccci-fs-request-sequence.txt`（对 `ccci_mdinit` 的 `/dev/ccci_fs`
+抓取）。
+
+### 先更正一条旧结论
+
+此前写"厂商在 `MF04_003` 之后接着读 `UM12_005`，我们的 MD 在这里分叉"。查证
+后不成立：那份抓取是**启动后约 10.4 秒才 attach** 的稳态序列，里面
+`md_nv_config`/`INFO_FILE`/`NV0S_000`/`Restore`/`FAT6F*` 出现次数全是 0，
+是 READY 之后的 NVRAM 巡检（21 秒内 2180 次 `CMPT_Read`），不是启动扫描。
+我们启动阶段的那 859 个请求在该文件里没有对应物，旧比较作废。
+
+### 厂商启动时间线（同一台设备）
+
+| 时刻 | 事件 |
+|---|---|
+| 9.161 s | MD 启动 |
+| 9.437 s | `prepare_runtime_data`，AP 声明 39 个 feature，随后发出 runtime data |
+| 9.526–9.624 s | MD 经 RPC 查 GPIO/EINT 与 dtsi |
+| **10.899 s** | `control message 0x0,0x0` → `md_state 3→4`，即 **WAIT_HS2 → READY** |
+
+也就是说厂商 MD 在启动后约 1.7 秒就到 HS2，**在长时间 NVRAM 扫描之前**。我们
+的 MD 则是先做完整 859 请求扫描、始终不到 HS2——这正是同板"首次启动重建
+NVRAM cache"的路径（我们每次 Linux 启动都会清零，所以每次都走这条路）。
+
+### 两项逐字段核对：都对
+
+1. **AP runtime data v2.1**：厂商 `config_ap_runtime_data_v2_1()`
+   （`eccci/modem_sys1.c`）填 `struct ap_query_md_feature_v2_1`，我们
+   `ccci_runtime_upload()` 填同一结构。head/tail pattern、
+   `feature_set[1]`（mask 0、version 1，其余为 0）、`share_memory_support=2`、
+   runtime 地址/大小、以及 `noncached_mpu_*`/`cached_mpu_*`
+   （`0x40000000+0x1800000`、`0x48000000+0x4960000`）**逐字段一致**。
+2. **SMEM 区域表**：新增只读 `smem_users` 属性（只打印 id/AP/MD/size/标志，
+   无载荷），与厂商启动日志的 `init_smem_regions` 逐条比对，24 个区域
+   **全部一致**，包括 `RAW_MDSS_DBG 0x8e110800/0x40110800/0x3800`、
+   `RAW_RUNTIME_DATA 0x8e11e800/0x4011e800/0x1000`、
+   `MD_NVRAM_CACHE 0x88180000/0x48180000/0x700000`、CCISM 三个区、
+   `RAW_MD_CONSYS` 与 CCB 聚合。
+
+### 一个负结果：HS1 回复不能只发 MUST 记录
+
+厂商 `append_runtime_feature()` 只为协商成 MUST_SUPPORT 的 feature 追加记录，
+于是把我们的编码改成同样语义（回复从 632 字节降到 192 字节）。结果：
+
+```
+bytes=192  fs_requests=0  service_tx=0  hs2_seen=0  dispatch error=0
+md_ee: 解码返回 -ENODATA（version 读到 0，没有异常记录）
+```
+
+MD **完全静默**：不再发任何 FS 请求，也不写异常记录。说明这块固件期望"对每个
+被查询的 feature 都有一条应答记录"，稀疏布局对它不等价。改动已回退，基线恢复
+（859 请求 / `tx=964` / 同一故障点 `pc=0x91823b66 addr=0x90d18620`）。
+
+证据见 `evidence/modem-vendor-boot-comparison.json`。

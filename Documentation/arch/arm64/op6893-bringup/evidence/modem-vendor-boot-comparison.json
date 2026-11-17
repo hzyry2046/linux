@@ -1,0 +1,69 @@
+{
+ "date": "2026-11-17",
+ "scope": "Comparison against the vendor's own boot log and shared-memory table, plus one negative experiment on the HS1 response format. Read-only device access; no firmware payload dumped.",
+ "vendor_sources": {
+  "boot_log": "/data/src/reverse-analysis/modem-runtime/ccci_dump-boot-excerpt.txt (vendor 4.19, captured on this unit)",
+  "fs_sequence": "/data/src/reverse-analysis/modem-runtime/ccci-fs-request-sequence.txt (strace of ccci_mdinit on /dev/ccci_fs)"
+ },
+ "correction_to_earlier_evidence": {
+  "claim": "the vendor trace continues with UM12_005 after MF04_003, so our MD diverges there",
+  "problem": "that capture attached ~10.4 s after boot and contains no boot-phase operations at all: zero occurrences of md_nv_config, INFO_FILE, NV0S_000, Restore or FAT6F*. It is the post-READY steady-state NVRAM pass (2180 CMPT_Read over ~21 s), not the boot scan",
+  "consequence": "our boot-phase sequence has no vendor counterpart in that file; the earlier comparison was invalid and is withdrawn"
+ },
+ "vendor_boot_timeline": {
+  "md_start": "9.161 s",
+  "runtime_data_sent": "9.437 s (prepare_runtime_data, AP total 39 features)",
+  "rpc_gpio_and_dtsi": "9.526-9.624 s",
+  "hs2_to_ready": "10.899 s (md_state 3 -> 4, i.e. BOOT_WAITING_FOR_HS2 -> READY)",
+  "implication": "the vendor reaches HS2 about 1.7 s after start, before the long NVRAM scan; our MD performs the full 859-request scan before HS2, which is the same-board first-boot rebuild path"
+ },
+ "ap_runtime_data_check": {
+  "vendor_struct": "struct ap_query_md_feature_v2_1 (156 B) plus a 16 B CCCI header",
+  "vendor_fill": "config_ap_runtime_data_v2_1() in eccci/modem_sys1.c",
+  "ours": "ccci_runtime_upload() in ccci-runtime.c",
+  "fields_compared": [
+   "head_pattern 0x43434349",
+   "feature_set[1].support_mask 0 / version 1 (all other entries zero)",
+   "share_memory_support 2 (MULTI_MD_MPU_SUPPORT)",
+   "ap_runtime_data_addr / size, md_runtime_data_addr / size",
+   "noncached_mpu_start_addr / total_size",
+   "cached_mpu_start_addr / total_size",
+   "tail_pattern 0x43434349"
+  ],
+  "result": "every field matches, including the MPU ranges (0x40000000+0x1800000 and 0x48000000+0x4960000) that the vendor logs"
+ },
+ "smem_table_check": {
+  "vendor_source": "init_smem_regions lines in the boot log",
+  "ours": "new read-only smem_users attribute (numbers only)",
+  "regions_compared": 24,
+  "result": "identical for every region, including RAW_MDSS_DBG 0x8e110800/0x40110800/0x3800, RAW_RUNTIME_DATA 0x8e11e800/0x4011e800/0x1000, CCISM_SCP 0x8e120000/0x40120000/0x8000, CCISM_MCU, CCISM_MCU_EXP, MD_NVRAM_CACHE 0x88180000/0x48180000/0x700000, RAW_MD_CONSYS 0x88000000/0x48000000/0x180000, CCB control and the CCB aggregate",
+  "conclusion": "the AP-published shared-memory geometry is not the cause"
+ },
+ "negative_experiment_hs1_records": {
+  "change": "emit a record only for features that negotiated to MUST_SUPPORT, matching the vendor's append_runtime_feature() behaviour",
+  "result": {
+   "runtime_bytes": 192,
+   "fs_requests": 0,
+   "service_tx": 0,
+   "exception_record": "absent (md_ee decode returns -ENODATA, version reads 0)",
+   "handshake": "state=3 WAIT_HS2, hs2_seen=0, error=0"
+  },
+  "interpretation": "the MD stops completely when the response omits records for features it queried as optional; it expects an answer record per queried feature, so the sparse vendor layout is not equivalent for this firmware and the change was reverted",
+  "reverted": true,
+  "baseline_restored": {
+   "image": "dist/58f6f5ee3e73/boot.img (sha256 9b7862b3b70a87ff9c189ff3bcc48486e9f5acd0d76facb1661d257a783daeb5)",
+   "fs_requests": 859,
+   "service_tx": 964,
+   "exception": "ex_type=0x1d, pc=0x91823b66, addr=0x90d18620"
+  }
+ },
+ "new_diagnostic": {
+  "attribute": "smem_users on 10209000.modem-platform",
+  "content": "one line per present LK user: id, AP view, MD view, size and the cached/preserve/nomap flags",
+  "limits": "numbers only, read-only, no payload reachable"
+ },
+ "not_claimed": [
+  "that the vendor boot sequence is fully understood",
+  "that the MD fault is explained"
+ ]
+}

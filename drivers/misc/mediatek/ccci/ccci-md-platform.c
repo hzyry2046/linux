@@ -533,6 +533,32 @@ static ssize_t lk_regions_show(struct device *dev, struct device_attribute *attr
 static DEVICE_ATTR_RO(lk_regions);
 
 /*
+ * The same validated table, one line per LK user, so it can be compared with
+ * the vendor's own region log. Numbers only; no payload is reachable here.
+ */
+static ssize_t smem_users_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	const struct ccci_smem_layout *smem = &md->smem;
+	ssize_t ret = 0;
+
+	mutex_lock(&md->lock);
+	for (u32 i = 0; i < CCCI_SMEM_USERS && ret < PAGE_SIZE - 96; i++) {
+		const struct ccci_smem_region *region = &smem->users[i];
+
+		if (!region->present)
+			continue;
+		ret += sysfs_emit_at(buf, ret,
+				     "id=%u ap=0x%llx md=0x%x size=0x%x cached=%u preserve=%u nomap=%u\n",
+				     i, region->ap, region->md, region->size,
+				     region->cached, region->preserve_first, region->no_map);
+	}
+	mutex_unlock(&md->lock);
+	return ret;
+}
+static DEVICE_ATTR_RO(smem_users);
+
+/*
  * Printable text of the MD debug region, newest tail first. Binary record
  * fields are dropped rather than hex-dumped so the log stays readable; the
  * caller asked for this content explicitly and it never leaves the machine.
@@ -600,7 +626,7 @@ static struct attribute *md_attrs[] = {
 	&dev_attr_md_power.attr, &dev_attr_md_boot.attr, &dev_attr_ccif.attr,
 	&dev_attr_handshake.attr, &dev_attr_ccism.attr, &dev_attr_services.attr,
 	&dev_attr_dispatch.attr, &dev_attr_md_ee.attr, &dev_attr_md_ee_raw.attr,
-	&dev_attr_lk_regions.attr,
+	&dev_attr_lk_regions.attr, &dev_attr_smem_users.attr,
 	&dev_attr_md_dbg.attr, NULL,
 };
 
