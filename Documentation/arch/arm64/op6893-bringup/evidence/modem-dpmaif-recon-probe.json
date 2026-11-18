@@ -1,0 +1,51 @@
+{
+  "date": "2026-11-18",
+  "scope": "First hardware step of the DPMAIF data path: the two clock gates, the device tree node and a read-only reconnaissance driver that samples registers without writing any.",
+  "images": [
+    {
+      "dist": "dist/cd289c3e79c1/boot.img",
+      "sha256": "519c9b55c1699ea87107c21854334f27f3a78ae1877c6a51cbe64e3ba946b709",
+      "content": "first attempt; probe failed with -ENOENT on the dpmaif-main clock"
+    },
+    {
+      "dist": "dist/6995dbbe7d35/boot.img",
+      "sha256": "8df0f4104d983a59b5293cf4b0b2a515616bd4196ab3dd92c34a68ce860d0468",
+      "content": "extends the clock provider's onecell size to cover the DPMAIF ids; probe and sampling succeed"
+    }
+  ],
+  "implementation": {
+    "clocks": "ifrao3 gate at 0xa4/0xa8/0xac shift 3 (CLK_IFRAO_DPMAIF, id 39) and ifrao4 at 0xc0/0xc4/0xc8 shift 26 (CLK_IFRAO_DPMAIF_MAIN, id 74), both CLK_IGNORE_UNUSED so LK's state is preserved",
+    "dt_node": "dpmaif@10014000 with the four vendor register ranges, GIC_SPI 209, both clocks and the existing infracfg phandle; disabled by default and enabled only by the image builder",
+    "driver": "ccci-dpmaif.c maps the four windows, the infracfg regmap, the interrupt number and both clocks; it writes no register and requests no interrupt. The sample attribute enables both clocks for one read and releases them again",
+    "formatter": "ccci-dpmaif-format.c is split out so the exact rendering is unit tested on the host"
+  },
+  "hardware": {
+    "probe": "op6893-dpmaif 10014000.dpmaif: dpmaif observed: irq=242, 4 blocks mapped, no register written",
+    "layout": "ao_ul=0x10014000 pd_ul=0x1022d000 pd_md_misc=0x1022c000 sram=0x1022e000",
+    "sample": [
+      "ao_ul_chnl0_sta=0x00000000 ao_ul_chnl0_sta0=0x00000000 ao_ul_l2timr0=0x00000000",
+      "pd_ul_add_desc=0x00000000 pd_ul_add_desc_ch0=0x00000000",
+      "pd_md_ip_busy=0x00000000 pd_md_ip_busy_mask=0x00000001",
+      "sram_raw0=0x5d20c209 sram_raw1=0x5e56519b infra_ctrl=0x00003000",
+      "busy_mask_field=3 wakeup_event_bit=1 md_busy_mask_field=0",
+      "clk_main=156000000 clk_bus=156000000"
+    ],
+    "stability": "three consecutive reads while the MD was held at lk-on returned identical values",
+    "reading": [
+      "both gates enable and the parent rate is 156 MHz, so the clock path and the map are real",
+      "the uplink descriptors and channel status are zero because nothing has initialised the data path yet; this is the expected pre-init state, not a fault",
+      "infra_ctrl reads 0x3000: the two-bit busy field is 3 and the MD to AP wakeup bit is still latched, which is the state LK left behind",
+      "the SRAM window holds non-zero residual words, so the block is powered and readable rather than stuck"
+    ]
+  },
+  "bug_found_on_hardware": {
+    "symptom": "probe returned -ENOENT with 'no dpmaif-main clock'",
+    "cause": "clk-mt6893-pmif.c sizes its onecell array as CLK_IFRAO_CCIF2_MD + 1 = 70, so the DPMAIF ids 39 and 74 were outside the array and of_clk_hw_onecell_get returned nothing for 74",
+    "fix": "take the maximum of the enabled id ranges instead of the last CCIF id",
+    "note": "the host tests could not see this: it only shows up when the provider and the consumer are both live"
+  },
+  "open": {
+    "irq": "the DTS requests GIC_SPI 209 and the live device tree confirms <0 209 4>, but platform_get_irq reports virq 242; the hwirq column of /proc/interrupts cannot be compared without requesting the interrupt, so this must be confirmed by the step that installs the handler",
+    "no_data_path": "nothing here moves a packet; the UL/DL descriptor rings, the BAT and PIT tables and the interrupt handler are still unimplemented"
+  }
+}

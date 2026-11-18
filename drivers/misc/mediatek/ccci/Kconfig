@@ -380,3 +380,14 @@ config OP6893_CCCI_MD_BOOT
 	  A service stop requires parent MD1 domain OFF readback as hardware
 	  evidence; RX closure, faults or generation changes are not evidence.
 	  No automatic action or sysfs trigger runs at probe. Disabled by default.
+
+config OP6893_CCCI_DPMAIF
+	bool "Observe op6893 DPMAIF registers without starting the modem"
+	depends on ARM64_OP6893_BRINGUP && OF && HAS_IOMEM && COMMON_CLK_MT6893_PMIF
+	help
+	  Map the four DPMAIF windows, the infracfg register that carries the IP
+	  busy mask, and the two DPMAIF clock gates. Probe performs no I/O: one
+	  read of the sample attribute enables both clocks for the duration of a
+	  single register sample and releases them again. No register is written,
+	  no interrupt is requested and no packet is moved. The node stays
+	  disabled until an explicit data-path experiment enables it.

@@ -66,6 +66,26 @@
 		};
 	};
 
+	/*
+	 * DPMAIF: the same-board data transport for CCMNI on MD generation 6297.
+	 * Address map, IRQ and clocks are the vendor mt6893 node's; the driver
+	 * only observes registers until the data-path port is validated.
+	 */
+	dpmaif: dpmaif@10014000 {
+		compatible = "mediatek,mt6893-dpmaif";
+		reg = <0 0x10014000 0 0x1000>,	/* AO_UL */
+		      <0 0x1022d000 0 0x1000>,	/* PD_UL */
+		      <0 0x1022c000 0 0x1000>,	/* PD_MD_MISC */
+		      <0 0x1022e000 0 0x1000>;	/* SRAM */
+		reg-names = "ao-ul", "pd-ul", "pd-md-misc", "sram";
+		interrupts = <GIC_SPI 209 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&ufs_infracfg CLK_IFRAO_DPMAIF_MAIN>,
+			 <&ufs_infracfg CLK_IFRAO_DPMAIF>;
+		clock-names = "dpmaif-main", "dpmaif";
+		mediatek,infracfg = <&ufs_infracfg>;
+		status = "disabled";
+	};
+
 	/* Explicit bounded observations; no SCP start or READY assertion. */
 	ccci_scp: scp-resource-hold@10724000 {
 		compatible = "realme,op6893-scp-resource-hold";

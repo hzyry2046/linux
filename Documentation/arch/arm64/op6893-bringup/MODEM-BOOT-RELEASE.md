@@ -1033,3 +1033,74 @@ mainline `clk-mt6893-pmif.c` 现有 `ccif_gate_regs = {0x88, 0x8c, 0x94}`，
 真正的移植工作量在 `ccci_dpmaif_com.c` / `bat.c` 的共享逻辑，而不是板级适配。
 
 证据见 `evidence/modem-dpmaif-dt-and-init-audit.json`。
+
+---
+
+# DPMAIF 第一步：时钟门、DT 节点与只读探测
+
+按上一轮的核对结论，先做最小可验证的一步：把两个时钟门和 DT 节点补上，再写一个
+**只读**探测驱动，确认时钟、映射、regmap 与寄存器读取全部可达。不动任何数据路径。
+
+## 1. 时钟门
+
+| 门 | 寄存器组 | shift | parent |
+|---|---|---|---|
+| `CLK_IFRAO_DPMAIF` (39) | ifrao3 `0xa4/0xa8/0xac` | 3 | 观察型 AXI |
+| `CLK_IFRAO_DPMAIF_MAIN` (74) | ifrao4 `0xc0/0xc4/0xc8` | 26 | 观察型 AXI |
+
+两者都是 `CLK_IGNORE_UNUSED`：注册不改变 LK 留下的门状态，消费者显式投票才动。
+
+## 2. 真机抓到一个只有上机才会暴露的缺陷
+
+第一张镜像 `cd289c3e79c1` probe 直接失败：
+
+```
+op6893-dpmaif 10014000.dpmaif: error -ENOENT: no dpmaif-main clock
+```
+
+原因不是门没注册，而是 **onecell 数组太小**：`clk-mt6893-pmif.c` 里
+`num_clks = CLK_IFRAO_CCIF2_MD + 1 = 70`，而 DPMAIF_MAIN 是 **74**，超出范围后
+`of_clk_hw_onecell_get` 返回空。改成取各已启用 id 范围的最大值即可。
+
+host 测试看不到这个：它只在 provider 与 consumer 同时在世时才出现。
+
+## 3. 只读探测结果（镜像 `6995dbbe7d35`）
+
+```
+op6893-dpmaif 10014000.dpmaif: dpmaif observed: irq=242, 4 blocks mapped, no register written
+
+ao_ul=0x10014000 pd_ul=0x1022d000 pd_md_misc=0x1022c000 sram=0x1022e000 irq=242
+clock_main=dpmaif-main clock_bus=dpmaif
+
+ao_ul_chnl0_sta=0x00000000 ao_ul_chnl0_sta0=0x00000000 ao_ul_l2timr0=0x00000000
+pd_ul_add_desc=0x00000000 pd_ul_add_desc_ch0=0x00000000
+pd_md_ip_busy=0x00000000 pd_md_ip_busy_mask=0x00000001
+sram_raw0=0x5d20c209 sram_raw1=0x5e56519b infra_ctrl=0x00003000
+busy_mask_field=3 wakeup_event_bit=1 md_busy_mask_field=0
+clk_main=156000000 clk_bus=156000000
+```
+
+读法：
+
+- **两个门都能打开，父频 156 MHz** —— 时钟路径与映射是真的；
+- UL 描述符与通道状态为 0，因为还没有任何东西初始化数据路径，这是**预期的初始化前状态**；
+- `infra_ctrl = 0x3000`：两位 busy 字段是 3，且 **MD→AP wakeup 位仍然置着**，这是 LK
+  留下的状态；
+- SRAM 窗口读到非零残留字，说明该块已上电且可读，不是卡死；
+- 连续三次读取（MD 停在 `lk-on`）结果完全一致。
+
+## 4. 过程中修掉的一个语义错误
+
+厂商的 `DPMAIF_IP_BUSY_MASK = 0x3 << 12` **包含 bit13**，而 bit13 随后被单独清掉。
+我最初把 `wakeup_event_bit` 当成布尔去和这个掩码相与，host 测试立刻抓到了（两个常量
+本来就重叠）。现在分别报告两位字段值和 wakeup 位，语义与厂商序列一致。
+
+## 5. 尚未确认
+
+**IRQ 编号**：DTS 请求 `GIC_SPI 209`，live devicetree 也确认是 `<0 209 4>`，但
+`platform_get_irq` 报的是 **virq 242**。因为没申请中断，无法从 `/proc/interrupts`
+的 hwirq 列反查，所以这一项留到**安装中断处理程序的那一步**再确认，不在本轮猜测。
+
+数据路径本身（UL/DL 描述符环、BAT/PIT 表、中断处理）尚未实现。
+
+证据见 `evidence/modem-dpmaif-recon-probe.json`。
