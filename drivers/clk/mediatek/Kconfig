@@ -47,6 +47,17 @@ config COMMON_CLK_MT6893_SCP_BOOTSTRAP
 	  it off. This does not implement SPM resource votes, DVFS or SCP reset.
 	  Leave disabled outside a controlled bootstrap experiment.
 
+config COMMON_CLK_MT6893_DPMAIF
+	bool "Experimental MT6893 op6893 DPMAIF clock gates"
+	depends on COMMON_CLK_MT6893_PMIF
+	help
+	  Add the two DPMAIF gates (ifrao3 shift 3 and ifrao4 shift 26) to the
+	  existing infrastructure provider, using the same set/clear/status
+	  table as the CCIF gates. Keep their inherited state until a consumer
+	  explicitly votes; the parent only observes the inherited AXI rate and
+	  does not manage the vendor's dpmaif_main_ck mux. Leave disabled until
+	  the DPMAIF data-path work needs them.
+
 config COMMON_CLK_MT6893_CCIF
 	bool "Experimental MT6893 op6893 CCIF clock gates"
 	depends on COMMON_CLK_MT6893_PMIF

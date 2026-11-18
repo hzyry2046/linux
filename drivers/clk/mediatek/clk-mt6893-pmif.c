@@ -324,6 +324,38 @@ static const struct mtk_fixed_factor ccif2_factors[] = {
 };
 #endif
 
+#ifdef CONFIG_COMMON_CLK_MT6893_DPMAIF
+/*
+ * Same ifrao1/3/4 set/clear/status table as the vendor clock driver; the
+ * ccif_gate_regs pair above is the ifrao1 entry of that same table.
+ */
+static const struct mtk_gate_regs dpmaif_gate_regs = {
+	.set_ofs = 0xa4,
+	.clr_ofs = 0xa8,
+	.sta_ofs = 0xac,
+};
+
+static const struct mtk_gate_regs dpmaif_main_gate_regs = {
+	.set_ofs = 0xc0,
+	.clr_ofs = 0xc4,
+	.sta_ofs = 0xc8,
+};
+
+/*
+ * IGNORE_UNUSED keeps LK's state: registration must not switch a gate the MD
+ * may already rely on. The parent only observes the inherited rate; the
+ * vendor's dpmaif_main_ck mux is not managed here.
+ */
+static const struct mtk_gate dpmaif_gates[] = {
+	GATE_MTK_FLAGS(CLK_IFRAO_DPMAIF, "mt6893_dpmaif",
+		       "mt6893_axi_observed", &dpmaif_gate_regs, 3,
+		       &mtk_clk_gate_ops_setclr, CLK_IGNORE_UNUSED),
+	GATE_MTK_FLAGS(CLK_IFRAO_DPMAIF_MAIN, "mt6893_dpmaif_main",
+		       "mt6893_axi_observed", &dpmaif_main_gate_regs, 26,
+		       &mtk_clk_gate_ops_setclr, CLK_IGNORE_UNUSED),
+};
+#endif
+
 static int mt6893_thermal_ready(struct regmap *map, struct clk *axi)
 {
 	unsigned int status;
@@ -385,7 +417,9 @@ static int mt6893_pmif_clk_probe(struct platform_device *pdev)
 	/* Vendor IDs are sparse: the generic count-based probe is unsuitable. */
 	num_clks = top ? CLK_TOP_PWRAP_ULPOSC_SEL + 1 : CLK_IFRAO_THERM + 1;
 	if (!top && IS_ENABLED(CONFIG_COMMON_CLK_MT6893_CCIF))
-		num_clks = CLK_IFRAO_CCIF2_MD + 1;
+		num_clks = max(num_clks, (unsigned int)CLK_IFRAO_CCIF2_MD + 1);
+	if (!top && IS_ENABLED(CONFIG_COMMON_CLK_MT6893_DPMAIF))
+		num_clks = max(num_clks, (unsigned int)CLK_IFRAO_DPMAIF_MAIN + 1);
 	data = mtk_alloc_clk_data(num_clks);
 	if (!data)
 		return -ENOMEM;
@@ -429,6 +463,12 @@ static int mt6893_pmif_clk_probe(struct platform_device *pdev)
 		if (ret)
 			goto unregister_ccif;
 #endif
+#ifdef CONFIG_COMMON_CLK_MT6893_DPMAIF
+		ret = mtk_clk_register_gates(dev, np, dpmaif_gates,
+					     ARRAY_SIZE(dpmaif_gates), data);
+		if (ret)
+			goto unregister_ccif;
+#endif
 	}
 
 	ret = of_clk_add_hw_provider(np, of_clk_hw_onecell_get, data);
@@ -444,12 +484,15 @@ unregister_clocks:
 	if (top) {
 		mtk_clk_unregister_muxes(top_muxes, ARRAY_SIZE(top_muxes), data);
 	} else {
+#ifdef CONFIG_COMMON_CLK_MT6893_DPMAIF
+		mtk_clk_unregister_gates(dpmaif_gates, ARRAY_SIZE(dpmaif_gates), data);
+#endif
 #ifdef CONFIG_COMMON_CLK_MT6893_CCIF
 		mtk_clk_unregister_factors(ccif2_factors, ARRAY_SIZE(ccif2_factors), data);
-unregister_ccif:
 		mtk_clk_unregister_gates(ccif_gates, ARRAY_SIZE(ccif_gates), data);
-unregister_infra:
 #endif
+unregister_ccif:
+unregister_infra:
 		mtk_clk_unregister_gates(infra_gates, ARRAY_SIZE(infra_gates), data);
 	}
 unregister_factors:

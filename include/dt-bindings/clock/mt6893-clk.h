@@ -27,5 +27,8 @@
 #define CLK_IFRAO_CCIF_MD	35
 #define CLK_IFRAO_CCIF2_AP	68
 #define CLK_IFRAO_CCIF2_MD	69
+/* DPMAIF data-path gates; same vendor indices as the same-board trees. */
+#define CLK_IFRAO_DPMAIF	39
+#define CLK_IFRAO_DPMAIF_MAIN	74
 
 #endif
