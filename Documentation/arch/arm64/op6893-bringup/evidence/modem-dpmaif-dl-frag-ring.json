@@ -6,8 +6,8 @@
     "release": "7.3.0-op6893-d1-83b9882c488b+",
     "boot_sha256": "bd36d1a670e8256e50eef14803417362dbd6031b5dab43795c82db0b4d6cd271",
     "previous_image": "ef568465c56c",
-    "flashed": false,
-    "note": "built and host-tested; the device was not taken to fastboot, so nothing here is hardware-verified yet"
+    "flashed": true,
+    "note": "flashed and booted; the fragment ring and MTU change ran on hardware"
   },
   "fragment_ring": {
     "what": "the packet and fragment BAT rings share BAT_INIT_CON0/CON1 but latch separately, selected by the BAT_INIT_FRG_INIT bit, and the fragment buffers are added with the DL_BAT_FRG_ADD doorbell bit",
@@ -44,8 +44,14 @@
     "caveat": "this says nothing about whether the binding itself matters; it only says this interface cannot set it"
   },
   "not_proven": [
-    "everything about the fragment ring and the MTU change: it is built and host-tested but has not run on hardware",
     "whether the modem forwards uplink frames, and where inside ipcore/dpfm a drop would happen",
-    "why the engine never takes a downlink buffer"
-  ]
+    "why the engine never takes a downlink buffer",
+    "what the modem needs before it will deliver a packet on this ring"
+  ],
+  "hardware_result": {
+    "ring_state": "frg=256/1920, frg_thres=0x10000f3e (feature on, buffer size 15*128, threshold 62), pktinfo1=0x00000c08 (MTU 3080), bat_init not busy",
+    "uplink": "four frames sent and consumed, sent=4 done=4 irqs=4 err=0 last_status=0x1",
+    "downlink": "AO_DL_BAT_STA2 stayed 0 and AO_DL_PIT_STA2 stayed 0x400 over 90s: the engine never took a buffer and never began a transfer",
+    "verdict": "with the packet queue enabled, the fragment ring installed and the vendor MTU, every downlink register the driver programs matches the vendor and the engine still does not start, so the missing input is on the modem side"
+  }
 }

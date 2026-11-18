@@ -1326,10 +1326,18 @@ BAT 队列（`BAT_INIT_CON1` bit16 + 只更新使能位的 `BAT_INIT` 命令）�
 卸载标志为 0 因为探针自己算校验和）、以及两个 add 门铃的 `count|UPDATE` 形式与 not-ready
 轮询。
 
-之后又把分片 BAT 环和 MTU 补齐（已构建、host 测试通过，但**尚未上机**）：包环与分片环
+之后又把分片 BAT 环和 MTU 补齐（**已上机验证**）：包环与分片环
 共用 `CON0/CON1`，用命令寄存器的 `BAT_INIT_FRG_INIT` 位走两个独立 latch，加缓冲用
 `DL_BAT_FRG_ADD` 门铃位；MTU 改为厂商的 3080。顺带纠正一处：`DPMAIF_HW_PKT_BIDCNT` 在厂商
 源码里就是 1（注释写着 "3-->1 should be 1 in E1"），所以 `BID_MAXCNT` 本来就对。
+
+上机结果：分片环确实装上（`frg=256/1920`，`frg_thres=0x10000f3e` = feature on +
+bufsz 15×128 + 阈值 62，`pktinfo1=0xc08` 即 MTU 3080，`bat_init` 不 busy），上行 4 帧全部被
+消费（`done=4 err=0`），但 `AO_DL_BAT_STA2` 仍是 0、`AO_DL_PIT_STA2` 仍是 `0x400`——引擎
+依旧从未取过缓冲、从未开始传输。
+
+**结论**：AP 侧能对照厂商的寄存器已经全部对齐（只剩 MD 域总线重映射未配），引擎仍不启动。
+所以缺的输入在 MD 侧，不在 AP 侧的编程。
 
 仍然存在的差异只剩 MD 域总线重映射未配置。
 
