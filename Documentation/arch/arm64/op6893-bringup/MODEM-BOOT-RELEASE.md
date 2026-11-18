@@ -1311,7 +1311,31 @@ PD_MD_MISC+0x1c               = bit 0
 DNS 查询这种通常必有回包的报文也一样。所以要么 MD 没有转发这些上行帧，要么下行环还不能
 交付；「描述符被消费」这一点无法区分两者。
 
-`dl_notify` 保留为独立入口（将来真正加 AP 条目时要用），注释写明无更新时发送会让 MD 崩。
+之后又补了一个确实缺失的步骤：厂商在发布缓冲区之后才用 `dl_all_queue_en(true)` 打开下行
+BAT 队列（`BAT_INIT_CON1` bit16 + 只更新使能位的 `BAT_INIT` 命令），而本驱动一直把使能位
+清掉、再也没置起。补上后 `con1` 读回 `0x00410100`（bit16 已置），但**下行依旧一条都没有**：
+`AO_DL_PIT_STA2` 停在 `0x400`、`AO_DL_BAT_STA2` 停在 0——引擎从未取过一个下行缓冲，也就是
+从未开始传输。
+
+### AP 侧现在已与厂商对齐
+
+逐项核对过的：BAT 基址/大小/使能及初始化握手（含只更新使能位那一步）、PIT 基址/大小/使能
+与 dummy AP 索引、`RDY_CHK_THRES`（拆开是 CHKSUM_ON + PKT_ALIGN_EN + `BAT_CHECK_THRES` 62
++ PIT burst + `CHK_RB_PITNUM` 62，与厂商 setter 逐位一致）、上行消息描述符（与
+`struct dpmaif_drb_msg` 字段完全相同，`count_l` 为 0 与厂商对普通 skb 的取值一致，校验和
+卸载标志为 0 因为探针自己算校验和）、以及两个 add 门铃的 `count|UPDATE` 形式与 not-ready
+轮询。
+
+仍然存在的差异只有三处：MTU 1664/`BID_MAXCNT` 1（厂商 3080/3）、没有分片 BAT 环（厂商
+总会初始化一个，用独立的 `BAT_INIT_FRG` latch 和 `DL_BAT_FRG_ADD` 使能）、MD 域总线重映射
+仍未配置。
+
+另外确认厂商**没有**「网卡打开」这类通知：4.19 与 6.6 里与数据面相关的 RPC 只有
+`IPC_RPC_CCCI_LHIF_MAPPING 0x400D`，`ccmni_open()` 也不向 MD 发任何消息。
+
+`dl_notify` 那个裸入口已删除：它就是个「打崩 MD」的按钮，诊断目的已经达到。厂商真正的
+运行中路径 `drv2_dl_add_apit_num()` 尚未实现——它要关/开重排单元的 force-enable、按硬件
+状态寄存器恢复 PIT 配置、按实际新增条数推进 dummy 计数，最后才发通知。
 
 ### 为什么 pc 反查不了
 
@@ -1351,4 +1375,5 @@ DNS 查询这种通常必有回包的报文也一样。所以要么 MD 没有转
 
 证据见 `evidence/modem-dpmaif-dl-data-attempt.json`；崩溃归因修正见
 `evidence/modem-dpmaif-md-fault-cause.json`；通知缺陷的 A/B 与根因见
-`evidence/modem-dpmaif-dl-notify-fault.json`。
+`evidence/modem-dpmaif-dl-notify-fault.json`；BAT 队列使能缺失与 AP/厂商对齐清单见
+`evidence/modem-dpmaif-dl-queue-enable.json`。

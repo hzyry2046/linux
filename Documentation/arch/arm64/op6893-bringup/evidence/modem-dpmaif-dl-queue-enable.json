@@ -1,0 +1,45 @@
+{
+  "feature": "op6893 DPMAIF downlink: the packet BAT queue was never enabled, and the downlink is still silent",
+  "date": "2026-11-18",
+  "image": {
+    "identity": "ef568465c56c",
+    "release": "7.3.0-op6893-d1-ef568465c56c+",
+    "boot_sha256": "fa1538734f5fd9b541d989c11b6d746522ea375ee7b76fa99d3286b887e3fb93",
+    "previous_image": "a85d6bbf7031"
+  },
+  "missing_step_found": {
+    "what": "the same-board driver clears the packet BAT enable bit while programming the ring, publishes the buffers with dl_add_bat_cnt(), and only then opens the queue with dl_all_queue_en(true), which sets BAT_INIT_CON1 bit 16 and issues BAT_INIT = BAT_INIT_EN so only the enable bit is updated",
+    "before": "this driver cleared BAT_EN and never set it again, so the downlink packet queue stayed closed",
+    "fix": "dpmaif_dl_queue_enable() now runs after the buffers are published; CON1 reads back 0x00410100, so bit 16 is set"
+  },
+  "still_no_downlink": {
+    "test": "downlink armed, uplink started on the mapped queue, four frames sent (one IPv4 echo request, three DNS queries), all consumed with sent=4 done=4 err=0 last_status=0x1",
+    "observation": "over 90s the modem never wrote a downlink PIT entry: AO_DL_PIT_STA2 stayed at 0x400 (index 1024), AO_DL_BAT_STA2 stayed 0, no downlink interrupt fired, pkts=0",
+    "meaning": "the engine never took a single downlink buffer, so it never began a transfer"
+  },
+  "ap_side_now_matches_the_vendor": {
+    "checked": [
+      "BAT base/size/enable and the init handshake, including the enable-only update",
+      "PIT base/size/enable and the dummy AP index",
+      "RDY_CHK_THRES decodes to CHKSUM_ON + PKT_ALIGN_EN + BAT_CHECK_THRES 62 + PIT burst + CHK_RB_PITNUM 62, matching the vendor's setters",
+      "the uplink message descriptor is field-identical to struct dpmaif_drb_msg, with count_l 0 as the vendor sets it for a normal skb and the checksum-offload flags 0 because the probe computes its own checksums",
+      "the uplink add-descriptor doorbell and the BAT/PIT add doorbells use the vendor's count|UPDATE form with the same not-ready polling"
+    ],
+    "remaining_differences": [
+      "MTU is 1664 with BAT_BID_MAXCNT 1; the vendor uses 3080 with 3",
+      "there is no fragment BAT ring; the vendor always initialises one with a separate BAT_INIT_FRG latch and enables it with DL_BAT_FRG_ADD",
+      "the MD-domain bus remap is still unprogrammed"
+    ]
+  },
+  "no_net_open_notification_exists": {
+    "finding": "the only data-path RPC opcode in either the 4.19 or the 6.6 tree is IPC_RPC_CCCI_LHIF_MAPPING 0x400D, and ccmni_open() does not message the modem at all, so there is no separate interface-up notification to implement"
+  },
+  "removed": {
+    "dl_notify": "the bare notification entry is gone. It was a way to fault the modem on purpose and its diagnostic purpose is served. The vendor's real mid-run path, drv2_dl_add_apit_num(), is not implemented: it disables and re-enables the reorder force-enable, restores the PIT registers from the hardware status registers, advances the dummy count by the number of entries actually added, and only then notifies."
+  },
+  "not_proven": [
+    "whether the modem forwards the uplink frames to the network at all",
+    "whether the missing fragment BAT ring or the MTU difference stops the engine from taking a downlink buffer",
+    "why the engine never takes a buffer even though the queue is enabled and 256 buffers are published"
+  ]
+}

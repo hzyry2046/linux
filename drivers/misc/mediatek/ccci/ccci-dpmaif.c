@@ -535,6 +535,26 @@ static int dpmaif_dl_add_bat(struct ccci_dpmaif *dpmaif, u32 cnt)
 	return dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_ADD, value);
 }
 
+/*
+ * Open the packet BAT queue. The same-board driver clears the enable bit while
+ * it programs the ring, publishes the buffers, and only then enables the queue
+ * with an enable-only update, so the modem cannot take a buffer before one has
+ * been published.
+ */
+static int dpmaif_dl_queue_enable(struct ccci_dpmaif *dpmaif, bool enable)
+{
+	void __iomem *pd = dpmaif_pd_dl(dpmaif);
+	u32 value = readl(pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
+
+	if (enable)
+		value |= CCCI_DPMAIF_BAT_EN_MSK;
+	else
+		value &= ~CCCI_DPMAIF_BAT_EN_MSK;
+	writel(value, pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
+	return dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_INIT,
+				CCCI_DPMAIF_DL_BAT_INIT_EN);
+}
+
 static int dpmaif_dl_add_pit(struct ccci_dpmaif *dpmaif, u32 cnt)
 {
 	u32 value = (cnt & CCCI_DPMAIF_PIT_SIZE_MSK) | CCCI_DPMAIF_DL_ADD_UPDATE;
@@ -647,15 +667,8 @@ static void dpmaif_dl_tune(struct ccci_dpmaif *dpmaif)
 	 * Stop here, exactly where the same-board startup path stops. Its
 	 * notification word and UL_RESERVE_AO_RW are written only when it adds
 	 * AP PIT entries mid-run, so writing them now would tell the modem about
-	 * an update that did not happen. dl_notify() does that separately.
+	 * an update that did not happen, which faults it.
 	 */
-}
-
-/* Announce an AP PIT index update to the modem, as the vendor does mid-run. */
-static void dpmaif_dl_notify(struct ccci_dpmaif *dpmaif)
-{
-	writel(0xff, dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_RESERVE_AO_RW);
-	writel(CCCI_DPMAIF_MD_NOTIFY, dpmaif->block[2] + CCCI_DPMAIF_PD_MD_L1TIMSR0);
 }
 
 /*
@@ -978,6 +991,9 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_
 	dl->pit_rd = readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA2) &
 		     CCCI_DPMAIF_DL_PIT_WRIDX_MSK;
 	ret = dpmaif_dl_add_bat(dpmaif, dl->bat.entries);
+	if (ret)
+		goto out_unprogram;
+	ret = dpmaif_dl_queue_enable(dpmaif, true);
 	if (ret)
 		goto out_unprogram;
 	spin_lock_irq(&dl->lock);
@@ -1579,28 +1595,6 @@ static ssize_t dl_stop_store(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_WO(dl_stop);
 
-/*
- * The modem's PIT-update notification, kept out of ring startup because the
- * same-board driver only sends it when it adds AP entries to a running ring.
- * Sending it without having added any entries is what used to fault the modem,
- * so it stays a separate, explicit operation.
- */
-static ssize_t dl_notify_store(struct device *dev, struct device_attribute *attr,
-			       const char *buf, size_t count)
-{
-	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
-	int ret = 0;
-
-	mutex_lock(&dpmaif->lock);
-	if (!dpmaif->dl.started)
-		ret = -ENOTCONN;
-	else
-		dpmaif_dl_notify(dpmaif);
-	mutex_unlock(&dpmaif->lock);
-	return ret ? ret : count;
-}
-static DEVICE_ATTR_WO(dl_notify);
-
 static struct attribute *dpmaif_attrs[] = {
 	&dev_attr_sample.attr,
 	&dev_attr_layout.attr,
@@ -1617,7 +1611,6 @@ static struct attribute *dpmaif_attrs[] = {
 	&dev_attr_peek_value.attr,
 	&dev_attr_poke.attr,
 	&dev_attr_reset.attr,
-	&dev_attr_dl_notify.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(dpmaif);
