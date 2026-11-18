@@ -481,7 +481,7 @@ static void dpmaif_dl_publish(struct ccci_dpmaif_bat_ring *ring, u32 bid)
 }
 
 static int dpmaif_dl_bat_program(struct ccci_dpmaif *dpmaif,
-				 struct ccci_dpmaif_bat_ring *ring)
+				 struct ccci_dpmaif_bat_ring *ring, bool frag)
 {
 	void __iomem *pd = dpmaif_pd_dl(dpmaif);
 	u64 base = (u64)ring->ring_dma;
@@ -495,8 +495,14 @@ static int dpmaif_dl_bat_program(struct ccci_dpmaif *dpmaif,
 	value |= ring->entries & CCCI_DPMAIF_BAT_SIZE_MSK;
 	value &= ~CCCI_DPMAIF_BAT_EN_MSK;
 	writel(value, pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
+	/*
+	 * The packet and fragment rings share CON0/CON1 but latch separately: the
+	 * same-board driver distinguishes them with BAT_INIT_FRG_INIT and always
+	 * sets ALLSET, so the fragment ring needs its own handshake.
+	 */
 	return dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_INIT,
-				CCCI_DPMAIF_DL_BAT_INIT_ALLSET | CCCI_DPMAIF_DL_BAT_INIT_EN);
+				CCCI_DPMAIF_DL_BAT_INIT_ALLSET | CCCI_DPMAIF_DL_BAT_INIT_EN |
+				(frag ? CCCI_DPMAIF_DL_BAT_FRG_INIT : 0));
 }
 
 static int dpmaif_dl_pit_program(struct ccci_dpmaif *dpmaif)
@@ -535,13 +541,21 @@ static int dpmaif_dl_add_bat(struct ccci_dpmaif *dpmaif, u32 cnt)
 	return dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_ADD, value);
 }
 
+static int dpmaif_dl_add_frg_bat(struct ccci_dpmaif *dpmaif, u32 cnt)
+{
+	u32 value = (cnt & CCCI_DPMAIF_BAT_SIZE_MSK) | CCCI_DPMAIF_DL_ADD_UPDATE |
+		    CCCI_DPMAIF_DL_BAT_FRG_ADD;
+
+	return dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_ADD, value);
+}
+
 /*
  * Open the packet BAT queue. The same-board driver clears the enable bit while
  * it programs the ring, publishes the buffers, and only then enables the queue
  * with an enable-only update, so the modem cannot take a buffer before one has
  * been published.
  */
-static int dpmaif_dl_queue_enable(struct ccci_dpmaif *dpmaif, bool enable)
+static int dpmaif_dl_queue_enable(struct ccci_dpmaif *dpmaif, bool enable, bool frag)
 {
 	void __iomem *pd = dpmaif_pd_dl(dpmaif);
 	u32 value = readl(pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
@@ -552,7 +566,8 @@ static int dpmaif_dl_queue_enable(struct ccci_dpmaif *dpmaif, bool enable)
 		value &= ~CCCI_DPMAIF_BAT_EN_MSK;
 	writel(value, pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
 	return dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_INIT,
-				CCCI_DPMAIF_DL_BAT_INIT_EN);
+				CCCI_DPMAIF_DL_BAT_INIT_EN |
+				(frag ? CCCI_DPMAIF_DL_BAT_FRG_INIT : 0));
 }
 
 static int dpmaif_dl_add_pit(struct ccci_dpmaif *dpmaif, u32 cnt)
@@ -610,11 +625,8 @@ static void dpmaif_dl_tune(struct ccci_dpmaif *dpmaif)
 	value &= ~CCCI_DPMAIF_CHK_RB_PITNUM_MSK;
 	value |= CCCI_DPMAIF_DL_HW_CHK_RB_PIT_NUM & CCCI_DPMAIF_CHK_RB_PITNUM_MSK;
 	writel(value, ao + CCCI_DPMAIF_AO_DL_PKTINFO_CON0);
-	/*
-	 * With no fragment ring the engine must never split a packet, so the MTU
-	 * is exactly one BAT buffer; anything larger is reported as an MTU error.
-	 */
-	writel(CCCI_DPMAIF_DL_BAT_BUF_SZ, ao + CCCI_DPMAIF_AO_DL_PKTINFO_CON1);
+	/* One BAT buffer per packet, so the MTU is the vendor's, not the buffer. */
+	writel(CCCI_DPMAIF_DL_MTU_SIZE, ao + CCCI_DPMAIF_AO_DL_PKTINFO_CON1);
 
 	value = readl(ao + CCCI_DPMAIF_AO_DL_PKTINFO_CON2);
 	value &= ~CCCI_DPMAIF_PIT_CHK_NUM_MSK;
@@ -635,9 +647,18 @@ static void dpmaif_dl_tune(struct ccci_dpmaif *dpmaif)
 	value |= (CCCI_DPMAIF_DL_HW_CHK_BAT_NUM << 16) & CCCI_DPMAIF_BAT_CHECK_THRES_MSK;
 	writel(value, ao + CCCI_DPMAIF_AO_DL_RDY_CHK_THRES);
 
-	/* No fragment ring: keep the fragment feature off and say so in the dump. */
+	/*
+	 * The fragment ring gets its own thresholds. The same-board driver always
+	 * brings one up, and turns the feature on rather than off.
+	 */
 	value = readl(ao + CCCI_DPMAIF_AO_DL_RDY_CHK_FRG_THRES);
 	value &= ~CCCI_DPMAIF_FRG_BAT_BUF_FEATURE_ON_MSK;
+	value |= CCCI_DPMAIF_FRG_BAT_BUF_FEATURE_ON_MSK;
+	value &= ~CCCI_DPMAIF_FRG_BAT_BUF_SZ_MSK;
+	value |= ((CCCI_DPMAIF_DL_FRG_BUF_SZ / CCCI_DPMAIF_BAT_BUF_SZ_BASE) << 8) &
+		 CCCI_DPMAIF_FRG_BAT_BUF_SZ_MSK;
+	value &= ~CCCI_DPMAIF_FRG_CHECK_THRES_MSK;
+	value |= CCCI_DPMAIF_DL_HW_CHK_FRG_NUM & CCCI_DPMAIF_FRG_CHECK_THRES_MSK;
 	writel(value, ao + CCCI_DPMAIF_AO_DL_RDY_CHK_FRG_THRES);
 
 	/* BAT cache in PD_DL_BAT_INIT_CON1 bit 22. */
@@ -735,9 +756,11 @@ static void dpmaif_dl_drain(struct ccci_dpmaif *dpmaif)
 		} else if (pit->ig) {
 			/* A dummy entry: it only asks the AP to move its index. */
 		} else if (pit->buffer_type) {
-			/* No fragment ring is published, so a fragment is a surprise. */
+			/*
+			 * A fragment entry now that the ring exists, but reassembly is
+			 * not implemented, so only its length is accounted for.
+			 */
 			dl->frag_pits++;
-			dl->overrun++;
 			cur_len += pit->data_len;
 		} else {
 			dl->last_bid = pit->buffer_id;
@@ -921,6 +944,9 @@ static void dpmaif_dl_unprogram(struct ccci_dpmaif *dpmaif)
 	value = readl(pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
 	value &= ~CCCI_DPMAIF_BAT_EN_MSK;
 	writel(value, pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
+	/* Both latches hold the same enable bit, so both must be told it is off. */
+	dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_INIT,
+			 CCCI_DPMAIF_DL_BAT_INIT_EN | CCCI_DPMAIF_DL_BAT_FRG_INIT);
 	dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_INIT, CCCI_DPMAIF_DL_BAT_INIT_EN);
 
 	writel(0, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON0);
@@ -962,22 +988,31 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_
 				   CCCI_DPMAIF_DL_BAT_BUF_SZ);
 	if (ret)
 		goto out_bus;
+	ret = dpmaif_dl_ring_alloc(dpmaif, &dl->frg, bat_entries,
+				   CCCI_DPMAIF_DL_FRG_BUF_SZ);
+	if (ret)
+		goto out_bat;
 	dl->pit_entries = pit_entries;
 	dl->pit = dma_alloc_coherent(dpmaif->dev,
 				     (size_t)pit_entries * CCCI_DPMAIF_DL_PIT_BYTE_SIZE,
 				     &dl->pit_dma, GFP_KERNEL);
 	if (!dl->pit) {
 		ret = -ENOMEM;
-		goto out_bat;
+		goto out_frg;
 	}
 
 	memset(dl->pit, 0, (size_t)pit_entries * CCCI_DPMAIF_DL_PIT_BYTE_SIZE);
 	for (i = 0; i < dl->bat.entries; i++)
 		dpmaif_dl_publish(&dl->bat, i);
+	for (i = 0; i < dl->frg.entries; i++)
+		dpmaif_dl_publish(&dl->frg, i);
 	dl->fail_reg = 0;
 	dpmaif_dl_hw_prepare(dpmaif);
 	dpmaif_dl_tune(dpmaif);
-	ret = dpmaif_dl_bat_program(dpmaif, &dl->bat);
+	ret = dpmaif_dl_bat_program(dpmaif, &dl->bat, false);
+	if (ret)
+		goto out_unprogram;
+	ret = dpmaif_dl_bat_program(dpmaif, &dl->frg, true);
 	if (ret)
 		goto out_unprogram;
 	ret = dpmaif_dl_pit_program(dpmaif);
@@ -990,10 +1025,16 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_
 	 */
 	dl->pit_rd = readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA2) &
 		     CCCI_DPMAIF_DL_PIT_WRIDX_MSK;
+	ret = dpmaif_dl_add_frg_bat(dpmaif, dl->frg.entries);
+	if (ret)
+		goto out_unprogram;
 	ret = dpmaif_dl_add_bat(dpmaif, dl->bat.entries);
 	if (ret)
 		goto out_unprogram;
-	ret = dpmaif_dl_queue_enable(dpmaif, true);
+	ret = dpmaif_dl_queue_enable(dpmaif, true, true);
+	if (ret)
+		goto out_unprogram;
+	ret = dpmaif_dl_queue_enable(dpmaif, true, false);
 	if (ret)
 		goto out_unprogram;
 	spin_lock_irq(&dl->lock);
@@ -1014,6 +1055,8 @@ out_unprogram:
 	dma_free_coherent(dpmaif->dev, (size_t)pit_entries * CCCI_DPMAIF_DL_PIT_BYTE_SIZE,
 			  dl->pit, dl->pit_dma);
 	dl->pit = NULL;
+out_frg:
+	dpmaif_dl_ring_free(dpmaif, &dl->frg);
 out_bat:
 	dpmaif_dl_ring_free(dpmaif, &dl->bat);
 out_bus:
@@ -1040,6 +1083,7 @@ static void dpmaif_dl_stop(struct ccci_dpmaif *dpmaif)
 	dma_free_coherent(dpmaif->dev, (size_t)pit_entries * CCCI_DPMAIF_DL_PIT_BYTE_SIZE,
 			  dl->pit, dl->pit_dma);
 	dl->pit = NULL;
+	dpmaif_dl_ring_free(dpmaif, &dl->frg);
 	dpmaif_dl_ring_free(dpmaif, &dl->bat);
 	clk_disable_unprepare(dpmaif->clk_bus);
 	clk_disable_unprepare(dpmaif->clk_main);

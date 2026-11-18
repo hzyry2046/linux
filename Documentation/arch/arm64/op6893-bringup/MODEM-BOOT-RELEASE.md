@@ -1326,9 +1326,28 @@ BAT 队列（`BAT_INIT_CON1` bit16 + 只更新使能位的 `BAT_INIT` 命令）�
 卸载标志为 0 因为探针自己算校验和）、以及两个 add 门铃的 `count|UPDATE` 形式与 not-ready
 轮询。
 
-仍然存在的差异只有三处：MTU 1664/`BID_MAXCNT` 1（厂商 3080/3）、没有分片 BAT 环（厂商
-总会初始化一个，用独立的 `BAT_INIT_FRG` latch 和 `DL_BAT_FRG_ADD` 使能）、MD 域总线重映射
-仍未配置。
+之后又把分片 BAT 环和 MTU 补齐（已构建、host 测试通过，但**尚未上机**）：包环与分片环
+共用 `CON0/CON1`，用命令寄存器的 `BAT_INIT_FRG_INIT` 位走两个独立 latch，加缓冲用
+`DL_BAT_FRG_ADD` 门铃位；MTU 改为厂商的 3080。顺带纠正一处：`DPMAIF_HW_PKT_BIDCNT` 在厂商
+源码里就是 1（注释写着 "3-->1 should be 1 in E1"），所以 `BID_MAXCNT` 本来就对。
+
+仍然存在的差异只剩 MD 域总线重映射未配置。
+
+### MD 镜像里的明文串说明了它的 IP 栈结构
+
+镜像代码虽不能反汇编，明文串表可读，能看到 MD 侧在 DPMAIF 驱动与协议栈之间还夹着一整套
+中间件：`middleware/hif/dpfm/`（`dpfm_filter.c`、`dpfm_data_usage.c`、`dpfm_if.c`）、
+`middleware/hif/ipcore/src/`（`ipc_data`、`ipc_dpfm`、`ipc_filter`、`ipc_if`、`ipc_session`、
+`pfm_garbage_filter`、`ipc_fragment/*`）、`middleware/hif/ipfcore/`（缓冲区池与 dl_filter /
+rqos 插件），以及接口名格式串 `ccmni%d`。
+
+也就是说：一个包**可以被传输层收下、随后在中间件里被过滤掉**。这和「描述符被消费但没有任何
+下行」的观察一致。
+
+镜像里还有 `AT+EMBIND`，取值含 `"M-CCMNI"`/`"M-RNDIS"`/`"M-MBIM"`/`"M-LHIF"`，看起来正是
+「把 PDP 绑定到某条 L2 通路」的命令。实测：`AT+EMBIND?` 返回 `+EMBIND: 0`（未绑定），
+`AT+EMBIND=?` 只返回模板串，`AT+EMBIND=1,"M-CCMNI",1` / `=1,1,1` / `=1` 全部 ERROR。所以这条
+命令在这个 AT 通道上不可用——这不说明绑定本身无关，只说明我们无法从这里设置它。
 
 另外确认厂商**没有**「网卡打开」这类通知：4.19 与 6.6 里与数据面相关的 RPC 只有
 `IPC_RPC_CCCI_LHIF_MAPPING 0x400D`，`ccmni_open()` 也不向 MD 发任何消息。
@@ -1376,4 +1395,5 @@ BAT 队列（`BAT_INIT_CON1` bit16 + 只更新使能位的 `BAT_INIT` 命令）�
 证据见 `evidence/modem-dpmaif-dl-data-attempt.json`；崩溃归因修正见
 `evidence/modem-dpmaif-md-fault-cause.json`；通知缺陷的 A/B 与根因见
 `evidence/modem-dpmaif-dl-notify-fault.json`；BAT 队列使能缺失与 AP/厂商对齐清单见
-`evidence/modem-dpmaif-dl-queue-enable.json`。
+`evidence/modem-dpmaif-dl-queue-enable.json`；分片环、MTU 与 MD 中间件清单见
+`evidence/modem-dpmaif-dl-frag-ring.json`。

@@ -1,0 +1,51 @@
+{
+  "feature": "op6893 DPMAIF downlink: fragment ring and vendor MTU, plus what the modem image says about its own IP stack",
+  "date": "2026-11-18",
+  "image": {
+    "identity": "83b9882c488b",
+    "release": "7.3.0-op6893-d1-83b9882c488b+",
+    "boot_sha256": "bd36d1a670e8256e50eef14803417362dbd6031b5dab43795c82db0b4d6cd271",
+    "previous_image": "ef568465c56c",
+    "flashed": false,
+    "note": "built and host-tested; the device was not taken to fastboot, so nothing here is hardware-verified yet"
+  },
+  "fragment_ring": {
+    "what": "the packet and fragment BAT rings share BAT_INIT_CON0/CON1 but latch separately, selected by the BAT_INIT_FRG_INIT bit, and the fragment buffers are added with the DL_BAT_FRG_ADD doorbell bit",
+    "implemented": [
+      "a second BAT ring with CCCI_DPMAIF_DL_FRG_BUF_SZ buffers, published the same way",
+      "dpmaif_dl_bat_program() now takes a frag flag and latches ALLSET|EN or ALLSET|FRG_INIT|EN",
+      "dpmaif_dl_add_frg_bat() uses DL_BAT_FRG_ADD",
+      "dpmaif_dl_queue_enable() takes a frag flag so both latches are told the enable bit is on, and teardown tells both it is off",
+      "the fragment AO thresholds are configured rather than cleared: feature bit on, buffer size 1920, check threshold 62"
+    ],
+    "why_the_earlier_attempt_failed": "the previous try programmed a fragment ring without BAT_INIT_FRG_INIT, so the fragment latch was never selected; the PIT handshake then reported a length error"
+  },
+  "mtu": {
+    "change": "the downlink MTU is now the vendor value 3080 instead of the BAT buffer size 1664",
+    "correction": "DPMAIF_HW_PKT_BIDCNT is 1 in the vendor source (the comment reads '3-->1 should be 1 in E1'), so the earlier note that the vendor uses 3 was wrong and BID_MAXCNT was already correct"
+  },
+  "modem_image_ip_stack": {
+    "how": "the plaintext string tables inside the md1img partition are readable even though the code is not",
+    "found": [
+      "driver/dpmaif/src/dpmaif_dev.c and driver/dpmaif/arch/97/src/dpmaif_dev_arch97_md.c, plus dpmaif_lisr_handler, dpmaif_dataflow_lisr_handler and DPMAIF_HISR",
+      "middleware/hif/dpfm/{dpfm_data_usage,dpfm_filter,dpfm_if}.c with DPFM_FILTER_EXPIRED, DPFM_LOCK and DPMAIF_SPIN_LOCK",
+      "middleware/hif/ipcore/src/{ipc_data,ipc_data_ipf,ipc_dhcp_adp,ipc_dpfm,ipc_filter,ipc_if,ipc_notify,ipc_packet_parser,ipc_session,ipc_task}.c with IPCORE_LOCK, IPCORE_UL_LOCK, IPC_UL_THROTTLE",
+      "middleware/hif/ipcore/src/pfm_garbage_filter.c and pfm_if.c with PFM_LOCK",
+      "middleware/hif/ipcore/src/ipc_fragment/* for defragmentation and reassembly",
+      "middleware/hif/ipfcore/core/src/{ipfc_core_available_seat,ipfc_core_meta,ipfc_core_private_room,ipfc_core_restaurant}.c and the dl_filter and rqos plugins",
+      "the interface name format string ccmni%d"
+    ],
+    "meaning": "the modem runs a full IP middleware with per-interface sessions, filters and a buffer pool between the DPMAIF driver and the protocol stack, so a packet can be accepted by the transport and then dropped inside that middleware"
+  },
+  "embind_negative": {
+    "idea": "the image also contains AT+EMBIND with L2P values M-CCMNI, M-RNDIS, M-MBIM and M-LHIF, which looked like the missing step that binds a PDP context to the CCMNI layer-2 path",
+    "measured": "AT+EMBIND? returns +EMBIND: 0, so nothing is bound; AT+EMBIND=? returns only the template (0,1),(list of supported <L2P>s),(1-16) without enumerating the strings; AT+EMBIND=1,\"M-CCMNI\",1, AT+EMBIND=1,1,1 and AT+EMBIND=1 all return ERROR",
+    "conclusion": "the command is not usable over this AT channel, so it is not a lever available to this bring-up",
+    "caveat": "this says nothing about whether the binding itself matters; it only says this interface cannot set it"
+  },
+  "not_proven": [
+    "everything about the fragment ring and the MTU change: it is built and host-tested but has not run on hardware",
+    "whether the modem forwards uplink frames, and where inside ipcore/dpfm a drop would happen",
+    "why the engine never takes a downlink buffer"
+  ]
+}

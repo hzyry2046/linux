@@ -145,6 +145,8 @@
 #define CCCI_DPMAIF_DL_PIT_INIT_EN	BIT(31)
 #define CCCI_DPMAIF_DL_PIT_INIT_NOT_READY	BIT(31)
 #define CCCI_DPMAIF_DL_ADD_UPDATE	BIT(31)
+/* The fragment ring uses its own latch and its own add doorbell bit. */
+#define CCCI_DPMAIF_DL_BAT_FRG_ADD	BIT(16)
 #define CCCI_DPMAIF_DL_ADD_NOT_READY	BIT(31)
 
 #define CCCI_DPMAIF_BAT_EN_MSK		BIT(16)
