@@ -1182,3 +1182,61 @@ sent=4 done=4 irqs=4 err=0 not_ready=0 last_status=0x00000001
 - **IP 流量**：没有配置地址，也没有观察到 PDP 载荷。
 
 证据见 `evidence/modem-dpmaif-ul-path.json`。
+
+# DPMAIF 下行环（2026-11-18）
+
+上行打通后，下一步是下行：MD 通过 PIT 条目告诉 AP「某个 BAT 槽里有这么多字节」，
+AP 读走并把槽还回去。本轮把这条环装上了，并把它拆掉过。
+
+## 1. 装上之后的寄存器状态（镜像 `adf4e596e306`）
+
+```
+bat=256 pit=16384 buf=1664 frg=0/0 pit_rd=1024 bat_wr=0
+irqs=0 pkts=0 bytes=0 msg_pits=0 frag_pits=0
+err=0 mtu_err=0 overrun=0 pit_init_stuck=0 last_status=0x00000000
+```
+
+```
+pd_dl_bat_init=0x00000001  con0=0x41600000 con1=0x00400100 add=0x00000100
+pd_dl_pit_init=0x00000001  con0=0x41640000 con1=0x00004000
+                          con2=0x00000400 con3=0x04000001 add=0x00000000
+ao_dl_pit_sta0=0x41640000 sta1=0x00004000 sta2=0x00000400 sta3=0x04000001
+ap_misc dl_status=0x00000000 dl_mask=0x000000be
+```
+
+四个延迟更新寄存器（BAT_INIT / BAT_ADD / PIT_INIT / PIT_ADD）全部 settle，状态锁存为 0，
+中断已申请（hwirq 241）。`dl_stop` 之后中断释放、基址与大小清零、`PIT_STA3` 的索引位清掉，
+MD 仍是 `state=4`，`AT+CSQ` 照常应答。
+
+## 2. 真机上才暴露的四个阻塞点
+
+**分片 BAT 环与 PIT 环互斥。** 先装分片 BAT 再装 PIT，`PIT_INIT` 的 NOT_READY 永远不清，
+状态锁存 `PITCNT_LEN_ERR`；把顺序换成 BAT→PIT 并**完全不做分片环**，PIT 立刻 settle。
+因此本轮把 MTU 收到单缓冲大小（1664），硬件不会需要分片；真出现分片条目按 overrun 计数丢弃。
+
+**PIT 门铃不能再加满环。** init 已经把容量公布出去（AP 索引 1024 时剩余计数读回 `15359`），
+再写 `PIT_ADD = 16384` 会溢出，门铃一直 busy。厂商启动时也不加，只在消费后补。
+
+**PIT ready 位不清不是致命错误。** 两个厂商驱动里这个握手都是 `void`，超时只打日志。
+之前把它当致命错误，于是环根本没装成。现在记成 `pit_init_stuck` 并继续。
+
+**AP 索引与写索引必须相等。** 厂商的索引检查会把两者改成一致。现在 `PIT_INIT_CON3`
+带 AP 索引、`PIT_INIT_CON2` 带写索引，软件读指针从硬件报回的写索引起步（实测 1024）。
+
+## 3. 排除掉的假设（都做过，都不成立）
+
+- 与 MD 是否运行无关：MD 停在 `lk-on` 和到 HS2 时是同一种失败；
+- `INFRA_AO_MEM` bit10（DPMAIF 保护位）开机就是置位的（`0x00000f3c`），不是缺的前提；
+- 清 MD 侧重排寄存器 `PD_MD_MISC+0x100` 无效；
+- 打开全部 AP 侧时钟门（`AP_MISC_CG_EN=0xff`）无效；
+- PIT 环 512 与 16384、AP 索引 0 与 1024、提前屏蔽下行事件，都无效；
+- 厂商式 AO+PD 复位能把 `PIT_INIT` 拉回 0 且 MD 不受影响，但同样的编程会再次卡住——
+  说明这条环从已知状态可复现，不是残留状态。
+
+## 4. 明确没有做到的
+
+**没有任何下行包。** 计数器全零，因为上行从未发过有效载荷，网络没有理由回包。
+`pit_rd` 从硬件写索引起步这一选择来自厂商不变量，还没有被一个真实到达的包验证。
+分片重组未实现；drain 只把有界头部复制进快照并回收缓冲，不把包交给协议栈。
+
+证据见 `evidence/modem-dpmaif-dl-ring.json`。

@@ -1,0 +1,95 @@
+{
+  "feature": "op6893 DPMAIF downlink ring: BAT/PIT programming, downlink interrupt plumbing and a controlled one-ring observation path",
+  "date": "2026-11-18",
+  "image": {
+    "identity": "adf4e596e306",
+    "release": "7.3.0-op6893-d1-adf4e596e306+",
+    "boot_sha256": "c5376a3ec38507b346d6900d17c4bd682fd499e60cb17961c19e471a1afcc859",
+    "flash": "boot partition only, queued fastboot, then reboot"
+  },
+  "what_was_added": {
+    "registers": "AO_DL (ao_ul+0x400), PD_DL (pd_ul+0x100) and PD_WDMA (pd_ul+0x300) are derived from the two regions the device tree already describes; INFRA_AO_MEM (0x10002000) is mapped as a fifth named region because the vendor sets one protection bit there.",
+    "bat_ring": "coherent 256-entry BAT ring, 8 bytes per entry, each entry naming one 1664-byte coherent buffer; entries are re-published in consumption order to keep the ring flowing.",
+    "pit_ring": "coherent 16384-entry PIT ring, 16 bytes per entry, which is the vendor geometry for this generation.",
+    "interrupt": "AP_DL_L2TISAR0 status plus the AO_UL APDL mask register and the duplicate mask field inside AO_DL_RDY_CHK_THRES; the line is shared with the uplink through a refcounted request_irq.",
+    "controls": "dl (counters), dl_regs (flat register dump), dl_start, dl_stop, plus bounded peek/poke/reset windows that only reach the five mapped blocks and only while neither ring runs."
+  },
+  "hardware_sequence": [
+    {
+      "step": "downlink ring start with the modem at HS2",
+      "result": "START_OK",
+      "state": "bat=256 pit=16384 buf=1664 frg=0/0 pit_rd=1024 bat_wr=0 irqs=0 pkts=0 msg_pits=0 err=0 mtu_err=0 overrun=0 pit_init_stuck=0",
+      "registers": {
+        "pd_dl_bat_init": "0x00000001",
+        "pd_dl_bat_init_con0": "0x41600000",
+        "pd_dl_bat_init_con1": "0x00400100",
+        "pd_dl_bat_add": "0x00000100",
+        "pd_dl_pit_init": "0x00000001",
+        "pd_dl_pit_init_con0": "0x41640000",
+        "pd_dl_pit_init_con1": "0x00004000",
+        "pd_dl_pit_init_con2": "0x00000400",
+        "pd_dl_pit_init_con3": "0x04000001",
+        "pd_dl_pit_add": "0x00000000",
+        "ao_dl_pit_sta0": "0x41640000",
+        "ao_dl_pit_sta1": "0x00004000",
+        "ao_dl_pit_sta2": "0x00000400",
+        "ao_dl_pit_sta3": "0x04000001",
+        "ap_misc_dl_status": "0x00000000",
+        "ap_misc_dl_mask": "0x000000be"
+      }
+    },
+    {
+      "step": "downlink ring stop",
+      "result": "clean",
+      "state": "interrupt released (no dpmaif line in /proc/interrupts), BAT_INIT and PIT_INIT back to 0, both base and size fields cleared, PIT_STA3 index bit cleared, status latch 0",
+      "modem_after_stop": "state=4 error=0, AT+CSQ still answers"
+    }
+  ],
+  "blockers_found_on_hardware": [
+    {
+      "symptom": "PIT_INIT bit31 (NOT_READY) never cleared and AP_DL_L2TISAR0 latched PITCNT_LEN_ERR (bit 3)",
+      "cause": "the fragment BAT ring was programmed before the PIT ring; only one of the two initialisations can settle in that order",
+      "fix": "program BAT, then PIT, then nothing else; the fragment ring is not set up at all and the MTU is clamped to one BAT buffer so the engine never needs to split a packet"
+    },
+    {
+      "symptom": "PIT_ADD doorbell stayed busy after the PIT init",
+      "cause": "the PIT init already publishes the ring capacity (remaining count read back as 15359 for an AP index of 1024), so adding the full ring again overruns it",
+      "fix": "do not add PIT entries at start; only replenish what the drain consumed"
+    },
+    {
+      "symptom": "the driver treated a non-clearing PIT ready bit as fatal",
+      "cause": "both vendor drivers declare this handshake void and merely log it",
+      "fix": "record it as pit_init_stuck and continue, so the counters decide instead of the driver aborting"
+    },
+    {
+      "symptom": "AP index and write index disagreed (1024 versus 0)",
+      "cause": "the same-board driver keeps the two equal and rewrites one to match the other in its index check",
+      "fix": "publish both: PIT_INIT_CON3 carries the AP index and PIT_INIT_CON2 the write index, and the software read pointer starts at the value the hardware reports"
+    }
+  ],
+  "negative_results": [
+    "the downlink ring does not depend on the modem being up: the same PIT failure was reproduced with the modem stopped and at HS2",
+    "INFRA_AO_MEM bit 10 (the DPMAIF protection bit) was already set by the bootloader (0x00000f3c), so it is not the missing prerequisite",
+    "clearing the modem-side reorder register PD_MD_MISC+0x100 did not change the PIT handshake",
+    "opening every AP-side clock gate (AP_MISC_CG_EN 0xff) did not change it",
+    "PIT ring size 512 versus 16384 made no difference to the handshake",
+    "AP index 0 versus 1024 made no difference to the handshake",
+    "masking the downlink events before programming did not change it",
+    "a vendor-style AO+PD reset returns PIT_INIT to 0 and leaves the modem alive, but the same programming wedges it again, so the ring is reproducible from a known state"
+  ],
+  "modem_side_observation": {
+    "rb_pit_init": "PD_MD_MISC+0x100 reads 0x4000008f once the modem is at HS2, so the modem does configure its own reorder unit before the AP touches the ring",
+    "lhif_mapping": "with PDP active the modem asked for net_if=0 lhif_q=3 (queue 3), so the data queue remains runtime-selected"
+  },
+  "not_proven": [
+    "no downlink packet has been received: the counters are all zero because nothing valid has been sent uplink, so the network had no reason to answer",
+    "the AP index / write index choice is derived from the vendor invariant, not yet confirmed by a delivered packet",
+    "fragment reassembly is not implemented; a fragment PIT would be counted as overrun and dropped",
+    "nothing here delivers packets to the network stack: the drain copies a bounded head into a snapshot and recycles the buffers"
+  ],
+  "verification": {
+    "host_tests": "57 modem suites pass, including the extended DPMAIF formatter test under ASan/UBSan",
+    "checkpatch": "0 errors, 0 warnings, 0 checks on the driver, header and formatter",
+    "cold_start_note": "the modem handshake occasionally times out with -110 and no exception record; the probe retries a bounded number of full reboots, which has always recovered"
+  }
+}

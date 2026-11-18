@@ -109,7 +109,88 @@ int main(void)
 	assert(ccci_dpmaif_format(&s, NULL, sizeof(buf)) == -EINVAL);
 	assert(ccci_dpmaif_format(&s, buf, 0) == -EINVAL);
 
-	puts("PASS: actual DPMAIF sample formatter, field order, mask derivation and bounded output");
+	/* The downlink counters render in a fixed order with the head as hex. */
+	{
+		struct ccci_dpmaif_dl_state dl;
+
+		memset(&dl, 0, sizeof(dl));
+		dl.bat_entries = 256;
+		dl.pit_entries = 512;
+		dl.bat_buf_sz = 1664;
+		dl.frg_entries = 256;
+		dl.frg_buf_sz = 1920;
+		dl.pit_rd = 7;
+		dl.bat_wr = 9;
+		dl.irqs = 1;
+		dl.pkts = 2;
+		dl.bytes = 120;
+		dl.msg_pits = 3;
+		dl.frag_pits = 4;
+		dl.err = 0;
+		dl.mtu_err = 0;
+		dl.overrun = 0;
+		dl.last_status = 0x1;
+		dl.last_len = 60;
+		dl.last_channel = 5;
+		dl.last_bid = 11;
+		dl.snap_len = 4;
+		dl.snap[0] = 0x45;
+		dl.snap[1] = 0x00;
+		dl.snap[2] = 0xab;
+		dl.snap[3] = 0xff;
+		n = ccci_dpmaif_format_dl(&dl, buf, sizeof(buf));
+		assert(n > 0);
+		assert((size_t)n == strlen(buf));
+		expect_contains(buf, "bat=256 pit=512 buf=1664 frg=256/1920");
+		expect_contains(buf, "pit_rd=7 bat_wr=9");
+		expect_contains(buf, "irqs=1 pkts=2 bytes=120 msg_pits=3 frag_pits=4");
+		expect_contains(buf, "err=0 mtu_err=0 overrun=0 pit_init_stuck=0");
+		expect_contains(buf, "last_status=0x00000001");
+		/* A stuck PIT ready handshake is reported, not hidden. */
+		dl.pit_init_stuck = 1;
+		n = ccci_dpmaif_format_dl(&dl, buf, sizeof(buf));
+		assert(n > 0);
+		expect_contains(buf, "pit_init_stuck=1");
+		dl.pit_init_stuck = 0;
+		expect_contains(buf, "last_len=60 last_channel=5 last_bid=11 snap_len=4");
+		expect_contains(buf, "snap=4500abff");
+		/* An empty snapshot still renders the key, with an empty value. */
+		dl.snap_len = 0;
+		n = ccci_dpmaif_format_dl(&dl, buf, sizeof(buf));
+		assert(n > 0);
+		expect_contains(buf, "snap_len=0");
+		expect_contains(buf, "snap=\n");
+		/*
+		 * A length beyond the array would read past it, so it is refused
+		 * rather than trusted.
+		 */
+		dl.snap_len = CCCI_DPMAIF_DL_SNAP_LEN + 1;
+		assert(ccci_dpmaif_format_dl(&dl, buf, sizeof(buf)) == -EINVAL);
+		dl.snap_len = CCCI_DPMAIF_DL_SNAP_LEN;
+		memset(dl.snap, 0x5a, sizeof(dl.snap));
+		n = ccci_dpmaif_format_dl(&dl, buf, sizeof(buf));
+		assert(n > 0);
+		assert(strlen(strstr(buf, "snap=") + 5) == 2 * CCCI_DPMAIF_DL_SNAP_LEN + 1);
+		/* A short buffer is refused here too. */
+		{
+			char small[40];
+
+			dl.snap_len = 0;
+			memset(small, 0x5a, sizeof(small));
+			assert(ccci_dpmaif_format_dl(&dl, small, sizeof(small)) == -ENOSPC);
+			assert(small[sizeof(small) - 1] == '\0');
+		}
+		assert(ccci_dpmaif_format_dl(NULL, buf, sizeof(buf)) == -EINVAL);
+		assert(ccci_dpmaif_format_dl(&dl, NULL, sizeof(buf)) == -EINVAL);
+		assert(ccci_dpmaif_format_dl(&dl, buf, 0) == -EINVAL);
+	}
+
+	/* The descriptor layouts are the vendor's, so check the sizes hold. */
+	assert(sizeof(struct ccci_dpmaif_bat) == 8);
+	assert(sizeof(struct ccci_dpmaif_pit) == CCCI_DPMAIF_DL_PIT_BYTE_SIZE);
+	assert(sizeof(struct ccci_dpmaif_msg_pit) <= CCCI_DPMAIF_DL_PIT_BYTE_SIZE);
+
+	puts("PASS: actual DPMAIF sample and downlink formatters, field order, mask derivation and bounded output");
 	return 0;
 }
 '''

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Read-only DPMAIF reconnaissance for the op6893 CCMNI data path.
+ * DPMAIF for the op6893 CCMNI data path.
  *
  * The same-board ABI carries CCMNI over DPMAIF on MD generation 6297, not over
- * CCIF, so the data-path port has to start from a verified view of the block.
- * This driver only samples registers: it never writes one, never requests the
- * interrupt and never moves data. Clocks are enabled for the duration of one
- * read and released again, so probe itself performs no I/O.
+ * CCIF, so the data path has to be brought up on this block. Probe only maps
+ * the regions and reads the clocks: every register write happens in one of the
+ * explicitly operator-driven uplink or downlink windows below, and each of
+ * them can be dismantled again without leaving a hardware pointer behind.
  */
 #include <linux/bits.h>
 #include <linux/clk.h>
@@ -23,11 +23,13 @@
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/spinlock.h>
+#include <linux/string.h>
 #include <linux/sysfs.h>
 
 #include "ccci-dpmaif.h"
 
-#define CCCI_DPMAIF_BLOCKS	4
+#define CCCI_DPMAIF_BLOCKS	5
 
 struct ccci_dpmaif_ul {
 	void *drb;
@@ -48,6 +50,47 @@ struct ccci_dpmaif_ul {
 	bool started;
 };
 
+/* One BAT ring and the packet buffers its entries point at. */
+struct ccci_dpmaif_bat_ring {
+	void *ring;
+	dma_addr_t ring_dma;
+	void *pool;
+	dma_addr_t pool_dma;
+	u32 entries;
+	u32 buf_sz;
+	u32 wr;
+};
+
+struct ccci_dpmaif_dl {
+	struct ccci_dpmaif_bat_ring bat;
+	struct ccci_dpmaif_bat_ring frg;
+	void *pit;
+	dma_addr_t pit_dma;
+	u32 pit_entries;
+	u32 pit_rd;
+	u32 irqs;
+	u32 pkts;
+	u32 bytes;
+	u32 msg_pits;
+	u32 frag_pits;
+	u32 err;
+	u32 mtu_err;
+	u32 overrun;
+	u32 last_status;
+	u32 last_len;
+	u32 last_channel;
+	u32 last_bid;
+	u32 snap_len;
+	u8 snap[CCCI_DPMAIF_DL_SNAP_LEN];
+	/* Offset of the deferred register that last refused to settle, if any. */
+	u32 fail_reg;
+	/* The PIT ready handshake did not clear, as the vendor tolerates. */
+	u32 pit_init_stuck;
+	bool started;
+	/* Keeps a drain from racing the teardown that frees the rings. */
+	spinlock_t lock;
+};
+
 struct ccci_dpmaif {
 	struct device *dev;
 	void __iomem *block[CCCI_DPMAIF_BLOCKS];
@@ -56,10 +99,52 @@ struct ccci_dpmaif {
 	struct clk *clk_main;
 	struct clk *clk_bus;
 	int irq;
-	/* Serializes the clock-on/sample/clock-off window and the uplink. */
+	unsigned int irq_refs;
+	/* Serializes the clock-on/sample/clock-off window and both rings. */
 	struct mutex lock;
 	struct ccci_dpmaif_ul ul;
+	struct ccci_dpmaif_dl dl;
+	/* Last result of the bounded register window. */
+	u32 peek_block;
+	u32 peek_offset;
+	u32 peek_value;
 };
+
+/*
+ * Register windows. Only two regions are described by the device tree; the
+ * downlink blocks are derived from them the same way the vendor driver does.
+ */
+static inline void __iomem *dpmaif_ao_ul(struct ccci_dpmaif *dpmaif)
+{
+	return dpmaif->block[0];
+}
+
+static inline void __iomem *dpmaif_pd_ul(struct ccci_dpmaif *dpmaif)
+{
+	return dpmaif->block[1];
+}
+
+static inline void __iomem *dpmaif_ap_misc(struct ccci_dpmaif *dpmaif)
+{
+	return dpmaif->block[1] + CCCI_DPMAIF_PD_MISC_BASE;
+}
+
+static inline void __iomem *dpmaif_ao_dl(struct ccci_dpmaif *dpmaif)
+{
+	return dpmaif->block[0] + CCCI_DPMAIF_AO_DL_BASE;
+}
+
+static inline void __iomem *dpmaif_pd_dl(struct ccci_dpmaif *dpmaif)
+{
+	return dpmaif->block[1] + CCCI_DPMAIF_PD_DL_BASE;
+}
+
+static inline void __iomem *dpmaif_infra_ao_mem(struct ccci_dpmaif *dpmaif)
+{
+	return dpmaif->block[4];
+}
+
+static irqreturn_t dpmaif_irq(int irq, void *data);
 
 static void dpmaif_ul_reset_counters(struct ccci_dpmaif *dpmaif)
 {
@@ -79,49 +164,50 @@ static void dpmaif_ul_reset_counters(struct ccci_dpmaif *dpmaif)
 static void dpmaif_ul_program(struct ccci_dpmaif *dpmaif)
 {
 	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
+	void __iomem *ao = dpmaif_ao_ul(dpmaif);
 	u64 base = (u64)ul->drb_dma;
 	u32 value;
 
-	value = readl(dpmaif->block[0] + CCCI_DPMAIF_UL_DRBSIZE(ul->queue));
+	value = readl(ao + CCCI_DPMAIF_UL_DRBSIZE(ul->queue));
 	value &= ~CCCI_DPMAIF_DRB_SIZE_MSK;
 	value |= ((ul->entries * sizeof(struct ccci_dpmaif_drb_pd)) / 4) &
 		 CCCI_DPMAIF_DRB_SIZE_MSK;
-	writel(value, dpmaif->block[0] + CCCI_DPMAIF_UL_DRBSIZE(ul->queue));
-	writel(lower_32_bits(base), dpmaif->block[0] + CCCI_DPMAIF_UL_QSAR(ul->queue));
-	value = readl(dpmaif->block[0] + CCCI_DPMAIF_UL_DRBSIZE(ul->queue));
+	writel(value, ao + CCCI_DPMAIF_UL_DRBSIZE(ul->queue));
+	writel(lower_32_bits(base), ao + CCCI_DPMAIF_UL_QSAR(ul->queue));
+	value = readl(ao + CCCI_DPMAIF_UL_DRBSIZE(ul->queue));
 	value &= ~CCCI_DPMAIF_DRB_ADDRH_MSK;
 	value |= (upper_32_bits(base) << 24) & CCCI_DPMAIF_DRB_ADDRH_MSK;
-	writel(value, dpmaif->block[0] + CCCI_DPMAIF_UL_DRBSIZE(ul->queue));
+	writel(value, ao + CCCI_DPMAIF_UL_DRBSIZE(ul->queue));
 
-	value = readl(dpmaif->block[0] + CCCI_DPMAIF_AO_UL_CHNL_ARB0);
+	value = readl(ao + CCCI_DPMAIF_AO_UL_CHNL_ARB0);
 	value |= BIT(ul->queue);
 	value |= BIT(ul->queue + 8);
-	writel(value, dpmaif->block[0] + CCCI_DPMAIF_AO_UL_CHNL_ARB0);
+	writel(value, ao + CCCI_DPMAIF_AO_UL_CHNL_ARB0);
 }
 
 static void dpmaif_ul_unprogram(struct ccci_dpmaif *dpmaif)
 {
 	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
+	void __iomem *ao = dpmaif_ao_ul(dpmaif);
 	u32 value;
 
-	value = readl(dpmaif->block[0] + CCCI_DPMAIF_AO_UL_CHNL_ARB0);
+	value = readl(ao + CCCI_DPMAIF_AO_UL_CHNL_ARB0);
 	value &= ~BIT(ul->queue);
 	value &= ~BIT(ul->queue + 8);
-	writel(value, dpmaif->block[0] + CCCI_DPMAIF_AO_UL_CHNL_ARB0);
+	writel(value, ao + CCCI_DPMAIF_AO_UL_CHNL_ARB0);
 	/* Mask every uplink event again; only this driver unmasked them. */
-	writel(CCCI_DPMAIF_UL_INT_EN, dpmaif->block[0] + CCCI_DPMAIF_AO_UL_AP_L2TIMSR0);
+	writel(CCCI_DPMAIF_UL_INT_EN, ao + CCCI_DPMAIF_AO_UL_AP_L2TIMSR0);
 	/*
 	 * Drop the ring base and size before the memory is freed: the hardware
 	 * would otherwise keep DMAing from a buffer that no longer belongs to us.
 	 */
-	writel(0, dpmaif->block[0] + CCCI_DPMAIF_UL_QSAR(ul->queue));
-	value = readl(dpmaif->block[0] + CCCI_DPMAIF_UL_DRBSIZE(ul->queue));
+	writel(0, ao + CCCI_DPMAIF_UL_QSAR(ul->queue));
+	value = readl(ao + CCCI_DPMAIF_UL_DRBSIZE(ul->queue));
 	value &= ~CCCI_DPMAIF_DRB_SIZE_MSK;
 	value &= ~CCCI_DPMAIF_DRB_ADDRH_MSK;
-	writel(value, dpmaif->block[0] + CCCI_DPMAIF_UL_DRBSIZE(ul->queue));
+	writel(value, ao + CCCI_DPMAIF_UL_DRBSIZE(ul->queue));
 	/* Leave no latched uplink event behind for the next owner. */
-	writel(0xffffffff, dpmaif->block[1] + CCCI_DPMAIF_PD_MISC_BASE +
-	       CCCI_DPMAIF_PD_AP_UL_L2TISAR0);
+	writel(0xffffffff, dpmaif_ap_misc(dpmaif) + CCCI_DPMAIF_PD_AP_UL_L2TISAR0);
 }
 
 /*
@@ -130,13 +216,13 @@ static void dpmaif_ul_unprogram(struct ccci_dpmaif *dpmaif)
  */
 static int dpmaif_ul_irq_enable(struct ccci_dpmaif *dpmaif)
 {
+	void __iomem *ao = dpmaif_ao_ul(dpmaif);
 	u32 count = 0;
 
-	writel(0xffffffff, dpmaif->block[1] + CCCI_DPMAIF_PD_MISC_BASE +
-	       CCCI_DPMAIF_PD_AP_UL_L2TISAR0);
-	writel(CCCI_DPMAIF_UL_INT_EN, dpmaif->block[0] + CCCI_DPMAIF_AO_UL_AP_L2TIMCR0);
-	writel(~CCCI_DPMAIF_UL_INT_EN, dpmaif->block[0] + CCCI_DPMAIF_AO_UL_AP_L2TIMSR0);
-	while ((readl(dpmaif->block[0] + CCCI_DPMAIF_AO_UL_AP_L2TIMR0) &
+	writel(0xffffffff, dpmaif_ap_misc(dpmaif) + CCCI_DPMAIF_PD_AP_UL_L2TISAR0);
+	writel(CCCI_DPMAIF_UL_INT_EN, ao + CCCI_DPMAIF_AO_UL_AP_L2TIMCR0);
+	writel(~CCCI_DPMAIF_UL_INT_EN, ao + CCCI_DPMAIF_AO_UL_AP_L2TIMSR0);
+	while ((readl(ao + CCCI_DPMAIF_AO_UL_AP_L2TIMR0) &
 		CCCI_DPMAIF_UL_INT_EN) == CCCI_DPMAIF_UL_INT_EN) {
 		if (++count >= CCCI_DPMAIF_UL_POLL_LIMIT)
 			return -ETIMEDOUT;
@@ -144,19 +230,20 @@ static int dpmaif_ul_irq_enable(struct ccci_dpmaif *dpmaif)
 	return 0;
 }
 
-static irqreturn_t dpmaif_irq(int irq, void *data)
+/* Returns true when this call consumed at least one uplink event. */
+static bool dpmaif_ul_irq(struct ccci_dpmaif *dpmaif)
 {
-	struct ccci_dpmaif *dpmaif = data;
 	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
+	void __iomem *misc = dpmaif_ap_misc(dpmaif);
 	u32 status, masked;
 
-	status = readl(dpmaif->block[1] + CCCI_DPMAIF_PD_MISC_BASE +
-		       CCCI_DPMAIF_PD_AP_UL_L2TISAR0);
-	masked = readl(dpmaif->block[0] + CCCI_DPMAIF_AO_UL_AP_L2TIMR0);
+	status = readl(misc + CCCI_DPMAIF_PD_AP_UL_L2TISAR0);
+	masked = readl(dpmaif_ao_ul(dpmaif) + CCCI_DPMAIF_AO_UL_AP_L2TIMR0);
 	status &= ~masked;
+	if (!status)
+		return false;
 	/* Write back what is handled: the status bits are write-one-to-clear. */
-	writel(status, dpmaif->block[1] + CCCI_DPMAIF_PD_MISC_BASE +
-	       CCCI_DPMAIF_PD_AP_UL_L2TISAR0);
+	writel(status, misc + CCCI_DPMAIF_PD_AP_UL_L2TISAR0);
 	ul->irqs++;
 	ul->last_status = status;
 	if (status & CCCI_DPMAIF_UL_INT_DONE(ul->queue))
@@ -164,7 +251,7 @@ static irqreturn_t dpmaif_irq(int irq, void *data)
 	if (status & (CCCI_DPMAIF_UL_INT_ERR_MSK | CCCI_DPMAIF_UL_INT_MD_NOTREADY_MSK |
 		      CCCI_DPMAIF_UL_INT_MD_PWR_NOTREADY_MSK))
 		ul->err++;
-	return IRQ_HANDLED;
+	return true;
 }
 
 /* One synthetic frame through the uplink ring; the caller holds the lock. */
@@ -201,7 +288,7 @@ static int dpmaif_ul_send(struct ccci_dpmaif *dpmaif, u32 channel_id)
 
 	/* Publish the descriptors before the doorbell. */
 	wmb();
-	while (readl(dpmaif->block[1] + CCCI_DPMAIF_UL_ADD_DESC(ul->queue)) &
+	while (readl(dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_ADD_DESC(ul->queue)) &
 	       CCCI_DPMAIF_UL_ADD_NOT_READY) {
 		if (++count >= CCCI_DPMAIF_UL_POLL_LIMIT) {
 			ul->not_ready++;
@@ -209,9 +296,9 @@ static int dpmaif_ul_send(struct ccci_dpmaif *dpmaif, u32 channel_id)
 		}
 	}
 	writel((CCCI_DPMAIF_UL_DRB_WORDS * 2) | CCCI_DPMAIF_UL_ADD_UPDATE,
-	       dpmaif->block[1] + CCCI_DPMAIF_UL_ADD_DESC(ul->queue));
+	       dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_ADD_DESC(ul->queue));
 	count = 0;
-	while (readl(dpmaif->block[1] + CCCI_DPMAIF_UL_ADD_DESC(ul->queue)) &
+	while (readl(dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_ADD_DESC(ul->queue)) &
 	       CCCI_DPMAIF_UL_ADD_NOT_READY) {
 		if (++count >= CCCI_DPMAIF_UL_POLL_LIMIT) {
 			ul->not_ready++;
@@ -220,6 +307,31 @@ static int dpmaif_ul_send(struct ccci_dpmaif *dpmaif, u32 channel_id)
 	}
 	ul->sent++;
 	return 0;
+}
+
+/* The interrupt line is shared between the two rings and requested once. */
+static int dpmaif_irq_get(struct ccci_dpmaif *dpmaif)
+{
+	int ret;
+
+	if (dpmaif->irq_refs) {
+		dpmaif->irq_refs++;
+		return 0;
+	}
+	ret = request_irq(dpmaif->irq, dpmaif_irq, 0, "op6893-dpmaif", dpmaif);
+	if (ret)
+		return ret;
+	dpmaif->irq_refs = 1;
+	return 0;
+}
+
+static void dpmaif_irq_put(struct ccci_dpmaif *dpmaif)
+{
+	if (!dpmaif->irq_refs)
+		return;
+	if (--dpmaif->irq_refs)
+		return;
+	free_irq(dpmaif->irq, dpmaif);
 }
 
 static int dpmaif_ul_start(struct ccci_dpmaif *dpmaif, u32 queue)
@@ -255,7 +367,7 @@ static int dpmaif_ul_start(struct ccci_dpmaif *dpmaif, u32 queue)
 	ret = dpmaif_ul_irq_enable(dpmaif);
 	if (ret)
 		goto out_unprogram;
-	ret = request_irq(dpmaif->irq, dpmaif_irq, 0, "op6893-dpmaif", dpmaif);
+	ret = dpmaif_irq_get(dpmaif);
 	if (ret)
 		goto out_unprogram;
 	ul->started = true;
@@ -285,13 +397,556 @@ static void dpmaif_ul_stop(struct ccci_dpmaif *dpmaif)
 		return;
 	ul->started = false;
 	dpmaif_ul_unprogram(dpmaif);
-	free_irq(dpmaif->irq, dpmaif);
+	dpmaif_irq_put(dpmaif);
 	dma_free_coherent(dpmaif->dev, CCCI_DPMAIF_UL_PAYLOAD_MAX, ul->payload,
 			  ul->payload_dma);
 	ul->payload = NULL;
 	dma_free_coherent(dpmaif->dev, ul->entries * sizeof(struct ccci_dpmaif_drb_pd),
 			  ul->drb, ul->drb_dma);
 	ul->drb = NULL;
+	clk_disable_unprepare(dpmaif->clk_bus);
+	clk_disable_unprepare(dpmaif->clk_main);
+}
+
+/*
+ * Downlink. The modem fills PIT entries that name a BAT slot and a length; the
+ * payload lands in the buffer that BAT slot points at. Both rings live in
+ * coherent memory, so the only per-packet work is walking the PIT and handing
+ * the buffers back.
+ */
+
+/* The first register that refuses to settle is the one worth reporting. */
+static int dpmaif_dl_timeout(struct ccci_dpmaif *dpmaif, u32 reg)
+{
+	if (!dpmaif->dl.fail_reg)
+		dpmaif->dl.fail_reg = reg;
+	return -ETIMEDOUT;
+}
+
+/* Write a deferred-update register: poll not-ready, write, poll not-ready. */
+static int dpmaif_dl_update(struct ccci_dpmaif *dpmaif, u32 reg, u32 value)
+{
+	void __iomem *pd = dpmaif_pd_dl(dpmaif);
+	u32 poll = 0;
+
+	while (readl(pd + reg) & CCCI_DPMAIF_DL_ADD_NOT_READY) {
+		if (++poll >= CCCI_DPMAIF_DL_POLL_LIMIT)
+			return dpmaif_dl_timeout(dpmaif, reg);
+	}
+	writel(value, pd + reg);
+	poll = 0;
+	while (readl(pd + reg) & CCCI_DPMAIF_DL_ADD_NOT_READY) {
+		if (++poll >= CCCI_DPMAIF_DL_POLL_LIMIT)
+			return dpmaif_dl_timeout(dpmaif, reg);
+	}
+	return 0;
+}
+
+/*
+ * Every entry of a BAT ring points at one buffer of the pool. Publishing an
+ * entry again after the modem used it is what keeps the ring flowing, so the
+ * same helper fills the ring at start and refills it while draining.
+ */
+static void dpmaif_dl_publish(struct ccci_dpmaif_bat_ring *ring, u32 bid)
+{
+	struct ccci_dpmaif_bat *entry = (struct ccci_dpmaif_bat *)ring->ring + ring->wr;
+	u64 addr = (u64)ring->pool_dma + (u64)bid * ring->buf_sz;
+
+	entry->buffer_addr_ext = upper_32_bits(addr) & 0xff;
+	entry->p_buffer_addr = lower_32_bits(addr);
+	ring->wr = (ring->wr + 1) % ring->entries;
+}
+
+static int dpmaif_dl_bat_program(struct ccci_dpmaif *dpmaif,
+				 struct ccci_dpmaif_bat_ring *ring)
+{
+	void __iomem *pd = dpmaif_pd_dl(dpmaif);
+	u64 base = (u64)ring->ring_dma;
+	u32 value;
+
+	writel(lower_32_bits(base), pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON0);
+	value = readl(pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
+	value &= ~CCCI_DPMAIF_BAT_ADDRH_MSK;
+	value |= (upper_32_bits(base) << 24) & CCCI_DPMAIF_BAT_ADDRH_MSK;
+	value &= ~CCCI_DPMAIF_BAT_SIZE_MSK;
+	value |= ring->entries & CCCI_DPMAIF_BAT_SIZE_MSK;
+	value &= ~CCCI_DPMAIF_BAT_EN_MSK;
+	writel(value, pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
+	return dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_INIT,
+				CCCI_DPMAIF_DL_BAT_INIT_ALLSET | CCCI_DPMAIF_DL_BAT_INIT_EN);
+}
+
+static int dpmaif_dl_pit_program(struct ccci_dpmaif *dpmaif)
+{
+	struct ccci_dpmaif_dl *dl = &dpmaif->dl;
+	void __iomem *pd = dpmaif_pd_dl(dpmaif);
+	u64 base = (u64)dl->pit_dma;
+	u32 value;
+
+	writel(lower_32_bits(base), pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON0);
+	value = readl(pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON1);
+	value &= ~CCCI_DPMAIF_PIT_ADDRH_MSK;
+	value |= (upper_32_bits(base) << 24) & CCCI_DPMAIF_PIT_ADDRH_MSK;
+	value &= ~CCCI_DPMAIF_PIT_SIZE_MSK;
+	value |= dl->pit_entries & CCCI_DPMAIF_PIT_SIZE_MSK;
+	writel(value, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON1);
+	value = readl(pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON3);
+	value |= CCCI_DPMAIF_PIT_EN_MSK;
+	writel(value, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON3);
+	/*
+	 * Both vendor drivers declare this handshake void and merely log when the
+	 * ready bit does not clear, then go on to add entries. Treating it as fatal
+	 * would stop the ring where the same-board driver keeps going, so record
+	 * the state and let the caller decide from the counters.
+	 */
+	dl->pit_init_stuck = dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_PIT_INIT,
+					      CCCI_DPMAIF_DL_PIT_INIT_ALLSET |
+					      CCCI_DPMAIF_DL_PIT_INIT_EN) ? 1 : 0;
+	return 0;
+}
+
+static int dpmaif_dl_add_bat(struct ccci_dpmaif *dpmaif, u32 cnt)
+{
+	u32 value = (cnt & CCCI_DPMAIF_BAT_SIZE_MSK) | CCCI_DPMAIF_DL_ADD_UPDATE;
+
+	return dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_ADD, value);
+}
+
+static int dpmaif_dl_add_pit(struct ccci_dpmaif *dpmaif, u32 cnt)
+{
+	u32 value = (cnt & CCCI_DPMAIF_PIT_SIZE_MSK) | CCCI_DPMAIF_DL_ADD_UPDATE;
+
+	return dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_PIT_ADD, value);
+}
+
+/*
+ * Bring the downlink engine out of the state the bootloader left it in. The
+ * vendor does this once per power-on: ungated AP-side clocks, the write-DMA
+ * outstanding limit, the level-1 timer mask, and the power flag the ring
+ * programming needs before any deferred register will settle.
+ */
+static void dpmaif_dl_hw_prepare(struct ccci_dpmaif *dpmaif)
+{
+	void __iomem *wdma = dpmaif->block[1] + CCCI_DPMAIF_PD_WDMA_BASE;
+	u32 value;
+
+	/*
+	 * The bootloader leaves the DPMAIF protection bit in INFRA_AO_MEM
+	 * clear; without it the engine will not settle a ring that lives in
+	 * AP DRAM.
+	 */
+	value = readl(dpmaif_infra_ao_mem(dpmaif));
+	writel(value | CCCI_DPMAIF_INFRA_PROT, dpmaif_infra_ao_mem(dpmaif));
+	writel(0x7f, dpmaif_ap_misc(dpmaif) + CCCI_DPMAIF_PD_AP_CG_EN);
+	value = readl(wdma + CCCI_DPMAIF_PD_WDMA_CHNL_CMD_CON3);
+	value &= ~(CCCI_DPMAIF_WDMA_CTRL_OSTD_MSK << CCCI_DPMAIF_WDMA_CTRL_OSTD_OFST);
+	value |= (CCCI_DPMAIF_WDMA_CTRL_OSTD_VALUE << CCCI_DPMAIF_WDMA_CTRL_OSTD_OFST);
+	writel(value, wdma + CCCI_DPMAIF_PD_WDMA_CHNL_CMD_CON3);
+	/* Keep the top half and clear the interval fields below it. */
+	value = readl(wdma + CCCI_DPMAIF_PD_WDMA_WR_CMD_CON0) & 0xffff0000;
+	writel(value, wdma + CCCI_DPMAIF_PD_WDMA_WR_CMD_CON0);
+	writel(CCCI_DPMAIF_AO_UL_L1TIMR0_VAL,
+	       dpmaif_ao_ul(dpmaif) + CCCI_DPMAIF_AO_UL_AP_L1TIMR0);
+	writel(CCCI_DPMAIF_DL_POWER_ON,
+	       dpmaif_pd_dl(dpmaif) + CCCI_DPMAIF_PD_DL_RESERVE_RW);
+}
+
+/* AO-side packet limits, thresholds and alignment, as the v2 driver sets them. */
+static void dpmaif_dl_tune(struct ccci_dpmaif *dpmaif)
+{
+	void __iomem *ao = dpmaif_ao_dl(dpmaif);
+	void __iomem *pd = dpmaif_pd_dl(dpmaif);
+	u32 value;
+
+	value = readl(ao + CCCI_DPMAIF_AO_DL_PKTINFO_CON0);
+	value &= ~CCCI_DPMAIF_BAT_BID_MAXCNT_MSK;
+	value |= (CCCI_DPMAIF_DL_PKT_BIDCNT << 16) & CCCI_DPMAIF_BAT_BID_MAXCNT_MSK;
+	value &= ~CCCI_DPMAIF_BAT_REMAIN_MINSZ_MSK;
+	value |= ((CCCI_DPMAIF_DL_BAT_REMAIN / CCCI_DPMAIF_BAT_REMAIN_SZ_BASE) << 8) &
+		 CCCI_DPMAIF_BAT_REMAIN_MINSZ_MSK;
+	value &= ~CCCI_DPMAIF_CHK_RB_PITNUM_MSK;
+	value |= CCCI_DPMAIF_DL_HW_CHK_RB_PIT_NUM & CCCI_DPMAIF_CHK_RB_PITNUM_MSK;
+	writel(value, ao + CCCI_DPMAIF_AO_DL_PKTINFO_CON0);
+	/*
+	 * With no fragment ring the engine must never split a packet, so the MTU
+	 * is exactly one BAT buffer; anything larger is reported as an MTU error.
+	 */
+	writel(CCCI_DPMAIF_DL_BAT_BUF_SZ, ao + CCCI_DPMAIF_AO_DL_PKTINFO_CON1);
+
+	value = readl(ao + CCCI_DPMAIF_AO_DL_PKTINFO_CON2);
+	value &= ~CCCI_DPMAIF_PIT_CHK_NUM_MSK;
+	value |= (CCCI_DPMAIF_DL_HW_CHK_PIT_NUM << 24) & CCCI_DPMAIF_PIT_CHK_NUM_MSK;
+	value &= ~CCCI_DPMAIF_BAT_BUF_SZ_MSK;
+	value |= ((CCCI_DPMAIF_DL_BAT_BUF_SZ / CCCI_DPMAIF_BAT_BUF_SZ_BASE) << 8) &
+		 CCCI_DPMAIF_BAT_BUF_SZ_MSK;
+	value &= ~CCCI_DPMAIF_BAT_RSV_LEN_MSK;
+	writel(value, ao + CCCI_DPMAIF_AO_DL_PKTINFO_CON2);
+
+	value = readl(ao + CCCI_DPMAIF_AO_DL_RDY_CHK_THRES);
+	value |= CCCI_DPMAIF_CHKSUM_ON_MSK;
+	/* Clearing the alignment mask also clears its enable bit; set it after. */
+	value &= ~CCCI_DPMAIF_PKT_ALIGN_MSK;
+	value |= CCCI_DPMAIF_PKT_ALIGN_EN;
+	value |= BIT(13);
+	value &= ~CCCI_DPMAIF_BAT_CHECK_THRES_MSK;
+	value |= (CCCI_DPMAIF_DL_HW_CHK_BAT_NUM << 16) & CCCI_DPMAIF_BAT_CHECK_THRES_MSK;
+	writel(value, ao + CCCI_DPMAIF_AO_DL_RDY_CHK_THRES);
+
+	/* No fragment ring: keep the fragment feature off and say so in the dump. */
+	value = readl(ao + CCCI_DPMAIF_AO_DL_RDY_CHK_FRG_THRES);
+	value &= ~CCCI_DPMAIF_FRG_BAT_BUF_FEATURE_ON_MSK;
+	writel(value, ao + CCCI_DPMAIF_AO_DL_RDY_CHK_FRG_THRES);
+
+	/* BAT cache in PD_DL_BAT_INIT_CON1 bit 22. */
+	value = readl(pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
+	value |= BIT(22);
+	writel(value, pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
+
+	/*
+	 * Tell the modem where the AP starts reading the shared PIT ring, both in
+	 * the ring's own index field and through the notification word it polls.
+	 */
+	value = readl(pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON3);
+	value &= ~(CCCI_DPMAIF_DL_PIT_WRIDX_MSK << 16);
+	value |= (CCCI_DPMAIF_DUMMY_PIT_AIDX & CCCI_DPMAIF_DL_PIT_WRIDX_MSK) << 16;
+	writel(value, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON3);
+	/*
+	 * The same-board driver keeps the write index equal to the AP index (its
+	 * index check rewrites one to match the other), so publish both here.
+	 */
+	value = readl(pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON2);
+	value &= ~CCCI_DPMAIF_DL_PIT_WRIDX_MSK;
+	value |= CCCI_DPMAIF_DUMMY_PIT_AIDX & CCCI_DPMAIF_DL_PIT_WRIDX_MSK;
+	writel(value, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON2);
+	writel(CCCI_DPMAIF_DUMMY_PIT_AIDX | CCCI_DPMAIF_MD_DUMMYPIT_EN,
+	       dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_RESERVE_RW);
+}
+
+/*
+ * Both the AO mask field and the AP_MISC mask register carry the downlink
+ * events; the vendor sets them to the same value, so do the same here.
+ */
+static void dpmaif_dl_irq_enable(struct ccci_dpmaif *dpmaif)
+{
+	void __iomem *ao = dpmaif_ao_ul(dpmaif);
+	void __iomem *misc = dpmaif_ap_misc(dpmaif);
+	void __iomem *ao_dl = dpmaif_ao_dl(dpmaif);
+	u32 value;
+
+	writel(0xffffffff, misc + CCCI_DPMAIF_PD_AP_DL_L2TISAR0);
+	writel(0xffffffff, misc + CCCI_DPMAIF_PD_AP_IP_BUSY);
+	writel(CCCI_DPMAIF_DL_INT_EN, ao + CCCI_DPMAIF_AO_UL_APDL_L2TIMCR0);
+	writel((u32)~CCCI_DPMAIF_DL_INT_EN, ao + CCCI_DPMAIF_AO_UL_APDL_L2TIMSR0);
+	value = readl(ao_dl + CCCI_DPMAIF_AO_DL_RDY_CHK_THRES);
+	value &= ~CCCI_DPMAIF_AO_DL_ISR_MSK;
+	value |= (~CCCI_DPMAIF_DL_INT_EN) & CCCI_DPMAIF_AO_DL_ISR_MSK;
+	writel(value, ao_dl + CCCI_DPMAIF_AO_DL_RDY_CHK_THRES);
+}
+
+static void dpmaif_dl_irq_mask(struct ccci_dpmaif *dpmaif)
+{
+	void __iomem *ao_dl = dpmaif_ao_dl(dpmaif);
+	u32 value;
+
+	writel(CCCI_DPMAIF_AO_DL_ISR_MSK,
+	       dpmaif_ao_ul(dpmaif) + CCCI_DPMAIF_AO_UL_APDL_L2TIMSR0);
+	value = readl(ao_dl + CCCI_DPMAIF_AO_DL_RDY_CHK_THRES);
+	value |= CCCI_DPMAIF_AO_DL_ISR_MSK;
+	writel(value, ao_dl + CCCI_DPMAIF_AO_DL_RDY_CHK_THRES);
+	writel(0xffffffff, dpmaif_ap_misc(dpmaif) + CCCI_DPMAIF_PD_AP_DL_L2TISAR0);
+}
+
+/*
+ * Walk every PIT entry the modem has published and hand the buffers back. The
+ * payload is copied out only far enough to identify it: this path observes the
+ * ring, it does not deliver packets anywhere yet.
+ */
+static void dpmaif_dl_drain(struct ccci_dpmaif *dpmaif)
+{
+	struct ccci_dpmaif_dl *dl = &dpmaif->dl;
+	u32 widx, used, i;
+	u32 bat_add = 0, pit_add = 0;
+	u32 channel = 0, cur_len = 0;
+	bool last = false;
+	u32 last_len = 0;
+
+	widx = readl(dpmaif_ao_dl(dpmaif) + CCCI_DPMAIF_AO_DL_PIT_STA2) &
+	       CCCI_DPMAIF_DL_PIT_WRIDX_MSK;
+	used = (widx >= dl->pit_rd) ? widx - dl->pit_rd :
+	       dl->pit_entries - dl->pit_rd + widx;
+
+	for (i = 0; i < used; i++) {
+		struct ccci_dpmaif_pit *pit = (struct ccci_dpmaif_pit *)dl->pit + dl->pit_rd;
+
+		if (pit->packet_type == CCCI_DPMAIF_DES_MSG) {
+			struct ccci_dpmaif_msg_pit *msg = (struct ccci_dpmaif_msg_pit *)pit;
+
+			dl->msg_pits++;
+			channel = msg->channel_id;
+		} else if (pit->ig) {
+			/* A dummy entry: it only asks the AP to move its index. */
+		} else if (pit->buffer_type) {
+			/* No fragment ring is published, so a fragment is a surprise. */
+			dl->frag_pits++;
+			dl->overrun++;
+			cur_len += pit->data_len;
+		} else {
+			dl->last_bid = pit->buffer_id;
+			if (pit->buffer_id >= dl->bat.entries) {
+				dl->overrun++;
+			} else {
+				if (!cur_len && pit->data_len) {
+					u32 n = min_t(u32, pit->data_len,
+						      CCCI_DPMAIF_DL_SNAP_LEN);
+
+					memcpy(dl->snap,
+					       (u8 *)dl->bat.pool +
+					       (u64)pit->buffer_id * dl->bat.buf_sz, n);
+					dl->snap_len = n;
+				}
+				dpmaif_dl_publish(&dl->bat, pit->buffer_id);
+				bat_add++;
+			}
+			cur_len += pit->data_len;
+		}
+		/* A cleared c_bit marks the last entry of one packet. */
+		if (!pit->c_bit) {
+			dl->pkts++;
+			dl->bytes += cur_len;
+			last_len = cur_len;
+			cur_len = 0;
+			last = true;
+		}
+		dl->pit_rd = (dl->pit_rd + 1) % dl->pit_entries;
+		pit_add++;
+	}
+	if (!pit_add)
+		return;
+	if (last) {
+		dl->last_len = last_len;
+		dl->last_channel = channel;
+	}
+	if (bat_add && dpmaif_dl_add_bat(dpmaif, bat_add))
+		dl->err++;
+	if (dpmaif_dl_add_pit(dpmaif, pit_add))
+		dl->err++;
+}
+
+static bool dpmaif_dl_irq(struct ccci_dpmaif *dpmaif)
+{
+	struct ccci_dpmaif_dl *dl = &dpmaif->dl;
+	void __iomem *misc = dpmaif_ap_misc(dpmaif);
+	u32 status, masked;
+	bool handled = false;
+
+	spin_lock(&dl->lock);
+	if (!dl->started) {
+		spin_unlock(&dl->lock);
+		return false;
+	}
+	/* The modem raises this one when it wants the AP awake. */
+	if (readl(misc + CCCI_DPMAIF_PD_AP_IP_BUSY)) {
+		writel(0xffffffff, misc + CCCI_DPMAIF_PD_AP_IP_BUSY);
+		handled = true;
+	}
+	status = readl(misc + CCCI_DPMAIF_PD_AP_DL_L2TISAR0);
+	masked = readl(dpmaif_ao_ul(dpmaif) + CCCI_DPMAIF_AO_UL_APDL_L2TIMR0);
+	status &= ~masked;
+	if (status) {
+		writel(status, misc + CCCI_DPMAIF_PD_AP_DL_L2TISAR0);
+		dl->irqs++;
+		dl->last_status = status;
+		if (status & CCCI_DPMAIF_DL_INT_MTU_ERR)
+			dl->mtu_err++;
+		if (status & ~CCCI_DPMAIF_DL_INT_QDONE)
+			dl->err++;
+		dpmaif_dl_drain(dpmaif);
+		handled = true;
+	}
+	spin_unlock(&dl->lock);
+	return handled;
+}
+
+static irqreturn_t dpmaif_irq(int irq, void *data)
+{
+	struct ccci_dpmaif *dpmaif = data;
+	bool handled = false;
+
+	if (dpmaif_ul_irq(dpmaif))
+		handled = true;
+	if (dpmaif_dl_irq(dpmaif))
+		handled = true;
+	return handled ? IRQ_HANDLED : IRQ_NONE;
+}
+
+static int dpmaif_dl_ring_alloc(struct ccci_dpmaif *dpmaif,
+				struct ccci_dpmaif_bat_ring *ring,
+				u32 entries, u32 buf_sz)
+{
+	ring->entries = entries;
+	ring->buf_sz = buf_sz;
+	ring->wr = 0;
+	ring->ring = dma_alloc_coherent(dpmaif->dev,
+					entries * sizeof(struct ccci_dpmaif_bat),
+					&ring->ring_dma, GFP_KERNEL);
+	if (!ring->ring)
+		return -ENOMEM;
+	ring->pool = dma_alloc_coherent(dpmaif->dev, (size_t)entries * buf_sz,
+					&ring->pool_dma, GFP_KERNEL);
+	if (!ring->pool) {
+		dma_free_coherent(dpmaif->dev, entries * sizeof(struct ccci_dpmaif_bat),
+				  ring->ring, ring->ring_dma);
+		ring->ring = NULL;
+		return -ENOMEM;
+	}
+	return 0;
+}
+
+static void dpmaif_dl_ring_free(struct ccci_dpmaif *dpmaif,
+				struct ccci_dpmaif_bat_ring *ring)
+{
+	if (ring->pool)
+		dma_free_coherent(dpmaif->dev, (size_t)ring->entries * ring->buf_sz,
+				  ring->pool, ring->pool_dma);
+	if (ring->ring)
+		dma_free_coherent(dpmaif->dev,
+				  ring->entries * sizeof(struct ccci_dpmaif_bat),
+				  ring->ring, ring->ring_dma);
+	ring->pool = NULL;
+	ring->ring = NULL;
+}
+
+/* Drop every hardware pointer before the rings are freed. */
+static void dpmaif_dl_unprogram(struct ccci_dpmaif *dpmaif)
+{
+	struct ccci_dpmaif_dl *dl = &dpmaif->dl;
+	void __iomem *pd = dpmaif_pd_dl(dpmaif);
+	u32 value;
+
+	value = readl(pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON3);
+	value &= ~CCCI_DPMAIF_PIT_EN_MSK;
+	writel(value, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON3);
+	dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_PIT_INIT, CCCI_DPMAIF_DL_PIT_INIT_EN);
+	value = readl(pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
+	value &= ~CCCI_DPMAIF_BAT_EN_MSK;
+	writel(value, pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
+	dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_INIT, CCCI_DPMAIF_DL_BAT_INIT_EN);
+
+	writel(0, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON0);
+	value = readl(pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON1);
+	value &= ~CCCI_DPMAIF_PIT_SIZE_MSK;
+	value &= ~CCCI_DPMAIF_PIT_ADDRH_MSK;
+	writel(value, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON1);
+	writel(0, pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON0);
+	value = readl(pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
+	value &= ~CCCI_DPMAIF_BAT_SIZE_MSK;
+	value &= ~CCCI_DPMAIF_BAT_ADDRH_MSK;
+	writel(value, pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
+	writel(0xffffffff, dpmaif_ap_misc(dpmaif) + CCCI_DPMAIF_PD_AP_IP_BUSY);
+	dl->pit_rd = 0;
+}
+
+static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_entries)
+{
+	struct ccci_dpmaif_dl *dl = &dpmaif->dl;
+	void __iomem *ao_dl = dpmaif_ao_dl(dpmaif);
+	u32 i;
+	int ret;
+
+	if (dl->started)
+		return -EBUSY;
+	/* Below the hardware check thresholds the ring reports a length error. */
+	if (bat_entries <= CCCI_DPMAIF_DL_HW_CHK_BAT_NUM ||
+	    pit_entries <= CCCI_DPMAIF_DL_HW_CHK_PIT_NUM)
+		return -EINVAL;
+	if (bat_entries > CCCI_DPMAIF_BAT_SIZE_MSK || pit_entries > CCCI_DPMAIF_PIT_SIZE_MSK)
+		return -EINVAL;
+	ret = clk_prepare_enable(dpmaif->clk_main);
+	if (ret)
+		return ret;
+	ret = clk_prepare_enable(dpmaif->clk_bus);
+	if (ret)
+		goto out_main;
+	ret = dpmaif_dl_ring_alloc(dpmaif, &dl->bat, bat_entries,
+				   CCCI_DPMAIF_DL_BAT_BUF_SZ);
+	if (ret)
+		goto out_bus;
+	dl->pit_entries = pit_entries;
+	dl->pit = dma_alloc_coherent(dpmaif->dev,
+				     (size_t)pit_entries * CCCI_DPMAIF_DL_PIT_BYTE_SIZE,
+				     &dl->pit_dma, GFP_KERNEL);
+	if (!dl->pit) {
+		ret = -ENOMEM;
+		goto out_bat;
+	}
+
+	memset(dl->pit, 0, (size_t)pit_entries * CCCI_DPMAIF_DL_PIT_BYTE_SIZE);
+	for (i = 0; i < dl->bat.entries; i++)
+		dpmaif_dl_publish(&dl->bat, i);
+	dl->fail_reg = 0;
+	dpmaif_dl_hw_prepare(dpmaif);
+	dpmaif_dl_tune(dpmaif);
+	ret = dpmaif_dl_bat_program(dpmaif, &dl->bat);
+	if (ret)
+		goto out_unprogram;
+	ret = dpmaif_dl_pit_program(dpmaif);
+	if (ret)
+		goto out_unprogram;
+	/*
+	 * Read the index back rather than assume the hardware starts at zero: the
+	 * PIT init already published the ring's capacity, and adding the full ring
+	 * again on top of that would overrun it.
+	 */
+	dl->pit_rd = readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA2) &
+		     CCCI_DPMAIF_DL_PIT_WRIDX_MSK;
+	ret = dpmaif_dl_add_bat(dpmaif, dl->bat.entries);
+	if (ret)
+		goto out_unprogram;
+	spin_lock_irq(&dl->lock);
+	dl->started = true;
+	spin_unlock_irq(&dl->lock);
+	dpmaif_dl_irq_enable(dpmaif);
+	ret = dpmaif_irq_get(dpmaif);
+	if (ret) {
+		spin_lock_irq(&dl->lock);
+		dl->started = false;
+		spin_unlock_irq(&dl->lock);
+		goto out_unprogram;
+	}
+	return 0;
+
+out_unprogram:
+	dpmaif_dl_unprogram(dpmaif);
+	dma_free_coherent(dpmaif->dev, (size_t)pit_entries * CCCI_DPMAIF_DL_PIT_BYTE_SIZE,
+			  dl->pit, dl->pit_dma);
+	dl->pit = NULL;
+out_bat:
+	dpmaif_dl_ring_free(dpmaif, &dl->bat);
+out_bus:
+	clk_disable_unprepare(dpmaif->clk_bus);
+out_main:
+	clk_disable_unprepare(dpmaif->clk_main);
+	return ret;
+}
+
+static void dpmaif_dl_stop(struct ccci_dpmaif *dpmaif)
+{
+	struct ccci_dpmaif_dl *dl = &dpmaif->dl;
+	u32 pit_entries = dl->pit_entries;
+
+	if (!dl->started)
+		return;
+	/* Mask first, then take the lock: a drain must not outlive the rings. */
+	dpmaif_dl_irq_mask(dpmaif);
+	spin_lock_irq(&dl->lock);
+	dl->started = false;
+	spin_unlock_irq(&dl->lock);
+	dpmaif_irq_put(dpmaif);
+	dpmaif_dl_unprogram(dpmaif);
+	dma_free_coherent(dpmaif->dev, (size_t)pit_entries * CCCI_DPMAIF_DL_PIT_BYTE_SIZE,
+			  dl->pit, dl->pit_dma);
+	dl->pit = NULL;
+	dpmaif_dl_ring_free(dpmaif, &dl->bat);
 	clk_disable_unprepare(dpmaif->clk_bus);
 	clk_disable_unprepare(dpmaif->clk_main);
 }
@@ -348,10 +1003,10 @@ static ssize_t layout_show(struct device *dev, struct device_attribute *attr, ch
 	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
 
 	return sysfs_emit(buf,
-			  "ao_ul=%pa pd_ul=%pa pd_md_misc=%pa sram=%pa irq=%d\n"
+			  "ao_ul=%pa pd_ul=%pa pd_md_misc=%pa sram=%pa infra_ao_mem=%pa irq=%d\n"
 			  "clock_main=%s clock_bus=%s\n",
 			  &dpmaif->base[0], &dpmaif->base[1], &dpmaif->base[2],
-			  &dpmaif->base[3], dpmaif->irq,
+			  &dpmaif->base[3], &dpmaif->base[4], dpmaif->irq,
 			  dpmaif->clk_main ? "dpmaif-main" : "none",
 			  dpmaif->clk_bus ? "dpmaif" : "none");
 }
@@ -449,6 +1104,330 @@ out:
 }
 static DEVICE_ATTR_WO(tx_one);
 
+static ssize_t dl_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+	struct ccci_dpmaif_dl *dl = &dpmaif->dl;
+	struct ccci_dpmaif_dl_state state;
+	unsigned long flags;
+
+	memset(&state, 0, sizeof(state));
+	mutex_lock(&dpmaif->lock);
+	spin_lock_irqsave(&dl->lock, flags);
+	state.bat_entries = dl->bat.entries;
+	state.pit_entries = dl->pit_entries;
+	state.bat_buf_sz = dl->bat.buf_sz;
+	state.frg_entries = dl->frg.entries;
+	state.frg_buf_sz = dl->frg.buf_sz;
+	state.pit_rd = dl->pit_rd;
+	state.bat_wr = dl->bat.wr;
+	state.irqs = dl->irqs;
+	state.pkts = dl->pkts;
+	state.bytes = dl->bytes;
+	state.msg_pits = dl->msg_pits;
+	state.frag_pits = dl->frag_pits;
+	state.err = dl->err;
+	state.mtu_err = dl->mtu_err;
+	state.overrun = dl->overrun;
+	state.pit_init_stuck = dl->pit_init_stuck;
+	state.last_status = dl->last_status;
+	state.last_len = dl->last_len;
+	state.last_channel = dl->last_channel;
+	state.last_bid = dl->last_bid;
+	state.snap_len = dl->snap_len;
+	memcpy(state.snap, dl->snap, sizeof(state.snap));
+	spin_unlock_irqrestore(&dl->lock, flags);
+	mutex_unlock(&dpmaif->lock);
+	return ccci_dpmaif_format_dl(&state, buf, PAGE_SIZE);
+}
+static DEVICE_ATTR_RO(dl);
+
+/*
+ * A raw view of every register the downlink path programs. Kept separate from
+ * "dl" so that a ring that refuses to settle can be located from the register
+ * that stayed busy instead of being guessed at.
+ */
+static ssize_t dl_regs_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+	void __iomem *ao_dl = dpmaif_ao_dl(dpmaif);
+	void __iomem *pd = dpmaif_pd_dl(dpmaif);
+	void __iomem *misc = dpmaif_ap_misc(dpmaif);
+	size_t n = 0;
+	u32 base_off, i;
+	int ret;
+
+	mutex_lock(&dpmaif->lock);
+	ret = clk_prepare_enable(dpmaif->clk_main);
+	if (ret)
+		goto out;
+	ret = clk_prepare_enable(dpmaif->clk_bus);
+	if (ret) {
+		clk_disable_unprepare(dpmaif->clk_main);
+		goto out;
+	}
+	n += scnprintf(buf + n, PAGE_SIZE - n, "fail_reg=0x%03x pit_init_stuck=%u\n",
+		       dpmaif->dl.fail_reg, dpmaif->dl.pit_init_stuck);
+	n += scnprintf(buf + n, PAGE_SIZE - n,
+		       "ao_dl: pktinfo0=0x%08x pktinfo1=0x%08x pktinfo2=0x%08x\n",
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_PKTINFO_CON0),
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_PKTINFO_CON1),
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_PKTINFO_CON2));
+	n += scnprintf(buf + n, PAGE_SIZE - n,
+		       "ao_dl: thres=0x%08x frg_thres=0x%08x bat_sta2=0x%08x pit_sta2=0x%08x\n",
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_RDY_CHK_THRES),
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_RDY_CHK_FRG_THRES),
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_BAT_STA2),
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA2));
+	n += scnprintf(buf + n, PAGE_SIZE - n,
+		       "ao_dl: pit_sta0=0x%08x pit_sta1=0x%08x pit_sta3=0x%08x\n",
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA0),
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA1),
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA3));
+	n += scnprintf(buf + n, PAGE_SIZE - n,
+		       "pd_dl: bat_init=0x%08x con0=0x%08x con1=0x%08x add=0x%08x reserve=0x%08x\n",
+		       readl(pd + CCCI_DPMAIF_PD_DL_BAT_INIT),
+		       readl(pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON0),
+		       readl(pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1),
+		       readl(pd + CCCI_DPMAIF_PD_DL_BAT_ADD),
+		       readl(pd + CCCI_DPMAIF_PD_DL_RESERVE_RW));
+	n += scnprintf(buf + n, PAGE_SIZE - n,
+		       "pd_dl: pit_init=0x%08x con0=0x%08x con1=0x%08x con3=0x%08x add=0x%08x\n",
+		       readl(pd + CCCI_DPMAIF_PD_DL_PIT_INIT),
+		       readl(pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON0),
+		       readl(pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON1),
+		       readl(pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON3),
+		       readl(pd + CCCI_DPMAIF_PD_DL_PIT_ADD));
+	n += scnprintf(buf + n, PAGE_SIZE - n,
+		       "ap_misc: cg_en=0x%08x ip_busy=0x%08x dl_sta=0x%08x dl_mask=0x%08x\n",
+		       readl(misc + CCCI_DPMAIF_PD_AP_CG_EN),
+		       readl(misc + CCCI_DPMAIF_PD_AP_IP_BUSY),
+		       readl(misc + CCCI_DPMAIF_PD_AP_DL_L2TISAR0),
+		       readl(dpmaif_ao_ul(dpmaif) + CCCI_DPMAIF_AO_UL_APDL_L2TIMR0));
+	n += scnprintf(buf + n, PAGE_SIZE - n, "infra_ao_mem=0x%08x\n",
+		       readl(dpmaif_infra_ao_mem(dpmaif)));
+	n += scnprintf(buf + n, PAGE_SIZE - n,
+		       "md_misc: rb_pit_init=0x%08x cfg0=0x%08x cfg1=0x%08x\n",
+		       readl(dpmaif->block[2] + 0x100), readl(dpmaif->block[2]),
+		       readl(dpmaif->block[2] + 0x04));
+	/* A flat dump of both downlink windows, eight words per line. */
+	for (base_off = 0; base_off < 0x100; base_off += 32) {
+		n += scnprintf(buf + n, PAGE_SIZE - n, "pd_dl %02x:", base_off);
+		for (i = 0; i < 32; i += 4)
+			n += scnprintf(buf + n, PAGE_SIZE - n, " %08x",
+				       readl(pd + base_off + i));
+		n += scnprintf(buf + n, PAGE_SIZE - n, "\n");
+	}
+	for (base_off = 0; base_off < 0x60; base_off += 32) {
+		n += scnprintf(buf + n, PAGE_SIZE - n, "ao_dl %02x:", base_off);
+		for (i = 0; i < 32; i += 4)
+			n += scnprintf(buf + n, PAGE_SIZE - n, " %08x",
+				       readl(ao_dl + base_off + i));
+		n += scnprintf(buf + n, PAGE_SIZE - n, "\n");
+	}
+	clk_disable_unprepare(dpmaif->clk_bus);
+	clk_disable_unprepare(dpmaif->clk_main);
+	ret = n;
+out:
+	mutex_unlock(&dpmaif->lock);
+	return ret;
+}
+static DEVICE_ATTR_RO(dl_regs);
+
+/*
+ * dl_start takes an optional "<bat entries> <pit entries>". Both defaults stay
+ * above the hardware check thresholds, and nothing is received until the modem
+ * itself publishes a PIT entry.
+ */
+static ssize_t dl_start_store(struct device *dev, struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+	unsigned int bat = CCCI_DPMAIF_DL_BAT_ENTRIES, pit = CCCI_DPMAIF_DL_PIT_ENTRIES;
+	char tmp[32];
+	char *rest = tmp;
+	int ret;
+
+	if (!count || count >= sizeof(tmp))
+		return -EINVAL;
+	memcpy(tmp, buf, count);
+	tmp[count] = '\0';
+	ret = kstrtouint(strsep(&rest, " \t\n"), 10, &bat);
+	if (ret)
+		return ret;
+	if (rest && *rest && *rest != '\n') {
+		ret = kstrtouint(strsep(&rest, " \t\n"), 10, &pit);
+		if (ret)
+			return ret;
+	}
+	mutex_lock(&dpmaif->lock);
+	ret = dpmaif_dl_start(dpmaif, bat, pit);
+	mutex_unlock(&dpmaif->lock);
+	return ret ? ret : count;
+}
+static DEVICE_ATTR_WO(dl_start);
+
+/*
+ * A bounded register window for bring-up. It only reaches the five blocks the
+ * driver already maps, only at word offsets, and only while neither ring is
+ * running, so a mistaken write cannot land in memory the hardware is using.
+ * "peek <block> <offset>" reads, "poke <block> <offset> <value>" writes.
+ */
+static int dpmaif_parse_window(const char *buf, unsigned int *block,
+			       unsigned int *offset, unsigned int *value,
+			       bool need_value)
+{
+	char tmp[48];
+	char *rest = tmp;
+	int ret;
+
+	if (!buf || strlen(buf) >= sizeof(tmp))
+		return -EINVAL;
+	strscpy(tmp, buf, sizeof(tmp));
+	ret = kstrtouint(strsep(&rest, " \t\n"), 10, block);
+	if (ret)
+		return ret;
+	if (!rest)
+		return -EINVAL;
+	ret = kstrtouint(strsep(&rest, " \t\n"), 0, offset);
+	if (ret)
+		return ret;
+	if (*block >= CCCI_DPMAIF_BLOCKS || *offset >= 0x1000 || (*offset & 3))
+		return -EINVAL;
+	if (!need_value)
+		return 0;
+	if (!rest)
+		return -EINVAL;
+	return kstrtouint(strsep(&rest, " \t\n"), 0, value);
+}
+
+static ssize_t peek_store(struct device *dev, struct device_attribute *attr,
+			  const char *buf, size_t count)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+	unsigned int block, offset, value;
+	int ret;
+
+	ret = dpmaif_parse_window(buf, &block, &offset, &value, false);
+	if (ret)
+		return ret;
+	mutex_lock(&dpmaif->lock);
+	ret = clk_prepare_enable(dpmaif->clk_main);
+	if (ret)
+		goto out;
+	ret = clk_prepare_enable(dpmaif->clk_bus);
+	if (ret) {
+		clk_disable_unprepare(dpmaif->clk_main);
+		goto out;
+	}
+	value = readl(dpmaif->block[block] + offset);
+	clk_disable_unprepare(dpmaif->clk_bus);
+	clk_disable_unprepare(dpmaif->clk_main);
+	dpmaif->peek_block = block;
+	dpmaif->peek_offset = offset;
+	dpmaif->peek_value = value;
+	ret = count;
+out:
+	mutex_unlock(&dpmaif->lock);
+	return ret;
+}
+static DEVICE_ATTR_WO(peek);
+
+static ssize_t peek_value_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "block=%u offset=0x%03x value=0x%08x\n",
+			  dpmaif->peek_block, dpmaif->peek_offset, dpmaif->peek_value);
+}
+static DEVICE_ATTR_RO(peek_value);
+
+static ssize_t poke_store(struct device *dev, struct device_attribute *attr,
+			  const char *buf, size_t count)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+	unsigned int block, offset, value;
+	int ret;
+
+	ret = dpmaif_parse_window(buf, &block, &offset, &value, true);
+	if (ret)
+		return ret;
+	mutex_lock(&dpmaif->lock);
+	if (dpmaif->ul.started || dpmaif->dl.started) {
+		ret = -EBUSY;
+		goto out;
+	}
+	ret = clk_prepare_enable(dpmaif->clk_main);
+	if (ret)
+		goto out;
+	ret = clk_prepare_enable(dpmaif->clk_bus);
+	if (ret) {
+		clk_disable_unprepare(dpmaif->clk_main);
+		goto out;
+	}
+	writel(value, dpmaif->block[block] + offset);
+	clk_disable_unprepare(dpmaif->clk_bus);
+	clk_disable_unprepare(dpmaif->clk_main);
+	ret = count;
+out:
+	mutex_unlock(&dpmaif->lock);
+	return ret;
+}
+static DEVICE_ATTR_WO(poke);
+
+/*
+ * The vendor's own recovery for a wedged DPMAIF: drop the memory protection,
+ * pulse both domain resets, and let the caller re-program from scratch. Only
+ * allowed with neither ring running, because it wipes every hardware pointer.
+ */
+static ssize_t reset_store(struct device *dev, struct device_attribute *attr,
+			   const char *buf, size_t count)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+	u32 value;
+	int ret;
+
+	mutex_lock(&dpmaif->lock);
+	if (dpmaif->ul.started || dpmaif->dl.started) {
+		ret = -EBUSY;
+		goto out;
+	}
+	ret = clk_prepare_enable(dpmaif->clk_main);
+	if (ret)
+		goto out;
+	ret = clk_prepare_enable(dpmaif->clk_bus);
+	if (ret) {
+		clk_disable_unprepare(dpmaif->clk_main);
+		goto out;
+	}
+	value = readl(dpmaif_infra_ao_mem(dpmaif));
+	writel(value & ~CCCI_DPMAIF_INFRA_PROT, dpmaif_infra_ao_mem(dpmaif));
+	regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST0_AO, CCCI_DPMAIF_AO_RST_MASK);
+	regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST1_AO, CCCI_DPMAIF_AO_RST_MASK);
+	regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST0_PD, CCCI_DPMAIF_PD_RST_MASK);
+	regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST1_PD, CCCI_DPMAIF_PD_RST_MASK);
+	writel(value, dpmaif_infra_ao_mem(dpmaif));
+	clk_disable_unprepare(dpmaif->clk_bus);
+	clk_disable_unprepare(dpmaif->clk_main);
+	ret = count;
+out:
+	mutex_unlock(&dpmaif->lock);
+	return ret;
+}
+static DEVICE_ATTR_WO(reset);
+
+static ssize_t dl_stop_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+
+	mutex_lock(&dpmaif->lock);
+	dpmaif_dl_stop(dpmaif);
+	mutex_unlock(&dpmaif->lock);
+	return count;
+}
+static DEVICE_ATTR_WO(dl_stop);
+
 static struct attribute *dpmaif_attrs[] = {
 	&dev_attr_sample.attr,
 	&dev_attr_layout.attr,
@@ -456,6 +1435,14 @@ static struct attribute *dpmaif_attrs[] = {
 	&dev_attr_ul_start.attr,
 	&dev_attr_ul_stop.attr,
 	&dev_attr_tx_one.attr,
+	&dev_attr_dl.attr,
+	&dev_attr_dl_regs.attr,
+	&dev_attr_dl_start.attr,
+	&dev_attr_dl_stop.attr,
+	&dev_attr_peek.attr,
+	&dev_attr_peek_value.attr,
+	&dev_attr_poke.attr,
+	&dev_attr_reset.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(dpmaif);
@@ -463,7 +1450,7 @@ ATTRIBUTE_GROUPS(dpmaif);
 static int dpmaif_probe(struct platform_device *pdev)
 {
 	static const char * const names[CCCI_DPMAIF_BLOCKS] = {
-		"ao-ul", "pd-ul", "pd-md-misc", "sram",
+		"ao-ul", "pd-ul", "pd-md-misc", "sram", "infra-ao-mem",
 	};
 	struct ccci_dpmaif *dpmaif;
 	struct device *dev = &pdev->dev;
@@ -474,6 +1461,7 @@ static int dpmaif_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	dpmaif->dev = dev;
 	mutex_init(&dpmaif->lock);
+	spin_lock_init(&dpmaif->dl.lock);
 	for (i = 0; i < CCCI_DPMAIF_BLOCKS; i++) {
 		struct resource *res;
 
@@ -509,6 +1497,7 @@ static void dpmaif_remove(struct platform_device *pdev)
 	struct ccci_dpmaif *dpmaif = platform_get_drvdata(pdev);
 
 	mutex_lock(&dpmaif->lock);
+	dpmaif_dl_stop(dpmaif);
 	dpmaif_ul_stop(dpmaif);
 	mutex_unlock(&dpmaif->lock);
 }
@@ -530,5 +1519,5 @@ static struct platform_driver dpmaif_driver = {
 };
 module_platform_driver(dpmaif_driver);
 
-MODULE_DESCRIPTION("Read-only op6893 DPMAIF reconnaissance");
+MODULE_DESCRIPTION("op6893 DPMAIF uplink and downlink observation path");
 MODULE_LICENSE("GPL");

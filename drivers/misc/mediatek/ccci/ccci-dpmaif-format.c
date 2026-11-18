@@ -43,3 +43,36 @@ ssize_t ccci_dpmaif_format(const struct ccci_dpmaif_sample *sample, char *buf, s
 		return -ENOSPC;
 	return ret;
 }
+
+ssize_t ccci_dpmaif_format_dl(const struct ccci_dpmaif_dl_state *dl, char *buf, size_t size)
+{
+	char snap[2 * CCCI_DPMAIF_DL_SNAP_LEN + 1];
+	int ret;
+	u32 i;
+
+	if (!dl || !buf || !size)
+		return -EINVAL;
+	if (dl->snap_len > CCCI_DPMAIF_DL_SNAP_LEN)
+		return -EINVAL;
+	for (i = 0; i < dl->snap_len; i++)
+		snprintf(snap + 2 * i, 3, "%02x", dl->snap[i]);
+	snap[2 * dl->snap_len] = '\0';
+	ret = snprintf(buf, size,
+		       "bat=%u pit=%u buf=%u frg=%u/%u\n"
+		       "pit_rd=%u bat_wr=%u\n"
+		       "irqs=%u pkts=%u bytes=%u msg_pits=%u frag_pits=%u\n"
+		       "err=%u mtu_err=%u overrun=%u pit_init_stuck=%u last_status=0x%08x\n"
+		       "last_len=%u last_channel=%u last_bid=%u snap_len=%u\n"
+		       "snap=%s\n",
+		       dl->bat_entries, dl->pit_entries, dl->bat_buf_sz,
+		       dl->frg_entries, dl->frg_buf_sz, dl->pit_rd, dl->bat_wr,
+		       dl->irqs, dl->pkts, dl->bytes, dl->msg_pits, dl->frag_pits,
+		       dl->err, dl->mtu_err, dl->overrun, dl->pit_init_stuck,
+		       dl->last_status,
+		       dl->last_len, dl->last_channel, dl->last_bid, dl->snap_len, snap);
+	if (ret < 0)
+		return ret;
+	if ((size_t)ret >= size)
+		return -ENOSPC;
+	return ret;
+}
