@@ -22,10 +22,11 @@
     "consequence": "correlating the fixed pc against the image is not possible on this target"
   },
   "corrected_trigger": {
+    "superseded_by": "evidence/modem-dpmaif-dl-notify-fault.json; the fault is the PIT-update notification written during ring startup, not the ring itself",
     "previous_belief": "the fault needed both rings running; the driver refused to run both as a workaround",
     "measurement": "with the modem released and a PDP context active, arming only the downlink ring and sending no uplink traffic at all reproduces the same fault within 10 seconds",
     "record": "ex_type=49 class=fatal pc=0x91831724 lr=0x91831764 cause=0x40800824 status=0x6002 code=0x305,0x88880302,0xcccccccc sp=0x2904ef00",
-    "consequence": "the uplink ring is not part of the trigger. The one-ring-at-a-time gate does not protect against this, because the downlink ring alone is enough."
+    "consequence": "the uplink ring is not part of the trigger. The one-ring-at-a-time gate does not protect against this fault, because the downlink ring alone is enough. That gate has since been removed: arming the ring without the notification is safe."
   },
   "fault_addresses": {
     "observed": ["0x86fc4c4b", "0xb294f00e", "0xb294f00f", "0x32b4f00f", "0x3296f00f"],

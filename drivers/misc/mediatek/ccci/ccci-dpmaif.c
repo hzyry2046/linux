@@ -12,6 +12,7 @@
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
+#include <linux/dmapool.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
@@ -26,6 +27,7 @@
 #include <linux/spinlock.h>
 #include <linux/string.h>
 #include <linux/sysfs.h>
+#include <linux/vmalloc.h>
 
 #include "ccci-dpmaif.h"
 
@@ -52,12 +54,18 @@ struct ccci_dpmaif_ul {
 	bool started;
 };
 
+/* One packet buffer behind a BAT entry, kept separately so each has its own address. */
+struct ccci_dpmaif_bat_buf {
+	void *cpu;
+	dma_addr_t dma;
+};
+
 /* One BAT ring and the packet buffers its entries point at. */
 struct ccci_dpmaif_bat_ring {
 	void *ring;
 	dma_addr_t ring_dma;
-	void *pool;
-	dma_addr_t pool_dma;
+	struct dma_pool *pool;
+	struct ccci_dpmaif_bat_buf *buf;
 	u32 entries;
 	u32 buf_sz;
 	u32 wr;
@@ -106,8 +114,6 @@ struct ccci_dpmaif {
 	struct mutex lock;
 	struct ccci_dpmaif_ul ul;
 	struct ccci_dpmaif_dl dl;
-	/* Diagnostic override for the one-ring-at-a-time rule; see both_rings. */
-	bool allow_both;
 	/* Last result of the bounded register window. */
 	u32 peek_block;
 	u32 peek_offset;
@@ -358,14 +364,6 @@ static int dpmaif_ul_start(struct ccci_dpmaif *dpmaif, u32 queue)
 
 	if (ul->started)
 		return -EBUSY;
-	/*
-	 * The modem takes a fatal exception at a fixed pc whenever the downlink
-	 * ring is armed against a released modem, with or without uplink traffic,
-	 * so neither ring is safe yet. Only one ring runs at a time until the
-	 * downlink programming is understood; see the bring-up evidence.
-	 */
-	if (dpmaif->dl.started && !dpmaif->allow_both)
-		return -EBUSY;
 	if (queue > 4)
 		return -EINVAL;
 	ret = clk_prepare_enable(dpmaif->clk_main);
@@ -475,7 +473,7 @@ static int dpmaif_dl_update(struct ccci_dpmaif *dpmaif, u32 reg, u32 value)
 static void dpmaif_dl_publish(struct ccci_dpmaif_bat_ring *ring, u32 bid)
 {
 	struct ccci_dpmaif_bat *entry = (struct ccci_dpmaif_bat *)ring->ring + ring->wr;
-	u64 addr = (u64)ring->pool_dma + (u64)bid * ring->buf_sz;
+	u64 addr = (u64)ring->buf[bid].dma;
 
 	entry->buffer_addr_ext = upper_32_bits(addr) & 0xff;
 	entry->p_buffer_addr = lower_32_bits(addr);
@@ -645,8 +643,18 @@ static void dpmaif_dl_tune(struct ccci_dpmaif *dpmaif)
 	writel(value, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON2);
 	writel(CCCI_DPMAIF_DUMMY_PIT_AIDX | CCCI_DPMAIF_MD_DUMMYPIT_EN,
 	       dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_RESERVE_RW);
+	/*
+	 * Stop here, exactly where the same-board startup path stops. Its
+	 * notification word and UL_RESERVE_AO_RW are written only when it adds
+	 * AP PIT entries mid-run, so writing them now would tell the modem about
+	 * an update that did not happen. dl_notify() does that separately.
+	 */
+}
+
+/* Announce an AP PIT index update to the modem, as the vendor does mid-run. */
+static void dpmaif_dl_notify(struct ccci_dpmaif *dpmaif)
+{
 	writel(0xff, dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_RESERVE_AO_RW);
-	/* The modem only learns about the new index through this write. */
 	writel(CCCI_DPMAIF_MD_NOTIFY, dpmaif->block[2] + CCCI_DPMAIF_PD_MD_L1TIMSR0);
 }
 
@@ -728,8 +736,7 @@ static void dpmaif_dl_drain(struct ccci_dpmaif *dpmaif)
 						      CCCI_DPMAIF_DL_SNAP_LEN);
 
 					memcpy(dl->snap,
-					       (u8 *)dl->bat.pool +
-					       (u64)pit->buffer_id * dl->bat.buf_sz, n);
+					       dl->bat.buf[pit->buffer_id].cpu, n);
 					dl->snap_len = n;
 				}
 				dpmaif_dl_publish(&dl->bat, pit->buffer_id);
@@ -811,6 +818,9 @@ static int dpmaif_dl_ring_alloc(struct ccci_dpmaif *dpmaif,
 				struct ccci_dpmaif_bat_ring *ring,
 				u32 entries, u32 buf_sz)
 {
+	u32 i;
+	int ret;
+
 	ring->entries = entries;
 	ring->buf_sz = buf_sz;
 	ring->wr = 0;
@@ -819,28 +829,68 @@ static int dpmaif_dl_ring_alloc(struct ccci_dpmaif *dpmaif,
 					&ring->ring_dma, GFP_KERNEL);
 	if (!ring->ring)
 		return -ENOMEM;
-	ring->pool = dma_alloc_coherent(dpmaif->dev, (size_t)entries * buf_sz,
-					&ring->pool_dma, GFP_KERNEL);
+	/*
+	 * One buffer per entry rather than one flat pool. A pool sized for the
+	 * same-board geometry is a multi-megabyte contiguous allocation, which
+	 * this platform refuses outright, and small buffers also make each entry
+	 * an address of its own instead of an offset into one block.
+	 */
+	ring->pool = dma_pool_create(dev_name(dpmaif->dev), dpmaif->dev, buf_sz,
+				     0, 0);
 	if (!ring->pool) {
-		dma_free_coherent(dpmaif->dev, entries * sizeof(struct ccci_dpmaif_bat),
-				  ring->ring, ring->ring_dma);
-		ring->ring = NULL;
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out_ring;
+	}
+	ring->buf = kvmalloc_array(entries, sizeof(*ring->buf), GFP_KERNEL);
+	if (!ring->buf) {
+		ret = -ENOMEM;
+		goto out_pool;
+	}
+	for (i = 0; i < entries; i++) {
+		ring->buf[i].cpu = dma_pool_alloc(ring->pool, GFP_KERNEL,
+						  &ring->buf[i].dma);
+		if (!ring->buf[i].cpu) {
+			ret = -ENOMEM;
+			goto out_bufs;
+		}
 	}
 	return 0;
+
+out_bufs:
+	while (i--)
+		dma_pool_free(ring->pool, ring->buf[i].cpu, ring->buf[i].dma);
+	kvfree(ring->buf);
+	ring->buf = NULL;
+out_pool:
+	dma_pool_destroy(ring->pool);
+	ring->pool = NULL;
+out_ring:
+	dma_free_coherent(dpmaif->dev, entries * sizeof(struct ccci_dpmaif_bat),
+			  ring->ring, ring->ring_dma);
+	ring->ring = NULL;
+	return ret;
 }
 
 static void dpmaif_dl_ring_free(struct ccci_dpmaif *dpmaif,
 				struct ccci_dpmaif_bat_ring *ring)
 {
-	if (ring->pool)
-		dma_free_coherent(dpmaif->dev, (size_t)ring->entries * ring->buf_sz,
-				  ring->pool, ring->pool_dma);
+	u32 i;
+
+	if (ring->buf) {
+		for (i = 0; i < ring->entries; i++)
+			if (ring->buf[i].cpu)
+				dma_pool_free(ring->pool, ring->buf[i].cpu,
+					      ring->buf[i].dma);
+		kvfree(ring->buf);
+		ring->buf = NULL;
+	}
+	/* NULL is safe here and the buffers above are the only other user. */
+	dma_pool_destroy(ring->pool);
+	ring->pool = NULL;
 	if (ring->ring)
 		dma_free_coherent(dpmaif->dev,
 				  ring->entries * sizeof(struct ccci_dpmaif_bat),
 				  ring->ring, ring->ring_dma);
-	ring->pool = NULL;
 	ring->ring = NULL;
 }
 
@@ -882,9 +932,6 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_
 	int ret;
 
 	if (dl->started)
-		return -EBUSY;
-	/* Only one ring at a time, for the reason given in dpmaif_ul_start(). */
-	if (dpmaif->ul.started && !dpmaif->allow_both)
 		return -EBUSY;
 	/* Below the hardware check thresholds the ring reports a length error. */
 	if (bat_entries <= CCCI_DPMAIF_DL_HW_CHK_BAT_NUM ||
@@ -1223,6 +1270,8 @@ static ssize_t dl_show(struct device *dev, struct device_attribute *attr, char *
 	state.frg_buf_sz = dl->frg.buf_sz;
 	state.pit_rd = dl->pit_rd;
 	state.bat_wr = dl->bat.wr;
+	state.ring_dma = dl->bat.ring_dma;
+	state.buf_dma = dl->bat.entries ? dl->bat.buf[0].dma : 0;
 	state.irqs = dl->irqs;
 	state.pkts = dl->pkts;
 	state.bytes = dl->bytes;
@@ -1531,38 +1580,26 @@ static ssize_t dl_stop_store(struct device *dev, struct device_attribute *attr,
 static DEVICE_ATTR_WO(dl_stop);
 
 /*
- * The one-ring-at-a-time rule exists because arming the downlink ring faults the
- * modem. That fault is not understood yet, so this override exists purely to
- * reproduce it under observation: with it set, the driver lets both rings run
- * and the modem is expected to take a fatal exception.
+ * The modem's PIT-update notification, kept out of ring startup because the
+ * same-board driver only sends it when it adds AP entries to a running ring.
+ * Sending it without having added any entries is what used to fault the modem,
+ * so it stays a separate, explicit operation.
  */
-static ssize_t both_rings_show(struct device *dev, struct device_attribute *attr,
-			       char *buf)
+static ssize_t dl_notify_store(struct device *dev, struct device_attribute *attr,
+			       const char *buf, size_t count)
 {
 	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
-
-	return sysfs_emit(buf, "allow_both=%u\n", dpmaif->allow_both);
-}
-
-static ssize_t both_rings_store(struct device *dev, struct device_attribute *attr,
-				const char *buf, size_t count)
-{
-	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
-	unsigned int value;
 	int ret = 0;
 
-	if (kstrtouint(buf, 0, &value) || value > 1)
-		return -EINVAL;
 	mutex_lock(&dpmaif->lock);
-	/* The rule is only meaningful while neither ring is running. */
-	if (dpmaif->ul.started || dpmaif->dl.started)
-		ret = -EBUSY;
+	if (!dpmaif->dl.started)
+		ret = -ENOTCONN;
 	else
-		dpmaif->allow_both = value;
+		dpmaif_dl_notify(dpmaif);
 	mutex_unlock(&dpmaif->lock);
 	return ret ? ret : count;
 }
-static DEVICE_ATTR_RW(both_rings);
+static DEVICE_ATTR_WO(dl_notify);
 
 static struct attribute *dpmaif_attrs[] = {
 	&dev_attr_sample.attr,
@@ -1580,7 +1617,7 @@ static struct attribute *dpmaif_attrs[] = {
 	&dev_attr_peek_value.attr,
 	&dev_attr_poke.attr,
 	&dev_attr_reset.attr,
-	&dev_attr_both_rings.attr,
+	&dev_attr_dl_notify.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(dpmaif);

@@ -121,6 +121,8 @@ int main(void)
 		dl.frg_buf_sz = 1920;
 		dl.pit_rd = 7;
 		dl.bat_wr = 9;
+		dl.ring_dma = 0x41600000;
+		dl.buf_dma = 0x88000000;
 		dl.irqs = 1;
 		dl.pkts = 2;
 		dl.bytes = 120;
@@ -143,6 +145,8 @@ int main(void)
 		assert((size_t)n == strlen(buf));
 		expect_contains(buf, "bat=256 pit=512 buf=1664 frg=256/1920");
 		expect_contains(buf, "pit_rd=7 bat_wr=9");
+		/* The ring and buffer addresses are reported so reachability is checkable. */
+		expect_contains(buf, "ring_dma=0x41600000 buf_dma=0x88000000");
 		expect_contains(buf, "irqs=1 pkts=2 bytes=120 msg_pits=3 frag_pits=4");
 		expect_contains(buf, "err=0 mtu_err=0 overrun=0 pit_init_stuck=0");
 		expect_contains(buf, "last_status=0x00000001");

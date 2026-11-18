@@ -1268,31 +1268,50 @@ DPMAIF 的上行载荷就是**裸 IP 报文**，`lhif_header` 属于 CCIF/CLDMA 
 
 所以「描述符被消费」只证明传输层收下了描述符，**不证明 MD 转发了这个包**。
 
-## 3. 下行环本身就会打死 MD（上一版结论已修正）
+## 3. 下行崩溃的根因：是那条通知，不是环
 
-上一版把崩溃归因于「两个环同时运行」。用 `both_rings` 诊断开关复现后，这个归因是错的：
-
-**只要下行环装上、且 MD 已放行，崩溃就会发生，完全不需要上行流量。**
+上一版把崩溃归因于「两个环同时运行」，再上一版归因于「下行环本身」。两次都错。真凶是
+`dl_start()` 在**没有任何 AP PIT 条目被加入**的情况下就发了 MD 的索引更新通知：
 
 ```
-offender=MCU ex_type=49 class=fatal pc=0x91831724 lr=0x91831764
-cause=0x40800824 status=0x6002 code=0x305,0x88880302,0xcccccccc
-addr 每次不同（0x86fc4c4b / 0xb294f00e / 0xb294f00f / 0x32b4f00f / 0x3296f00f）
+UL_RESERVE_AO_RW (PD_UL+0xac) = 0xff
+PD_MD_MISC+0x1c               = bit 0
 ```
 
-| 场景 | 结果 |
-|---|---|
-| 已放行 + PDP 激活，只装下行环、不发任何上行 | **10 秒内出现上述致命异常** |
-| 已放行、无 PDP，只装下行环 | 30 秒内出现另一种 MD 断言：`mcu/l1/cl1/common/cl1fr.c:973`，`para=0x13,0x13,0x20` |
-| 下行环已装 + 上行发数据 | 另见过一次 `mcu/protocol/lte_sec/errc/lcel/protect/errc_lcel_paging_protect.c:591` 断言 |
+同板驱动只在 `drv2_dl_add_apit_num()`（真正往运行中的环里加 AP 条目那条路径）才写这两处；
+它的启动路径 `ccci_drv2_rxq_hw_int_apit()` → `drv2_dl_set_apit_idx()` 只写 `PIT_INIT_CON3`
+（AP 索引）和 `UL_RESERVE_RW`（索引 | `MD_DUMMYPIT_EN`）。
 
-所以上行不是触发条件，**互斥闸门并不保护任何东西**——下行环单独就足够。闸门保留只是
-因为两个环都还不能用，不是因为它挡住了这个故障。
+### 怎么定的
 
-`ex_type=49` 是 `0x31 = SYS_FATALERR_EXT_TASK_EXCEPTION`，即 MD 任务主动上报的 fatal，
-不是 CPU 原生异常，所以固定 pc 更可能是「上报点」。故障地址全部未对齐且都落在普通 AP
-内存里（不在 `lk_regions` 报的两个 MD 保留 bank 内），`cause` 解出来是 MemManage
-DACCVIOL + 栈解压错误 + 非对齐 + HFSR FORCED —— 即 MPU 拒绝访问后再次出错。
+把通知从启动路径里拆成独立操作，一张镜像上就能做 A/B：
+
+| 阶段 | 动作 | 结果 |
+|---|---|---|
+| A | 只装下行环，不发通知，等 120 秒 | **不崩**，环一直装着，MD 停在 HS2、PDP 在线 |
+| B | 在已装好的环上单独发通知 | **60 秒内**出现致命异常（同 pc/lr/cause/code，`addr=0x9294f00e`） |
+
+所以装环是安全的，通知是触发条件。
+
+### 缓冲区地址与故障无关
+
+把下行缓冲从一整块改成每个 BAT 条目一个 `dma_pool` 缓冲后，`ring_dma=0x41600000`、
+`buf_dma=0x41601000` 完全变了，故障地址却仍是 `0xb294f00f`（与旧分配那次一模一样）。
+所以「MD 访问不到我们发布的缓冲」这个假设不成立。
+
+### 两个环现在可以共存
+
+下行已装（不发通知）+ 上行启动并发 5 帧（2 个 IPv4 回显、3 个 DNS 查询），全部被消费
+（`sent=5 done=5 err=0 last_status=0x1`），MD 无异常。因此**互斥闸门已删除**，`both_rings`
+诊断开关一并去掉——它当初的依据就是这条通知缺陷。
+
+### 但仍然没有任何下行
+
+两个环都健康、PDP 在线、上行帧被消费，`pit_rd` 仍停在 1024，`irqs=0`、`pkts=0`，持续 90 秒。
+DNS 查询这种通常必有回包的报文也一样。所以要么 MD 没有转发这些上行帧，要么下行环还不能
+交付；「描述符被消费」这一点无法区分两者。
+
+`dl_notify` 保留为独立入口（将来真正加 AP 条目时要用），注释写明无更新时发送会让 MD 崩。
 
 ### 为什么 pc 反查不了
 
@@ -1312,22 +1331,14 @@ DACCVIOL + 栈解压错误 + 非对齐 + HFSR FORCED —— 即 MPU 拒绝访问
 60 秒内出现。所以重映射确实缺，但**要么基址不是 0x40000000，要么它不是这次故障的原因**。
 
 另有一处实质差异：厂商 MTU 写 3080（`3*1024+8`）、`BAT_BID_MAXCNT=3`，我们写 1664、1
-（因为去掉了分片环）。两者都是引擎参数，而故障在 MD CPU 侧，不足以解释。
+（因为去掉了分片环）。两者都是引擎参数，和上面那个通知缺陷无关，仍是未验证的差异。
 
-真机验证过的闸门行为（保留为默认，非修复）：
-
-```
-dl_start 允许 → ul_start 被拒(-EBUSY) → dl_stop → ul_start 允许
-→ dl_start 被拒(-EBUSY) → ul_stop → dl_start 允许
-```
-
-`both_rings=1` 可绕过闸门，仅供观察下复现该故障。
-
-### 一个分配限制
+### 一个分配限制（已解决）
 
 本板 `dma_alloc_coherent` 拒绝 4096×1664（6.8 MB）与 8192×1664（13.6 MB），报 `-ENOMEM`，
-而 256×1664（426 KB）成功（当时空闲 10.4 GB）。所以要测厂商的 8192 项 BAT 几何，必须改
-成页分配 + `dma_map_single`，也就是厂商用 `__dev_alloc_skb` 的做法。
+而 256×1664（426 KB）成功（当时空闲 10.4 GB）。原因是它们要求 order-11/12 的连续分配。
+现在下行缓冲改成每个 BAT 条目一个 `dma_pool` 缓冲，这个限制不再存在，厂商的 8192 项几何
+可以测了——只是先撞到了通知缺陷，还没实际跑过。
 
 ## 4. 工具
 
@@ -1338,5 +1349,6 @@ dl_start 允许 → ul_start 被拒(-EBUSY) → dl_stop → ul_start 允许
 - `ssh-wifi.sh`：USB gadget 掉线时用 Wi-Fi SSH（`10.65.84.170`）。两次 USB 消失期间
   设备一直在线，说明掉的是 USB gadget，不是设备。
 
-证据见 `evidence/modem-dpmaif-dl-data-attempt.json`；崩溃归因修正与新增诊断开关见
-`evidence/modem-dpmaif-md-fault-cause.json`。
+证据见 `evidence/modem-dpmaif-dl-data-attempt.json`；崩溃归因修正见
+`evidence/modem-dpmaif-md-fault-cause.json`；通知缺陷的 A/B 与根因见
+`evidence/modem-dpmaif-dl-notify-fault.json`。

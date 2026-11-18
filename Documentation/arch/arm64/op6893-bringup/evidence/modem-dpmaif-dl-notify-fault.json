@@ -1,0 +1,46 @@
+{
+  "feature": "op6893 DPMAIF downlink: the modem fault is the PIT-update notification, not the ring",
+  "date": "2026-11-18",
+  "image": {
+    "identity": "a85d6bbf7031",
+    "release": "7.3.0-op6893-d1-a85d6bbf7031+",
+    "boot_sha256": "b3f2c170f0c1a7aee59255a62e70743ccd5c029b3f9e147c149f7c22e0c10288",
+    "previous_image": "25d59992d691"
+  },
+  "root_cause": {
+    "what": "dl_start() wrote the modem PIT-update notification even though no AP PIT entry had been added: UL_RESERVE_AO_RW (PD_UL+0xac) = 0xff followed by PD_MD_MISC+0x1c = bit 0",
+    "why_it_is_wrong": "the same-board driver sends those two writes only from drv2_dl_add_apit_num(), the path that actually adds AP entries to a running ring. Its startup path ccci_drv2_rxq_hw_int_apit() -> drv2_dl_set_apit_idx() writes only PIT_INIT_CON3 (the AP index) and UL_RESERVE_RW (index | MD_DUMMYPIT_EN)",
+    "effect": "the modem is told an index update happened when nothing changed, and its handler faults"
+  },
+  "isolation": {
+    "method": "the notification was split out of ring startup into its own sysfs operation, so one image can run both phases",
+    "phase_a": "arm the downlink ring only, send no notification, wait 120s: no exception, ring stays armed, modem stays at HS2 with an active PDP context",
+    "phase_b": "send the notification on the already armed ring: fatal within 60s",
+    "phase_b_record": "ex_type=49 class=fatal pc=0x91831724 lr=0x91831764 cause=0x40800824 status=0x6002 code=0x305,0x88880302,0xcccccccc addr=0x9294f00e",
+    "conclusion": "arming the ring is safe; the notification is the trigger"
+  },
+  "buffer_address_is_not_involved": {
+    "measurement": "after the downlink buffers were moved from one flat pool to one dma_pool buffer per BAT entry, ring_dma=0x41600000 and buf_dma=0x41601000, yet the fault address stayed at 0xb294f00f, the same value seen with the old allocation",
+    "meaning": "the fault address does not derive from the buffers the driver publishes, so the earlier hypothesis that the modem cannot reach them is not supported"
+  },
+  "both_rings_now_coexist": {
+    "test": "downlink armed (no notification) plus uplink started on the mapped queue, five frames sent (two IPv4 echo requests, three DNS queries), all consumed: sent=5 done=5 irqs=5 err=0 last_status=0x1",
+    "modem": "no exception, stayed at HS2",
+    "consequence": "the one-ring-at-a-time rule was based on the notification bug and has been removed, together with the both_rings override"
+  },
+  "still_no_downlink": {
+    "measurement": "with both rings healthy and a live PDP context, pit_rd stayed at 1024, irqs=0, pkts=0 over 90s after the uplink frames were consumed",
+    "tried": ["IPv4 ICMP echo to 8.8.8.8 and 114.114.114.114", "UDP DNS queries to 114.114.114.114, 223.5.5.5 and 8.8.8.8"],
+    "note": "a DNS query normally produces a reply, so the absence is evidence that either the modem does not forward these uplink frames or the downlink ring cannot deliver yet; the transport-level completion alone does not distinguish the two"
+  },
+  "allocation_change": {
+    "what": "the downlink packet buffers are now one dma_pool buffer per BAT entry instead of one flat coherent pool",
+    "why": "a pool sized for the same-board geometry is a multi-megabyte contiguous allocation, which this platform refuses with -ENOMEM at 6.8 MB and 13.6 MB, so the vendor 8192-entry geometry could not be tested at all",
+    "status": "in place; the vendor geometry has not been exercised yet because the fault was found first"
+  },
+  "not_proven": [
+    "whether the modem forwards the uplink frames at all",
+    "why no downlink PIT entry is ever written, now that the ring can be armed safely",
+    "the meaning of code1=0x305 and of the fault address low half 0xf00e/0xf00f, which recurs across runs"
+  ]
+}

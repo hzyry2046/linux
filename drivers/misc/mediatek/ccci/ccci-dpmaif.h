@@ -316,6 +316,9 @@ struct ccci_dpmaif_dl_state {
 	u32 frg_buf_sz;
 	u32 pit_rd;
 	u32 bat_wr;
+	/* Where the ring and its first buffer actually landed, for reachability. */
+	u64 ring_dma;
+	u64 buf_dma;
 	u32 irqs;
 	u32 pkts;
 	u32 bytes;

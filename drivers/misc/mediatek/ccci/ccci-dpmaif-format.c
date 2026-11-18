@@ -60,12 +60,15 @@ ssize_t ccci_dpmaif_format_dl(const struct ccci_dpmaif_dl_state *dl, char *buf, 
 	ret = snprintf(buf, size,
 		       "bat=%u pit=%u buf=%u frg=%u/%u\n"
 		       "pit_rd=%u bat_wr=%u\n"
+		       "ring_dma=%#llx buf_dma=%#llx\n"
 		       "irqs=%u pkts=%u bytes=%u msg_pits=%u frag_pits=%u\n"
 		       "err=%u mtu_err=%u overrun=%u pit_init_stuck=%u last_status=0x%08x\n"
 		       "last_len=%u last_channel=%u last_bid=%u snap_len=%u\n"
 		       "snap=%s\n",
 		       dl->bat_entries, dl->pit_entries, dl->bat_buf_sz,
 		       dl->frg_entries, dl->frg_buf_sz, dl->pit_rd, dl->bat_wr,
+		       (unsigned long long)dl->ring_dma,
+		       (unsigned long long)dl->buf_dma,
 		       dl->irqs, dl->pkts, dl->bytes, dl->msg_pits, dl->frag_pits,
 		       dl->err, dl->mtu_err, dl->overrun, dl->pit_init_stuck,
 		       dl->last_status,
