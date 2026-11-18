@@ -42,6 +42,11 @@
 					 CCCI_DPMAIF_UL_INT_ERR_MSK | \
 					 CCCI_DPMAIF_UL_INT_MD_NOTREADY_MSK | \
 					 CCCI_DPMAIF_UL_INT_MD_PWR_NOTREADY_MSK)
+/* The uplink engine reports idle in bits 31:26 of its debug status word. */
+#define CCCI_DPMAIF_PD_UL_DBG_STA2	0x88
+#define CCCI_DPMAIF_UL_STS_CUR_SHIFT	26
+#define CCCI_DPMAIF_UL_IDLE_STS_MSK	0x3f
+#define CCCI_DPMAIF_UL_IDLE_STS		0x01
 #define CCCI_DPMAIF_UL_DRB_ENTRIES	2048
 #define CCCI_DPMAIF_UL_DRB_WORDS	2
 #define CCCI_DPMAIF_UL_PAYLOAD_MAX	1600
@@ -174,6 +179,14 @@
  * the reserve word in the uplink block, which the modem reads as a notification.
  */
 #define CCCI_DPMAIF_UL_RESERVE_RW	0xa8
+#define CCCI_DPMAIF_UL_RESERVE_AO_RW	0xac
+/*
+ * The modem-side reorder unit is told about a changed AP index through this
+ * status word; the same-board driver writes it after every index update and
+ * says so explicitly in a comment.
+ */
+#define CCCI_DPMAIF_PD_MD_L1TIMSR0	0x1c
+#define CCCI_DPMAIF_MD_NOTIFY		BIT(0)
 #define CCCI_DPMAIF_DUMMY_PIT_AIDX	1024
 #define CCCI_DPMAIF_MD_DUMMYPIT_EN	BIT(31)
 

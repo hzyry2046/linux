@@ -47,6 +47,8 @@ struct ccci_dpmaif_ul {
 	u32 err;
 	u32 not_ready;
 	u32 last_status;
+	/* Message-descriptor metadata the modem reads for this packet. */
+	u32 network_type;
 	bool started;
 };
 
@@ -189,6 +191,7 @@ static void dpmaif_ul_unprogram(struct ccci_dpmaif *dpmaif)
 {
 	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
 	void __iomem *ao = dpmaif_ao_ul(dpmaif);
+	u32 count = 0;
 	u32 value;
 
 	value = readl(ao + CCCI_DPMAIF_AO_UL_CHNL_ARB0);
@@ -197,6 +200,17 @@ static void dpmaif_ul_unprogram(struct ccci_dpmaif *dpmaif)
 	writel(value, ao + CCCI_DPMAIF_AO_UL_CHNL_ARB0);
 	/* Mask every uplink event again; only this driver unmasked them. */
 	writel(CCCI_DPMAIF_UL_INT_EN, ao + CCCI_DPMAIF_AO_UL_AP_L2TIMSR0);
+	/*
+	 * Wait for the engine to go idle before the ring is taken away. Tearing it
+	 * down while the modem still holds descriptors faults the modem itself,
+	 * which is why the same-board driver polls its queues before stopping.
+	 */
+	while (((readl(dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_PD_UL_DBG_STA2) >>
+		 CCCI_DPMAIF_UL_STS_CUR_SHIFT) & CCCI_DPMAIF_UL_IDLE_STS_MSK) !=
+	       CCCI_DPMAIF_UL_IDLE_STS) {
+		if (++count >= CCCI_DPMAIF_UL_POLL_LIMIT)
+			break;
+	}
 	/*
 	 * Drop the ring base and size before the memory is freed: the hardware
 	 * would otherwise keep DMAing from a buffer that no longer belongs to us.
@@ -274,6 +288,7 @@ static int dpmaif_ul_send(struct ccci_dpmaif *dpmaif, u32 channel_id)
 	msg->c_bit = 1;
 	msg->packet_len = size;
 	msg->channel_id = channel_id;
+	msg->network_type = ul->network_type & 0x7;
 	ul->wr = (ul->wr + 1) % ul->entries;
 
 	pd = (struct ccci_dpmaif_drb_pd *)ul->drb + ul->wr;
@@ -340,6 +355,13 @@ static int dpmaif_ul_start(struct ccci_dpmaif *dpmaif, u32 queue)
 	int ret;
 
 	if (ul->started)
+		return -EBUSY;
+	/*
+	 * The modem faults at a fixed pc when uplink data flows while the downlink
+	 * ring is armed, and neither the vendor's idle wait nor an explicit stop
+	 * order prevents it. Until that is understood only one ring runs at a time.
+	 */
+	if (dpmaif->dl.started)
 		return -EBUSY;
 	if (queue > 4)
 		return -EINVAL;
@@ -620,6 +642,9 @@ static void dpmaif_dl_tune(struct ccci_dpmaif *dpmaif)
 	writel(value, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON2);
 	writel(CCCI_DPMAIF_DUMMY_PIT_AIDX | CCCI_DPMAIF_MD_DUMMYPIT_EN,
 	       dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_RESERVE_RW);
+	writel(0xff, dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_RESERVE_AO_RW);
+	/* The modem only learns about the new index through this write. */
+	writel(CCCI_DPMAIF_MD_NOTIFY, dpmaif->block[2] + CCCI_DPMAIF_PD_MD_L1TIMSR0);
 }
 
 /*
@@ -855,6 +880,9 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_
 
 	if (dl->started)
 		return -EBUSY;
+	/* Only one ring at a time, for the reason given in dpmaif_ul_start(). */
+	if (dpmaif->ul.started)
+		return -EBUSY;
 	/* Below the hardware check thresholds the ring reports a length error. */
 	if (bat_entries <= CCCI_DPMAIF_DL_HW_CHK_BAT_NUM ||
 	    pit_entries <= CCCI_DPMAIF_DL_HW_CHK_PIT_NUM)
@@ -1039,16 +1067,18 @@ static ssize_t ul_start_store(struct device *dev, struct device_attribute *attr,
 {
 	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
 	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
-	unsigned int queue = 0, payload = 64;
+	unsigned int queue = 0, payload = 64, net_type = 0;
 	int ret;
 
-	if (sscanf(buf, "%u %u", &queue, &payload) < 1)
+	ret = sscanf(buf, "%u %u %u", &queue, &payload, &net_type);
+	if (ret < 1)
 		return -EINVAL;
-	if (payload < 14 || payload > CCCI_DPMAIF_UL_PAYLOAD_MAX)
+	if (payload < 14 || payload > CCCI_DPMAIF_UL_PAYLOAD_MAX || net_type > 7)
 		return -EINVAL;
 	mutex_lock(&dpmaif->lock);
 	ul->entries = CCCI_DPMAIF_UL_DRB_ENTRIES;
 	ul->payload_len = payload;
+	ul->network_type = net_type;
 	ret = dpmaif_ul_start(dpmaif, queue);
 	mutex_unlock(&dpmaif->lock);
 	return ret ? ret : count;
@@ -1103,6 +1133,75 @@ out:
 	return ret ? ret : count;
 }
 static DEVICE_ATTR_WO(tx_one);
+
+/*
+ * Send an exact byte string up the uplink. The payload of a DPMAIF uplink
+ * packet is the bare IP packet; the channel in the message descriptor is the
+ * CCMNI index, not the AT channel. Keeping the bytes caller-supplied means the
+ * packet can be built and checked on the host instead of in the driver.
+ */
+static int dpmaif_hexval(char c)
+{
+	if (c >= '0' && c <= '9')
+		return c - '0';
+	if (c >= 'a' && c <= 'f')
+		return c - 'a' + 10;
+	if (c >= 'A' && c <= 'F')
+		return c - 'A' + 10;
+	return -1;
+}
+
+static ssize_t tx_hex_store(struct device *dev, struct device_attribute *attr,
+			    const char *buf, size_t count)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
+	const char *hex = buf;
+	unsigned int channel = 0;
+	bool seen = false;
+	u8 *frame;
+	size_t len, i;
+	int ret;
+
+	/* Parsed in place: the byte string can be the whole payload. */
+	while (*hex == ' ' || *hex == '\t')
+		hex++;
+	while (*hex >= '0' && *hex <= '9') {
+		channel = channel * 10 + (*hex - '0');
+		seen = true;
+		if (++hex - buf > 4)
+			return -EINVAL;
+	}
+	if (!seen || channel > 4)
+		return -EINVAL;
+	while (*hex == ' ' || *hex == '\t')
+		hex++;
+	len = strcspn(hex, "\n");
+	if (!len || (len & 1) || len / 2 > CCCI_DPMAIF_UL_PAYLOAD_MAX)
+		return -EINVAL;
+	mutex_lock(&dpmaif->lock);
+	if (!ul->started) {
+		ret = -ENOTCONN;
+		goto out;
+	}
+	frame = ul->payload;
+	for (i = 0; i < len; i += 2) {
+		int hi = dpmaif_hexval(hex[i]);
+		int lo = dpmaif_hexval(hex[i + 1]);
+
+		if (hi < 0 || lo < 0) {
+			ret = -EINVAL;
+			goto out;
+		}
+		frame[i / 2] = (u8)((hi << 4) | lo);
+	}
+	ul->payload_len = len / 2;
+	ret = dpmaif_ul_send(dpmaif, channel);
+out:
+	mutex_unlock(&dpmaif->lock);
+	return ret ? ret : count;
+}
+static DEVICE_ATTR_WO(tx_hex);
 
 static ssize_t dl_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
@@ -1435,6 +1534,7 @@ static struct attribute *dpmaif_attrs[] = {
 	&dev_attr_ul_start.attr,
 	&dev_attr_ul_stop.attr,
 	&dev_attr_tx_one.attr,
+	&dev_attr_tx_hex.attr,
 	&dev_attr_dl.attr,
 	&dev_attr_dl_regs.attr,
 	&dev_attr_dl_start.attr,

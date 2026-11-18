@@ -1,0 +1,73 @@
+{
+  "feature": "op6893 DPMAIF downlink: attempts to make the modem deliver a packet, and the fault that stops it",
+  "date": "2026-11-18",
+  "image": {
+    "identity": "a5ab6730de93",
+    "release": "7.3.0-op6893-d1-a5ab6730de93+",
+    "boot_sha256": "5986d4d02519c0afcb0bb1306ba3abd74d7b294bd5715ccba82ae1445f5575a7",
+    "note": "one flash reported a fastboot failure after 'Writing boot OKAY'; the device was re-flashed with the same image and booted, and the release string was read back over Wi-Fi SSH"
+  },
+  "uplink_payload_format": {
+    "source": "eccci/hif/ccci_dpmaif_com.c dpmaif_txq_set_skb_data_to_drb() and ccmni.c ccmni_start_xmit()",
+    "finding": "the DPMAIF uplink payload is the bare IP packet; the lhif_header belongs to the CCIF/CLDMA paths. Per-packet metadata lives in the message descriptor: channel_id is the CCMNI index (struct ccci_rpc_queue_mapping documents net_if as 'ccmni index'), network_type comes from the RIL's SIOCSNETTYPE and defaults to 0.",
+    "queue_mapping": "port_rpc.c ccci_rpc_remap_queue(): lhif_q 2 (LHIF_HWQ_AP_UL_Q0) maps to MD_HW_NORMAL_Q = 0, lhif_q 3 maps to MD_HW_IMS_Q = 3. Both values were observed on hardware, so neither the CCMNI index nor the queue can be hardcoded."
+  },
+  "what_was_tried": [
+    {
+      "attempt": "IPv4 ICMP echo to the PDN's DNS server, source = the assigned PDP address",
+      "result": "uplink descriptor consumed (sent=1 done=1 irqs=1 err=0), no downlink entry, AO_DL_PIT_STA2 write index stayed at its initial value"
+    },
+    {
+      "attempt": "IPv6 ICMP echo to the PDN gateway, and to a public IPv6 resolver",
+      "result": "same: uplink consumed, no downlink"
+    },
+    {
+      "attempt": "IPv6 ICMP echo to the PDP's own address",
+      "result": "same"
+    },
+    {
+      "attempt": "network_type swept over 0, 1, 2 and 3",
+      "result": "no difference; the write index never moved"
+    },
+    {
+      "attempt": "vendor notification of the AP PIT index (PD_UL+0xAC = 0xff then PD_MD_MISC+0x1C = bit 0, after the same-board drv2_dl_add_apit_num tail)",
+      "result": "no difference"
+    }
+  ],
+  "modem_fault": {
+    "what": "the modem takes a fatal exception while uplink data flows with the downlink ring armed",
+    "record": "offender=MCU ex_type=49 class=fatal pc=0x91831724 lr=0x91831764 cause=0x40800824 status=0x6002, addr varies between runs (0x86fc4c4b, 0xb294f00e, 0x32b4f00f)",
+    "reproducibility": "fixed pc, within three uplink start/stop cycles, twice on separate boots",
+    "isolation": [
+      "downlink ring alone, started and stopped four times: modem stays up, no exception",
+      "uplink ring alone, started and stopped four times, including sending a packet: modem stays up, no exception",
+      "downlink ring armed plus uplink start/data/stop: exception appears",
+      "one uplink packet with the downlink armed survived once, so the fault is not triggered by the first packet deterministically"
+    ],
+    "not_prevented_by": [
+      "waiting for the uplink engine to report idle before tearing the ring down (PD_UL_DBG_STA2 bits 31:26, the same-board check)",
+      "refusing ul_stop while the downlink ring is running"
+    ],
+    "consequence": "the driver now refuses to run both rings at once; this is a mitigation, not a fix. The root cause is on the modem side and needs evidence the AP cannot obtain."
+  },
+  "guard_verified_on_hardware": {
+    "dl_start": "allowed",
+    "ul_start_while_dl_active": "refused (-EBUSY)",
+    "ul_start_after_dl_stop": "allowed",
+    "dl_start_while_ul_active": "refused (-EBUSY)",
+    "dl_start_after_ul_stop": "allowed",
+    "modem_after": "state=4 error=0, no exception record"
+  },
+  "not_proven": [
+    "whether the uplink packets reach the network at all: descriptor consumption proves the transport layer took them, not that the modem forwarded them",
+    "whether the modem writes downlink entries when it does receive something, because no packet was ever received",
+    "the root cause of the modem fault",
+    "fragment reassembly and delivery to the network stack: the drain still only keeps a bounded head and recycles buffers"
+  ],
+  "tooling_added": {
+    "tx_hex": "sends an exact caller-supplied byte string up the uplink, so the packet can be built and checksum-verified on the host instead of in the driver",
+    "peek_poke_reset": "bounded register window over the five mapped blocks, refused while a ring runs, plus the vendor's AO/PD reset sequence; these turned each register hypothesis from a five-minute flash into seconds",
+    "packet_builder": "modem-ip6-probe.py builds and self-verifies IPv4 and IPv6 echo requests (in the non-git build workspace)",
+    "wifi_ssh": "ssh-wifi.sh reaches the device over Wi-Fi when the USB gadget drops off the bus; the device stayed reachable at 10.65.84.170 during both USB disappearances"
+  }
+}

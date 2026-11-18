@@ -1240,3 +1240,70 @@ MD 仍是 `state=4`，`AT+CSQ` 照常应答。
 分片重组未实现；drain 只把有界头部复制进快照并回收缓冲，不把包交给协议栈。
 
 证据见 `evidence/modem-dpmaif-dl-ring.json`。
+
+# 下行数据尝试与一个 MD 侧故障（2026-11-18）
+
+环装上之后，下一步是让 MD 真的往下发一个包。这一轮把能想到的变量都试了，
+一个包也没下来；并且发现了一个会打死 MD 的组合。
+
+## 1. 上行载荷格式（已从源码确认）
+
+DPMAIF 的上行载荷就是**裸 IP 报文**，`lhif_header` 属于 CCIF/CLDMA 路径。
+每包元数据在消息描述符里：`channel_id` 是 **CCMNI 索引**（`struct ccci_rpc_queue_mapping`
+的注释写明 `net_if` 就是 ccmni index），`network_type` 来自 RIL 的 `SIOCSNETTYPE`，
+默认 0。
+
+队列映射同样不能写死：`ccci_rpc_remap_queue()` 把 `lhif_q=2`（`LHIF_HWQ_AP_UL_Q0`）
+映射到 `MD_HW_NORMAL_Q = 0`，`lhif_q=3` 映射到 `MD_HW_IMS_Q = 3`。两种取值真机上都出现过。
+
+## 2. 试过但都没有回包
+
+| 尝试 | 结果 |
+|---|---|
+| IPv4 ICMP echo 到 PDN 的 DNS，源地址用 PDP 分配到的地址 | 上行描述符被消费（`sent=1 done=1 err=0`），下行 PIT 写索引不动 |
+| IPv6 ICMP echo 到网关、到公网解析器 | 同上 |
+| IPv6 ICMP echo 到自己的 PDP 地址 | 同上 |
+| `network_type` 扫 0/1/2/3 | 无差别 |
+| 补上厂商的 AP 索引通知（`PD_UL+0xAC=0xff`，再 `PD_MD_MISC+0x1C=bit0`） | 无差别 |
+
+所以「描述符被消费」只证明传输层收下了描述符，**不证明 MD 转发了这个包**。
+
+## 3. 一个会打死 MD 的组合
+
+**下行环已装上时，上行环活动（发数据或反复 start/stop）会让 MD 致命异常**：
+
+```
+offender=MCU ex_type=49 class=fatal pc=0x91831724 lr=0x91831764
+cause=0x40800824 status=0x6002   addr 每次不同（0x86fc4c4b / 0xb294f00e / 0x32b4f00f）
+```
+
+pc 固定，三次以内可复现，两次不同启动都出现。隔离结果：
+
+| 场景 | 结果 |
+|---|---|
+| 只有下行环，start/stop 四次 | MD 存活，无异常 |
+| 只有上行环，start/stop 四次（含发一个包） | MD 存活，无异常 |
+| 下行环已装 + 上行 start/数据/stop | 出现异常 |
+| 下行已装 + 只发一个上行包 | 有一次存活，所以不是「第一个包必崩」 |
+
+**没有阻止它的做法**：按厂商方式等上行引擎 idle（`PD_UL_DBG_STA2` bits 31:26）再拆环；
+在下行运行时拒绝 `ul_stop`。两者都没用。
+
+因此现在驱动**拒绝两个环同时运行**。这是**规避，不是修复**——根因在 MD 侧，AP 侧拿不到
+证据。真机验证过的闸门行为：
+
+```
+dl_start 允许 → ul_start 被拒(-EBUSY) → dl_stop → ul_start 允许
+→ dl_start 被拒(-EBUSY) → ul_stop → dl_start 允许；MD 始终 state=4、无异常
+```
+
+## 4. 工具
+
+- `tx_hex`：按调用者给的字节串发上行，报文在主机上构造并自校验，不放进驱动；
+- `peek`/`poke`/`reset`：限定五个已映射块、环运行时拒绝，加厂商的 AO/PD 复位序列。
+  这把每个寄存器假设从一次刷机变成几秒钟；
+- `modem-ip6-probe.py`：构造并自校验 IPv4/IPv6 回显请求；
+- `ssh-wifi.sh`：USB gadget 掉线时用 Wi-Fi SSH（`10.65.84.170`）。两次 USB 消失期间
+  设备一直在线，说明掉的是 USB gadget，不是设备。
+
+证据见 `evidence/modem-dpmaif-dl-data-attempt.json`。
