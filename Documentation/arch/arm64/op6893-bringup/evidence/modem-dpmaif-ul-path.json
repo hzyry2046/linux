@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-18",
+  "scope": "First AP to MD data transfer on the correct transport: the DPMAIF uplink ring, its doorbell and its completion interrupt, exercised on hardware with a controlled synthetic frame. The downlink path is not implemented yet.",
+  "images": [
+    {
+      "dist": "dist/ac69fb4fb188/boot.img",
+      "sha256": "1e2b4c0a7c2436138d52306066e0b2a2cea88e26e7c858be03e05e939ce3f106",
+      "content": "uplink ring, doorbell, completion interrupt and the ul/tx_one controls"
+    },
+    {
+      "dist": "dist/61c8fcf561e2/boot.img",
+      "sha256": "835793b0100d3fc8b5ae1bfc32b91b21dfe27b5f3c21d0d045870797379ddd9e",
+      "content": "clears the ring base and size before freeing the buffer"
+    },
+    {
+      "dist": "dist/28aa0b3e1ef5/boot.img",
+      "sha256": "fd5be9ef0e44b28f7f388f298c2586ab4ac106702d38d25f14702d9553183cae",
+      "content": "same code with the uplink state moved out of the header; re-verified with the negative control (last_status=0x8400, hwirq 241, line released on stop)"
+    }
+  ],
+  "implementation": {
+    "ring": "2048 two-word descriptors from dma_alloc_coherent; one message descriptor followed by one payload descriptor per frame, the last one clearing c_bit, which is the same-board v2 layout",
+    "programming": "DRB size in words at bits 15:0 of UL_DRBSIZE, base low 32 bits in ULQSAR, base high byte at bits 31:24, then the per-queue ready and arbitration bits in CHNL_ARB0",
+    "doorbell": "poll the per-queue ADD_DESC NOT_READY bit, write (descriptor words | UPDATE), then poll NOT_READY clear again",
+    "interrupt": "clear the uplink status latch, clear the wanted mask bits (mask set means masked), request the IRQ only while the uplink is started, and write back the handled status bits",
+    "controls": "ul_start takes '<queue> <payload bytes>', tx_one takes the CCMNI channel id, ul_stop tears the ring down and releases the interrupt"
+  },
+  "hardware": {
+    "interrupt_number": {
+      "resolved": "/proc/interrupts shows 'GICv3 241 Level op6893-dpmaif' while the uplink is started, so hwirq 241 = 32 + 209 confirms the DTS GIC_SPI 209; the earlier virq 242 was simply the mapped Linux number",
+      "release": "after ul_stop the line is gone from /proc/interrupts, so free_irq ran"
+    },
+    "negative_control": {
+      "condition": "MD held at lk-on, uplink started on queue 0, one 64-byte frame",
+      "result": "sent=1 done=0 irqs=1 err=1 last_status=0x00008400",
+      "reading": "0x8400 is bit 10 (MD not ready) plus bit 15 (MD power not ready), which is exactly what the hardware should report with no modem running; the ring, doorbell and status decode are therefore exercised without needing the MD"
+    },
+    "md_running": {
+      "condition": "HS2 accepted (state=4, hs2_seen=1), CCISM RUNNING (state=5), PDP context 1 active",
+      "remap": "the MD asked for net_if=1, lhif_q=2, which resolves to queue 0: with this context the PDN is carried by CCMNI1, not CCMNI0. An earlier run with the emergency APN asked for net_if=0 on queue 3, so the mapping really is per-context",
+      "result": "four frames with channel id 1: sent=4 done=4 irqs=4 err=0 not_ready=0 last_status=0x00000001",
+      "md_health": "no exception record (md_ee reports only its fixed size and -61), and AT still answered +CSQ: 18 afterwards",
+      "reading": "every frame produced exactly one uplink-done interrupt with no error and no MD-not-ready event, so DPMAIF accepted the descriptors and the MD consumed them without asserting"
+    },
+    "after_stop": {
+      "state": "started=0 with the counters preserved, the line released, UL_AP_L2TIMR0 back to 0x01ffffff (everything masked again), and the ring base and size cleared"
+    }
+  },
+  "bug_found_and_fixed": {
+    "symptom": "the first modem bring-up after the uplink test timed out at handshake with -ETIMEDOUT and never reached HS2",
+    "cause": "ul_stop freed the coherent ring but left ULQSAR and UL_DRBSIZE pointing at it, so the hardware kept a DMA base that no longer belonged to the driver",
+    "fix": "clear the base, the size and the high address byte and drop the latched status before freeing, which is now what ul_stop does",
+    "honesty": "the stale base is a real hazard and the fix is correct on its own, but the -110 was not reproduced after the fix and before it only once, so the causal link is plausible rather than proven"
+  },
+  "not_established": {
+    "frame_accepted_by_md_stack": "the frame carries a private ethertype and synthetic MAC addresses, so uplink-done proves the transport consumed it, not that the modem forwarded it",
+    "downlink": "the BAT and PIT rings, the downlink interrupt and the receive path are not implemented, so no packet has come back",
+    "ip_traffic": "no address is configured and no PDP payload has been observed"
+  }
+}

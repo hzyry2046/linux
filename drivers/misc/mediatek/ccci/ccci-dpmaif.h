@@ -12,10 +12,68 @@
 #define CCCI_DPMAIF_AO_UL_CHNL0_STA	0x00
 #define CCCI_DPMAIF_AO_UL_CHNL0_STA0	0x60
 #define CCCI_DPMAIF_AO_UL_AP_L2TIMR0	0x80
+#define CCCI_DPMAIF_AO_UL_AP_L2TIMCR0	0x84
+#define CCCI_DPMAIF_AO_UL_AP_L2TIMSR0	0x88
 #define CCCI_DPMAIF_PD_UL_ADD_DESC	0x00
 #define CCCI_DPMAIF_PD_UL_ADD_DESC_CH0	0xb0
+/* The vendor derives this from pd_ul_base + 0x400 rather than mapping it. */
+#define CCCI_DPMAIF_PD_MISC_BASE	0x400
+#define CCCI_DPMAIF_PD_AP_UL_L2TISAR0	0x00
 #define CCCI_DPMAIF_PD_MD_IP_BUSY	0x00
 #define CCCI_DPMAIF_PD_MD_IP_BUSY_MASK	0x40
+
+/* Uplink ring programming, from the same-board v2 driver. */
+#define CCCI_DPMAIF_AO_UL_CHNL_ARB0	0x1c
+#define CCCI_DPMAIF_AO_UL_CHNL0_CON0	0x20
+#define CCCI_DPMAIF_AO_UL_CHNL0_CON1	0x24
+#define CCCI_DPMAIF_UL_QSAR(q)		(CCCI_DPMAIF_AO_UL_CHNL0_CON0 + 0x10 * (q))
+#define CCCI_DPMAIF_UL_DRBSIZE(q)	(CCCI_DPMAIF_AO_UL_CHNL0_CON1 + 0x10 * (q))
+#define CCCI_DPMAIF_UL_ADD_DESC(q)	(CCCI_DPMAIF_PD_UL_ADD_DESC_CH0 + 0x04 * (q))
+#define CCCI_DPMAIF_DRB_SIZE_MSK	0x0000ffff
+#define CCCI_DPMAIF_DRB_ADDRH_MSK	0xff000000
+#define CCCI_DPMAIF_UL_ADD_UPDATE	BIT(31)
+#define CCCI_DPMAIF_UL_ADD_NOT_READY	BIT(31)
+#define CCCI_DPMAIF_UL_INT_DONE(q)	BIT(q)
+#define CCCI_DPMAIF_UL_INT_QDONE_MSK	(0x1f << 0)
+#define CCCI_DPMAIF_UL_INT_ERR_MSK	(0x1f << 20)
+#define CCCI_DPMAIF_UL_INT_MD_NOTREADY_MSK	(0x1f << 10)
+#define CCCI_DPMAIF_UL_INT_MD_PWR_NOTREADY_MSK	(0x1f << 15)
+#define CCCI_DPMAIF_UL_INT_EN		(CCCI_DPMAIF_UL_INT_QDONE_MSK | \
+					 CCCI_DPMAIF_UL_INT_ERR_MSK | \
+					 CCCI_DPMAIF_UL_INT_MD_NOTREADY_MSK | \
+					 CCCI_DPMAIF_UL_INT_MD_PWR_NOTREADY_MSK)
+#define CCCI_DPMAIF_UL_DRB_ENTRIES	2048
+#define CCCI_DPMAIF_UL_DRB_WORDS	2
+#define CCCI_DPMAIF_UL_PAYLOAD_MAX	1600
+#define CCCI_DPMAIF_UL_POLL_LIMIT	1600000
+
+#define CCCI_DPMAIF_DES_PD		0x0
+#define CCCI_DPMAIF_DES_MSG		0x1
+
+/* Two-word uplink descriptors; the layout is the vendor's, bit for bit. */
+struct ccci_dpmaif_drb_pd {
+	u32 dtyp:2;
+	u32 c_bit:1;
+	u32 reserved:5;
+	u32 data_addr_ext:8;
+	u32 data_len:16;
+	u32 p_data_addr;
+};
+
+struct ccci_dpmaif_drb_msg {
+	u32 dtyp:2;
+	u32 c_bit:1;
+	u32 reserved:13;
+	u32 packet_len:16;
+	u32 count_l:16;
+	u32 channel_id:8;
+	u32 network_type:3;
+	u32 r:1;
+	u32 ipv4:1;
+	u32 l4:1;
+	u32 rsv:2;
+};
+
 /*
  * Infracfg busy control. The vendor ORs a two-bit field at 12 and then clears
  * bit 13, so a post-init read normally shows bit 12 set and bit 13 clear: bit

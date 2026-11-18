@@ -1104,3 +1104,81 @@ clk_main=156000000 clk_bus=156000000
 数据路径本身（UL/DL 描述符环、BAT/PIT 表、中断处理）尚未实现。
 
 证据见 `evidence/modem-dpmaif-recon-probe.json`。
+
+---
+
+# DPMAIF 第二步：上行路径打通（一帧进 MD）
+
+这一轮把 DPMAIF 的上行环、门铃和完成中断实现出来，并在真机上让 MD 消费了 4 帧。
+
+## 1. 实现
+
+| 部分 | 做法（照同板 v2 驱动） |
+|---|---|
+| 环 | `dma_alloc_coherent` 2048 个两字描述符；每帧一个 message 描述符 + 一个 payload 描述符，最后一个清 `c_bit` |
+| 编程 | `UL_DRBSIZE` bits15:0 写字数、`ULQSAR` 写基址低 32 位、bits31:24 写高字节，然后置 `CHNL_ARB0` 的 ready 与 arb 位 |
+| 门铃 | 轮询 `ADD_DESC` 的 `NOT_READY`，写 `(字数 \| UPDATE)`，再轮询 `NOT_READY` 清零 |
+| 中断 | 清状态锁存 → 清掩码位（置位=屏蔽）→ 仅在启动期间申请 IRQ → 回写已处理状态位 |
+| 控制 | `ul_start "<queue> <bytes>"`、`tx_one <channel>`、`ul_stop` |
+
+## 2. IRQ 编号已确认
+
+上一轮留下的疑问解决了。启动 UL 后：
+
+```
+242:  ...  GICv3  241  Level  op6893-dpmaif
+```
+
+hwirq **241 = 32 + 209**，与 DTS 的 `GIC_SPI 209` 一致；之前的 242 只是 Linux 映射号。
+`ul_stop` 后该行消失，说明 `free_irq` 正常。
+
+## 3. 负向对照：MD 没运行时
+
+MD 停在 `lk-on`，在 queue 0 上发一帧：
+
+```
+sent=1 done=0 irqs=1 err=1 last_status=0x00008400
+```
+
+`0x8400` = bit10（MD not ready）+ bit15（MD power not ready）——正是无基带时应有的状态。
+这说明环、门铃、状态解码本身是通的，不依赖 MD。
+
+## 4. 正向结果：MD 运行时
+
+HS2 已接受（`state=4 hs2_seen=1`）、CCISM RUNNING、PDP 上下文 1 已激活，然后：
+
+```
+sent=4 done=4 irqs=4 err=0 not_ready=0 last_status=0x00000001
+```
+
+- 每帧**恰好一次**上行完成中断，无错误、无 MD-not-ready；
+- `md_ee` 无异常记录，AT 仍能应答（`+CSQ: 18`）；
+- `ul_stop` 后中断释放、掩码恢复 `0x01ffffff`、基址与大小清零。
+
+**这是 AP→MD 数据第一次走在正确的传输通道上并被 MD 消费，且没有触发任何断言。**
+
+## 5. 一个重要发现：映射是按上下文变的
+
+| 上下文 | MD 的请求 | 结果 |
+|---|---|---|
+| 应急/IMS 上下文 | `net_if=0, lhif_q=3` | CCMNI0 → queue 3 |
+| 本次 cid 1（ctnet） | `net_if=1, lhif_q=2` | **CCMNI1 → queue 0** |
+
+也就是说 `cid ↔ CCMNI ↔ 队列` 三者是**逐上下文绑定**的，队列和 CCMNI 索引都不能写死。
+
+## 6. 自己引入并修掉的一个隐患
+
+`ul_stop` 最初只释放 DMA 环，却**没有清 ULQSAR/UL_DRBSIZE**，硬件里留下指向已释放内存的
+基址。已在 stop 里清基址、大小、高字节并清状态。
+
+诚实说明：修复后重跑能正常到 HS2；修复前只出现过一次 `-110` 握手超时。所以这个隐患是
+真实存在的，但「-110 就是它造成的」只是**合理推断，未被证实**。
+
+## 7. 没有做到的
+
+- **帧是否被 MD 网络栈接受**：载荷是私有 ethertype + 合成 MAC，`done` 只证明传输层消费了
+  描述符，不证明 MD 转发了它；
+- **下行**：BAT/PIT 环、下行中断、接收路径都还没实现，所以没有任何包回来；
+- **IP 流量**：没有配置地址，也没有观察到 PDP 载荷。
+
+证据见 `evidence/modem-dpmaif-ul-path.json`。
