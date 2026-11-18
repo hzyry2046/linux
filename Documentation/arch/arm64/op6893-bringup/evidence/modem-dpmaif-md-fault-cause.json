@@ -1,0 +1,68 @@
+{
+  "feature": "op6893 DPMAIF: what the modem fault actually depends on, and what the modem says about it",
+  "date": "2026-11-18",
+  "image": {
+    "identity": "019baa893dd9",
+    "release": "7.3.0-op6893-d1-019baa893dd9+",
+    "boot_sha256": "c38208ddc53b5a99993aad63a984aaa62dd225b9c998a5ef30cd121b4b73b4c6",
+    "previous_image": "a5ab6730de93"
+  },
+  "exception_type_decoding": {
+    "source": "same-board 4.19 mdee_dumper_v5.h enum, values 0x30..0x32",
+    "finding": "ex_type 49 is 0x31 = SYS_FATALERR_EXT_TASK_EXCEPTION, not a raw CPU exception. The fixed pc therefore names where a modem task raised the fatal error, not necessarily where the bad access happened."
+  },
+  "fatal_record_has_no_file_name": {
+    "record": "file_supported=0 file=",
+    "meaning": "the modem only fills ex_fatal_v5.filename when is_filename_supported is 1; for this fault it is 0, so the source file is not available and the fixed pc cannot be resolved without modem symbols"
+  },
+  "modem_image_is_readable_but_not_disassemblable": {
+    "access": "the md1img partition is visible from mainline as /dev/sdc28 (409600 KiB); its first 64 KiB is byte-identical to the archived md1img-head-64k.bin (sha256 99e69ed3a020a70e7ce6362134c906e8d2cb80a1f0555a1ca7dc41d3be3c45e9)",
+    "format": "MTK mtk_image: magic 0x58881688 with the name md1rom, then an ext header and FILE_INFO carrying k6893v1_64_k419_20615S_MDBIN_PCB01_MT6893_S00.MOLY_NR15_R3_TC16_S_PR2_SP_V2_P88.bin, which matches the SWVersion the modem prints in its own exception dump",
+    "body": "everything past the header is high entropy (about 7.2 bits/byte across the whole 32 MiB image), so the code cannot be disassembled. Only plaintext string tables survive, for example ccismcore, dpmaif and DPMAIF around offsets 0x18413ef and 0x184456c",
+    "consequence": "correlating the fixed pc against the image is not possible on this target"
+  },
+  "corrected_trigger": {
+    "previous_belief": "the fault needed both rings running; the driver refused to run both as a workaround",
+    "measurement": "with the modem released and a PDP context active, arming only the downlink ring and sending no uplink traffic at all reproduces the same fault within 10 seconds",
+    "record": "ex_type=49 class=fatal pc=0x91831724 lr=0x91831764 cause=0x40800824 status=0x6002 code=0x305,0x88880302,0xcccccccc sp=0x2904ef00",
+    "consequence": "the uplink ring is not part of the trigger. The one-ring-at-a-time gate does not protect against this, because the downlink ring alone is enough."
+  },
+  "fault_addresses": {
+    "observed": ["0x86fc4c4b", "0xb294f00e", "0xb294f00f", "0x32b4f00f", "0x3296f00f"],
+    "note": "every one is unaligned and lies in ordinary AP memory, outside both modem reserved banks reported by lk_regions (cached 0x88000000+0x4960000, noncached 0x8e000000+0x1800000)",
+    "cause_decode": "0x40800824 is HFSR FORCED plus MMFSR DACCVIOL and MUNSTKERR, BFSR UNSTKERR and UFSR UNALIGNED: an MPU denial followed by fault escalation, not a plain bad pointer"
+  },
+  "second_distinct_modem_failure": {
+    "when": "one run where the uplink ring consumed frames while the downlink ring was armed",
+    "record": "ex_type=80 (0x50 = ASSERT_FAIL_EXCEPTION) offender=MCU line=591 path=mcu/protocol/lte_sec/errc/lcel/protect/errc_lcel_paging_protect.c lr=0x9073f74a para=0x0,0x0,0x0",
+    "note": "this is a different exception from the fatal one above, and it is the only case where the modem named a source file"
+  },
+  "missing_vendor_initialisation_found": {
+    "function": "drv_md_hw_bus_remap() in ccci_dpmaif_drv_v2.c (6.6) and drv_dpmaif_md_hw_bus_remap() in dpmaif_drv.c (4.19), identical in both",
+    "what_it_writes": "AO_MD_DL: REMAP_DOMAIN=0x0101, REMAP_CACHE=0x0607, eight 32 MiB windows spaced 64 MiB apart starting at md_base_at_ap, then MISC_AO_CFG1 bit 0 (DPMAIF_MD_AO_REMAP_ENABLE)",
+    "state_before": "CFG1=0x00000002 so the remap was disabled, REMAP_DOMAIN=0x00000707, all eight MAP registers zero",
+    "experiment": "wrote the vendor-shaped set through poke assuming md_base_at_ap=0x40000000 (0x430041, 0x470045, 0x4b0049, 0x4f004d, 0x530051, 0x570055, 0x5b0059, 0x5f005d); all eleven registers read back exactly",
+    "result": "the fault still occurred, at t=60s with addr=0x3296f00f, same pc, lr and cause",
+    "status": "the remap is genuinely missing, but either the base is not 0x40000000 or the remap is not the cause of this fault"
+  },
+  "other_vendor_differences": {
+    "mtu": "vendor ccci_drv2_dl_set_mtu writes 3080 (3*1024+8) with BAT_BID_MAXCNT 3; the driver writes 1664 with BIDCNT 1 because the fragment ring was removed",
+    "bat_geometry": "vendor uses 8192 BAT entries; this driver uses 256",
+    "note": "both are engine parameters, and the observed fault is on the modem CPU, so neither is a sufficient explanation on its own"
+  },
+  "allocation_limit": {
+    "finding": "dma_alloc_coherent on this device refuses 4096*1664 (6.8 MB) and 8192*1664 (13.6 MB) with -ENOMEM while 256*1664 (426 KB) succeeds, with 10.4 GB free",
+    "consequence": "testing the vendor 8192-entry BAT geometry needs page allocation plus dma_map_single, which is what the vendor does with __dev_alloc_skb"
+  },
+  "flash_path": {
+    "boot_partition": "/dev/sdc48, 65536 KiB; its first 32 MiB hash equals the flashed boot.img sha256 5986d4d0... so the mapping is confirmed",
+    "read_only": "the initramfs load_root() sets every /sys/class/block/sd* read-only with blockdev --setro, so writing flash from Linux is deliberately unavailable and flashing still requires fastboot",
+    "fastboot": "there is no reboot-mode node, so `reboot bootloader` is not understood by LK; the device had to be taken to fastboot by hand"
+  },
+  "not_proven": [
+    "why the modem faults: the remap base is unknown and the remap write alone did not change the outcome",
+    "whether the modem ever writes a downlink PIT entry: pit_rd stayed at 1024 and no downlink interrupt ever fired in any run",
+    "whether the fault is in the modem downlink send path or in unrelated modem software that only runs once a data context exists",
+    "any relationship between the fatal exception and the paging-protect assertion"
+  ]
+}

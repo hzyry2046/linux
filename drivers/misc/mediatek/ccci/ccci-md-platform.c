@@ -506,10 +506,11 @@ static ssize_t md_ee_show(struct device *dev, struct device_attribute *attr, cha
 	/* core count is a record field, so every later offset derives from it. */
 	if (ee.content_type == 1)
 		ret = sysfs_emit(buf,
-				 "present=1 bytes=%zu version=%#x cores=%u offender=%s ex_type=%u class=fatal section=%u cadefa=%u code=%#x,%#x,%#x sp=%#x pc=%#x lr=%#x addr=%#x cause=%#x status=%#x\n",
+				 "present=1 bytes=%zu version=%#x cores=%u offender=%s ex_type=%u class=fatal section=%u cadefa=%u code=%#x,%#x,%#x sp=%#x pc=%#x lr=%#x addr=%#x cause=%#x status=%#x file_supported=%u file=%s\n",
 				 md->ee_bytes, ee.version, ee.cores, ee.core, ee.ex_type,
 				 ee.section, ee.cadefa, ee.code[0], ee.code[1], ee.code[2],
-				 ee.sp, ee.pc, ee.lr, ee.addr, ee.cause, ee.status);
+				 ee.sp, ee.pc, ee.lr, ee.addr, ee.cause, ee.status,
+				 ee.filename_supported, ee.file);
 	else
 		ret = sysfs_emit(buf,
 				 "present=1 bytes=%zu version=%#x cores=%u offender=%s ex_type=%u class=assert line=%u path=%s para=%#x,%#x,%#x lr=%#x\n",

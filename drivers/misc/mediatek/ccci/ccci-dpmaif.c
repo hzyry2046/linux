@@ -106,6 +106,8 @@ struct ccci_dpmaif {
 	struct mutex lock;
 	struct ccci_dpmaif_ul ul;
 	struct ccci_dpmaif_dl dl;
+	/* Diagnostic override for the one-ring-at-a-time rule; see both_rings. */
+	bool allow_both;
 	/* Last result of the bounded register window. */
 	u32 peek_block;
 	u32 peek_offset;
@@ -357,11 +359,12 @@ static int dpmaif_ul_start(struct ccci_dpmaif *dpmaif, u32 queue)
 	if (ul->started)
 		return -EBUSY;
 	/*
-	 * The modem faults at a fixed pc when uplink data flows while the downlink
-	 * ring is armed, and neither the vendor's idle wait nor an explicit stop
-	 * order prevents it. Until that is understood only one ring runs at a time.
+	 * The modem takes a fatal exception at a fixed pc whenever the downlink
+	 * ring is armed against a released modem, with or without uplink traffic,
+	 * so neither ring is safe yet. Only one ring runs at a time until the
+	 * downlink programming is understood; see the bring-up evidence.
 	 */
-	if (dpmaif->dl.started)
+	if (dpmaif->dl.started && !dpmaif->allow_both)
 		return -EBUSY;
 	if (queue > 4)
 		return -EINVAL;
@@ -881,7 +884,7 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_
 	if (dl->started)
 		return -EBUSY;
 	/* Only one ring at a time, for the reason given in dpmaif_ul_start(). */
-	if (dpmaif->ul.started)
+	if (dpmaif->ul.started && !dpmaif->allow_both)
 		return -EBUSY;
 	/* Below the hardware check thresholds the ring reports a length error. */
 	if (bat_entries <= CCCI_DPMAIF_DL_HW_CHK_BAT_NUM ||
@@ -1527,6 +1530,40 @@ static ssize_t dl_stop_store(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_WO(dl_stop);
 
+/*
+ * The one-ring-at-a-time rule exists because arming the downlink ring faults the
+ * modem. That fault is not understood yet, so this override exists purely to
+ * reproduce it under observation: with it set, the driver lets both rings run
+ * and the modem is expected to take a fatal exception.
+ */
+static ssize_t both_rings_show(struct device *dev, struct device_attribute *attr,
+			       char *buf)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf, "allow_both=%u\n", dpmaif->allow_both);
+}
+
+static ssize_t both_rings_store(struct device *dev, struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+	unsigned int value;
+	int ret = 0;
+
+	if (kstrtouint(buf, 0, &value) || value > 1)
+		return -EINVAL;
+	mutex_lock(&dpmaif->lock);
+	/* The rule is only meaningful while neither ring is running. */
+	if (dpmaif->ul.started || dpmaif->dl.started)
+		ret = -EBUSY;
+	else
+		dpmaif->allow_both = value;
+	mutex_unlock(&dpmaif->lock);
+	return ret ? ret : count;
+}
+static DEVICE_ATTR_RW(both_rings);
+
 static struct attribute *dpmaif_attrs[] = {
 	&dev_attr_sample.attr,
 	&dev_attr_layout.attr,
@@ -1543,6 +1580,7 @@ static struct attribute *dpmaif_attrs[] = {
 	&dev_attr_peek_value.attr,
 	&dev_attr_poke.attr,
 	&dev_attr_reset.attr,
+	&dev_attr_both_rings.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(dpmaif);

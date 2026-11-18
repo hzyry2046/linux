@@ -74,6 +74,22 @@ static void check_fatal(void)
 	assert(ee.status == 2 && ee.cadefa == 1 && ee.section == 0);
 	assert(ee.sp == 0x24ab42d0 && ee.pc == 0x91823b66);
 	assert(ee.lr == 0x90b2d7c2 && ee.addr == 0x90d18620 && ee.cause == 0x74);
+	/* Without the flag the modem sent no file name, so nothing is reported. */
+	assert(ee.filename_supported == 0 && ee.file[0] == 0);
+	free(p);
+
+	/* The offending file name follows the fixed record when the flag is set. */
+	p = record(12, 1, &n);
+	info = 8 + 12 * 12;
+	p[info + 8 + 21] = 1;
+	memcpy(p + info + 8 + 52, "mcu/driver/hif/src/dpmaif.c", 27);
+	assert(ccci_md_ee_decode(p, n, &ee) == 0);
+	assert(ee.filename_supported == 1);
+	assert(!strcmp(ee.file, "mcu/driver/hif/src/dpmaif.c"));
+	/* A name with no terminator is clipped to the decoder's own bound. */
+	memset(p + info + 8 + 52, 'a', n - (info + 8 + 52));
+	assert(ccci_md_ee_decode(p, n, &ee) == 0);
+	assert(strlen(ee.file) == CCCI_MD_EE_FILE - 1);
 	free(p);
 
 	/* The same fields move with a different core count. */

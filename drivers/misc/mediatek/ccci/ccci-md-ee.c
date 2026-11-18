@@ -23,6 +23,7 @@
 #define EE_INFO		8	/* overview_verno + core_num */
 #define EE_CLASS_FATAL	1
 #define EE_FATAL_BYTES	0x40	/* through error_cause */
+#define EE_FATAL_FILE	0x34	/* sizeof(struct ex_fatal_v5) */
 #define EE_ASSERT_BYTES	0x11c	/* through lr */
 
 size_t ccci_md_ee_size(u32 cores)
@@ -60,7 +61,10 @@ int ccci_md_ee_decode(const u8 *data, size_t bytes, struct ccci_md_ee *out)
 	out->ex_type = get_unaligned_le16(data + info);
 	out->content_type = data[info + 3];
 	if (out->content_type == EE_CLASS_FATAL) {
+		size_t off = info + 8 + EE_FATAL_FILE;
+
 		out->cadefa = data[info + 8 + 20];
+		out->filename_supported = data[info + 8 + 21];
 		out->section = data[info + 8 + 22];
 		out->code[0] = get_unaligned_le32(data + info + 8);
 		out->code[1] = get_unaligned_le32(data + info + 12);
@@ -71,6 +75,20 @@ int ccci_md_ee_decode(const u8 *data, size_t bytes, struct ccci_md_ee *out)
 		out->lr = get_unaligned_le32(data + info + 8 + 40);
 		out->addr = get_unaligned_le32(data + info + 8 + 44);
 		out->cause = get_unaligned_le32(data + info + 8 + 48);
+		/*
+		 * The modem names the offending source file after the fixed
+		 * record when it supports it. The string is not length-checked
+		 * on that side, so it is bounded by the bytes we hold.
+		 */
+		if (out->filename_supported == 1) {
+			for (i = 0; i < sizeof(out->file) - 1 && off + i < bytes; i++) {
+				u8 c = data[off + i];
+
+				if (!c)
+					break;
+				out->file[i] = (c >= 0x20 && c < 0x7f) ? c : '.';
+			}
+		}
 		return 0;
 	}
 	if (bytes < info + EE_ASSERT_BYTES)
