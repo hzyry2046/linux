@@ -19,6 +19,8 @@ from modem_ipv6_probe import IFACE, UL_STATUS, dns_reply, ip, pdp_iid, solicit
 AT_DEVICE = '/dev/ccci-at-10209000.modem-platform'
 MD_NET = Path('/sys/devices/platform/10209000.modem-platform/md_net')
 RESOLVERS = ('8.8.8.8', '2001:4860:4860::8888')
+POLICY_TABLE = '6893'
+POLICY_PRIORITY = 11000
 
 
 class AddressPending(AtError):
@@ -48,7 +50,31 @@ def check_interface():
         raise AtError(f'{IFACE} must start down and without configured addresses')
 
 
-def setup_link(stack, v4, iid, resolvers):
+def check_policy_routes():
+    for family in ('-4', '-6'):
+        try:
+            rules = json.loads(ip('-N', '-j', family, 'rule', 'show').stdout)
+            routes = json.loads(ip('-N', '-j', family, 'route', 'show', 'table', 'all').stdout)
+        except subprocess.CalledProcessError:
+            raise AtError('policy routing requires IPv4 and IPv6 multiple tables') from None
+        # Numeric output avoids overlooking a table with an alias in rt_tables.
+        if any(rule.get('priority') == POLICY_PRIORITY for rule in rules):
+            raise AtError(f'policy rule priority {POLICY_PRIORITY} is in use')
+        if any(str(item.get('table')) == POLICY_TABLE for item in rules + routes):
+            raise AtError(f'policy routing table {POLICY_TABLE} is in use')
+
+
+def setup_policy_routes(stack, v4, v6):
+    for family, src in (('-4', v4), ('-6', v6)):
+        route = ('default', 'dev', IFACE, 'src', str(src), 'table', POLICY_TABLE)
+        rule = ('priority', str(POLICY_PRIORITY), 'oif', IFACE, 'table', POLICY_TABLE)
+        ip(family, 'route', 'add', *route)
+        stack.callback(ip, family, 'route', 'del', *route)
+        ip(family, 'rule', 'add', *rule)
+        stack.callback(ip, family, 'rule', 'del', *rule)
+
+
+def setup_link(stack, v4, iid, targets, policy_routing):
     conf = Path('/proc/sys/net/ipv6/conf', IFACE)
     for name in ('accept_ra', 'autoconf', 'router_solicitations'):
         path = conf / name
@@ -73,8 +99,10 @@ def setup_link(stack, v4, iid, resolvers):
             raise AddressPending('IPv6 RA lacked a usable autonomous prefix')
         raise AddressPending('no IPv6 router advertisement received')
     v6 = ipaddress.IPv6Address((prefix << 64) | iid)
-    address(f'{v6}/64', '-6', ('nodad',))
-    for dst in resolvers:
+    address(f'{v6}/64', '-6', ('nodad', 'noprefixroute') if policy_routing else ('nodad',))
+    if policy_routing:
+        setup_policy_routes(stack, v4, v6)
+    for dst in targets:
         family, src = ('-4', v4) if dst.version == 4 else ('-6', v6)
         target = f'{dst}/{dst.max_prefixlen}'
         ip(family, 'route', 'add', target, 'dev', IFACE, 'src', str(src))
@@ -90,6 +118,8 @@ def deactivate(at):
 
 def run_session(at, args, stopping):
     check_interface()
+    if args.policy_routing:
+        check_policy_routes()
     if context_active(at):
         raise AtError('CID 1 already active; refusing to take over')
     with ExitStack() as stack:
@@ -119,7 +149,7 @@ def run_session(at, args, stopping):
         elif int(ul['queue']) != queue:
             raise AtError('armed UL ring does not match the modem queue mapping')
 
-        setup_link(stack, v4, iid, args.targets)
+        setup_link(stack, v4, iid, args.targets, args.policy_routing)
         print('CID 1 active, IPv4 and IPv6 configured', flush=True)
         if args.probe and not stopping():
             success = []
@@ -148,6 +178,8 @@ def main():
     parser.add_argument('--target', action='append', type=ipaddress.ip_address, default=[],
                         help='install a host route through the data interface; repeatable')
     parser.add_argument('--probe', action='store_true', help='verify IPv4 and IPv6 UDP DNS')
+    parser.add_argument('--policy-routing', action='store_true',
+                        help='route interface-bound sockets through a dedicated dual-stack table')
     parser.add_argument('--seconds', type=int, help='stop after this many seconds online')
     parser.add_argument('--reconnects', type=int, default=2,
                         help='maximum retries on CID loss or missing IPv6 prefix (default 2)')
@@ -156,9 +188,11 @@ def main():
         parser.error('invalid APN')
     if (args.seconds is not None and args.seconds < 0) or args.reconnects < 0:
         parser.error('seconds and reconnects must be nonnegative')
+    if args.policy_routing and args.target:
+        parser.error('--policy-routing and --target are mutually exclusive')
     args.targets = list(dict.fromkeys(args.target +
                                      ([ipaddress.ip_address(x) for x in RESOLVERS]
-                                      if args.probe else [])))
+                                      if args.probe and not args.policy_routing else [])))
 
     stop_requested = False
 
