@@ -1574,8 +1574,10 @@ static ssize_t dl_show(struct device *dev, struct device_attribute *attr, char *
 	state.frg_buf_sz = dl->frg.buf_sz;
 	state.pit_rd = dl->pit_rd;
 	state.bat_wr = dl->bat.wr;
-	state.ring_dma = dl->bat.ring_dma;
-	state.buf_dma = dl->bat.entries ? dl->bat.buf[0].dma : 0;
+	if (dl->bat.ring)
+		state.ring_dma = dl->bat.ring_dma;
+	if (dl->bat.buf)
+		state.buf_dma = dl->bat.buf[0].dma;
 	state.irqs = dl->irqs;
 	state.pkts = dl->pkts;
 	state.bytes = dl->bytes;

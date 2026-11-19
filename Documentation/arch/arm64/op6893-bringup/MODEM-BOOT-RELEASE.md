@@ -57,6 +57,23 @@ dispatcher 的 endpoint/bridge 清理必须在 MD 真正停止后执行。因此
 RX 关闭、controller 故障、generation 变化或 SPM 单 bit 都不被接受为停止
 证据；`md_boot stop` 只在父状态已是 `stopped` 时传入 `true`。
 
+### DPMAIF 停止与 AP 冷启动复测
+
+在 `c0b3b7c2bf0b` 上，拨号退出并停止 UL/DL 后，读取 DPMAIF
+`dl` 触发 `dl_show` 的空指针 Oops。环的几何参数在释放后仍保留，
+但 BAT 数组已经清空。`57e6fb81cf4b` 按实际指针是否存在报告 DMA
+地址；真机复测停止后两个地址均为零，内核 taint 为零。
+
+停止 DMA 后，`md_power off` 已将电源关到 `stopped`，但首次返回
+`-EBUSY`，因为 CCISM 的 STOP 确认尚未处理。确认到达后执行
+`md_boot stop`，dispatcher 进入 STOPPED，SCP 接收关闭。保持同一镜像
+重启 AP 后，新一代基带达到 HS2；MUX 的首次 CFUN 查询超时，稍后复试
+成功。SIM2 回到 NR n41，IPv4 和 IPv6 DNS 均通过，退出后两卡 PDP
+均不活跃，测试路由已清理。
+
+当前电源、启动和 CCISM 路径的单次放行限制仍然有效。这次复测覆盖
+关电后重启 AP 的恢复；同一次 AP 启动中再次放行 MD 尚未验证。
+
 ## 32k 事实来源（本轮核实）
 
 - 本机 A `eccci/ccci_rtc.c` 读取 nvmem cell `external-32k` 的首字节；
