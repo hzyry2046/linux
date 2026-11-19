@@ -1,0 +1,59 @@
+{
+  "date": "2026-11-19",
+  "image": {
+    "id": "c87a82dbad96",
+    "boot_sha256": "955d999269668da0fd95173cac330cd8faf9b03eea9a38fc4e991118ea974ab0",
+    "reference": "83b9882c488b",
+    "configuration": "Embedded DTB byte-identical; kernel config differs only in LOCALVERSION."
+  },
+  "geometry": {
+    "bat": 8192,
+    "fragment_bat": 8192,
+    "pit": 16384
+  },
+  "modem": {
+    "hs2": true,
+    "ipv4_pdp": true
+  },
+  "downlink": {
+    "after_init": {
+      "bat_sta2": "0x00001fff",
+      "frgbat_sta2": "0x00001fff",
+      "pit_sta2": "0x00000000",
+      "pit_sta3": "0x04000001"
+    },
+    "before_probes": {
+      "bat_sta2": "0x00010000",
+      "pit_sta2": "0x00020002"
+    },
+    "after_60_seconds": {
+      "bat_sta2": "0x00050004",
+      "pit_sta2": "0x000a000a",
+      "pit_sta3": "0x040a0001",
+      "irqs": 5,
+      "packets": 5,
+      "bytes": 421,
+      "fragment_pits": 0,
+      "errors": 0,
+      "overruns": 0
+    }
+  },
+  "uplink": {
+    "icmp_requests": 1,
+    "dns_queries": 3,
+    "descriptors_completed": 4,
+    "error_counter": 3
+  },
+  "matched_reply": {
+    "protocol": "IPv4 UDP DNS",
+    "source_matches_probe_destination": true,
+    "ports": [
+      53,
+      12345
+    ],
+    "transaction_id": "0x1234",
+    "question": "www.example.com A IN",
+    "response_code": 0
+  },
+  "limits": "Raw diagnostic rings only; no Linux netdev. The initialization changes, geometry and ring setup before PDP were tested together."
+}
