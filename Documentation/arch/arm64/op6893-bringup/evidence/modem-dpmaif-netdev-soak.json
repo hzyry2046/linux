@@ -1,0 +1,110 @@
+{
+  "date": "2026-11-19",
+  "interface": "ccmnidp0",
+  "duration_seconds": 24,
+  "icmp_payload_bytes": {
+    "small": 56,
+    "large": 1472
+  },
+  "counts": "DNS counters are success/attempts; ICMP counters are sent/received. Completion IRQs may coalesce.",
+  "1ec804fd5678": {
+    "SOCK_DGRAM": [
+      10,
+      10
+    ],
+    "SOCK_STREAM": [
+      10,
+      10
+    ],
+    "small": [
+      120,
+      111
+    ],
+    "large": [
+      60,
+      54
+    ],
+    "before": {
+      "started": 1,
+      "queue": 0,
+      "entries": 2048,
+      "payload": 60,
+      "wr": 16,
+      "sent": 8,
+      "done": 8,
+      "irqs": 15,
+      "err": 7,
+      "not_ready": 0,
+      "last_status": 1
+    },
+    "after": {
+      "started": 1,
+      "queue": 0,
+      "entries": 2048,
+      "payload": 60,
+      "wr": 520,
+      "sent": 260,
+      "done": 248,
+      "irqs": 296,
+      "err": 48,
+      "not_ready": 0,
+      "last_status": 1
+    }
+  },
+  "b4fbbdd8d476": {
+    "SOCK_DGRAM": [
+      8,
+      10
+    ],
+    "SOCK_STREAM": [
+      10,
+      10
+    ],
+    "small": [
+      120,
+      112
+    ],
+    "large": [
+      60,
+      55
+    ],
+    "before": {
+      "started": 1,
+      "queue": 0,
+      "entries": 2048,
+      "payload": 60,
+      "wr": 18,
+      "sent": 9,
+      "done": 9,
+      "irqs": 17,
+      "err": 8,
+      "not_ready": 0,
+      "last_status": 1,
+      "rd_words": 36,
+      "len_err": 0,
+      "md_not_ready": 1,
+      "md_power_not_ready": 8,
+      "err_status": 33792
+    },
+    "after": {
+      "started": 1,
+      "queue": 0,
+      "entries": 2048,
+      "payload": 60,
+      "wr": 526,
+      "sent": 263,
+      "done": 260,
+      "irqs": 336,
+      "err": 76,
+      "not_ready": 0,
+      "last_status": 1,
+      "rd_words": 1052,
+      "len_err": 0,
+      "md_not_ready": 1,
+      "md_power_not_ready": 76,
+      "err_status": 33792
+    }
+  },
+  "first_boot": "HS2 completed; AT endpoint closed with -EBADMSG before radio/PDP setup. Same image succeeded after reboot.",
+  "notes": "No netdev drops or DPMAIF RX errors. The q0 consumer reached the producer; remaining IRQs are predominantly q0 MD power-not-ready. This does not locate end-to-end packet loss."
+}
