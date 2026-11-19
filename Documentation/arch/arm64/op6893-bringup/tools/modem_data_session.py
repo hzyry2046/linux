@@ -22,6 +22,7 @@ MD_NET = Path('/sys/devices/platform/10209000.modem-platform/md_net')
 RESOLVERS = ('8.8.8.8', '2001:4860:4860::8888')
 POLICY_TABLE = '6893'
 POLICY_PRIORITY = 11000
+RAT_PROFILES = {'lte-only': ('3', '0'), 'nr-lte': ('19', '128')}
 
 
 def context_states(at):
@@ -37,6 +38,34 @@ def context_states(at):
 
 def context_active(at):
     return context_states(at)[1]
+
+
+def rat_profile(at):
+    for line in at('AT+ERAT?'):
+        state = re.fullmatch(r'\+ERAT:\s*\d+,\s*\d+,\s*(\d{1,3}),\s*(\d{1,3}),\s*\d+', line)
+        if state:
+            return state.groups()
+    raise AtError('cannot read configured RAT policy')
+
+
+def set_rat_profile(at, profile):
+    at('AT+ERAT=' + ','.join(profile), 15)
+    if rat_profile(at) != profile:
+        raise AtError('configured RAT policy did not match the request')
+
+
+def wait_for_rat(at, mode, stopping):
+    allowed = {7} if mode == 'lte-only' else {7, 10, 11, 12, 13}
+    deadline = time.monotonic() + 45
+    while not stopping() and time.monotonic() < deadline:
+        for line in at('AT+COPS?'):
+            match = re.fullmatch(r'\+COPS:\s*\d+,\s*\d+,\s*"[^"]*",\s*(\d+)', line)
+            if match and int(match[1]) in allowed and '+CGATT: 1' in at('AT+CGATT?'):
+                print(f'Packet attached, access technology {match[1]}', flush=True)
+                return
+        time.sleep(2)
+    if not stopping():
+        raise AtError('requested RAT policy did not reach packet attach')
 
 
 def tx_queue(status):
@@ -223,6 +252,8 @@ def main():
     parser.add_argument('--apn', help='optionally set the CID 1 APN')
     parser.add_argument('--slot', type=int, choices=SLOTS,
                         help='select a data SIM on an already established basic MUX')
+    parser.add_argument('--rat', choices=RAT_PROFILES,
+                        help='temporarily set the selected SIM radio access policy')
     parser.add_argument('--ipv4-only', action='store_true',
                         help='request an IPv4-only PDP (requires --apn)')
     parser.add_argument('--target', action='append', type=ipaddress.ip_address, default=[],
@@ -240,6 +271,8 @@ def main():
         parser.error('seconds and reconnects must be nonnegative')
     if args.policy_routing and args.target:
         parser.error('--policy-routing and --target are mutually exclusive')
+    if args.rat and args.slot is None:
+        parser.error('--rat requires --slot')
     if args.ipv4_only and (not args.apn or any(x.version == 6 for x in args.target)):
         parser.error('--ipv4-only requires --apn and accepts only IPv4 targets')
     probes = RESOLVERS[:1] if args.ipv4_only else RESOLVERS
@@ -284,7 +317,7 @@ def select_data_slot(reader, write, slot, policy_routing):
     def at_slot(dlci):
         def at(text, timeout=8):
             name = text[2:].split('=', 1)[0].rstrip('?')
-            prefix = f'{name}:' if text in ('AT+CGACT?', 'AT+CGPADDR=1') else None
+            prefix = f'{name}:' if text.endswith('?') or text == 'AT+CGPADDR=1' else None
             lines = mux.exchange(dlci, text, timeout, prefix=prefix)
             if lines[-1] != 'OK':
                 raise AtError(f'DLCI {dlci} rejected {name}')
@@ -319,15 +352,23 @@ def run_modem(fd, args, stopping):
             establish(reader, write, 8)
         else:
             at = select_data_slot(reader, write, args.slot, args.policy_routing)
-        for retry in range(args.reconnects + 1):
-            if stopping() or run_session(at, args, stopping):
-                return 0
-            if retry < args.reconnects:
-                print('waiting before the next CID 1 activation', flush=True)
-                for _ in range(10):
-                    if stopping():
-                        return 0
-                    time.sleep(1)
+        with ExitStack() as stack:
+            if args.rat and not stopping():
+                previous = rat_profile(at)
+                requested = RAT_PROFILES[args.rat]
+                if previous != requested:
+                    stack.callback(set_rat_profile, at, previous)
+                    set_rat_profile(at, requested)
+                wait_for_rat(at, args.rat, stopping)
+            for retry in range(args.reconnects + 1):
+                if stopping() or run_session(at, args, stopping):
+                    return 0
+                if retry < args.reconnects:
+                    print('waiting before the next CID 1 activation', flush=True)
+                    for _ in range(10):
+                        if stopping():
+                            return 0
+                        time.sleep(1)
         raise AtError('CID 1 reconnect budget exhausted')
     except subprocess.CalledProcessError as error:
         raise AtError(f'{error.cmd[0]} operation failed') from None

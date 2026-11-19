@@ -12,6 +12,27 @@ import modem_data_session as modem
 
 
 class SessionTest(unittest.TestCase):
+    def test_rat_policy_is_restored_after_session_failure(self):
+        calls = []
+        profile = ('6', '4')
+
+        def at(text, timeout=8):
+            nonlocal profile
+            if text == 'AT+ERAT?':
+                return [f'+ERAT: 7,0,{",".join(profile)},0', 'OK']
+            if text.startswith('AT+ERAT='):
+                profile = tuple(text[8:].split(','))
+                calls.append(profile)
+            return ['OK']
+
+        args = SimpleNamespace(slot=2, rat='nr-lte', policy_routing=True, reconnects=0)
+        with (patch.object(modem, 'select_data_slot', return_value=at),
+              patch.object(modem, 'wait_for_rat'),
+              patch.object(modem, 'run_session', side_effect=modem.AtError('test failure'))):
+            with self.assertRaisesRegex(modem.AtError, 'test failure'):
+                modem.run_modem(0, args, lambda: False)
+        self.assertEqual(calls, [('19', '128'), ('6', '4')])
+
     def test_ra_retry_while_ipv4_and_cid_stay_active(self):
         now = 0
         active = False

@@ -141,6 +141,38 @@ passed both IPv4 and IPv6 DNS on a repeat dual-stack run; an earlier SIM1
 attempt immediately after SIM2 also had no DNS or RA. This is not enough
 to attribute the misses to an operator or a driver mechanism.
 
-Capture Android's network-mode settings toggle to disambiguate LTE-only
-and NR-allowed parameters before using them; NR SA/NSA attachment and
-per-band locking remain untested.
+## LTE and NR policy
+
+The same-device Android `libmtk-ril.so` (SHA-256
+`2a816e0b1aaa7049c30abb0ffe8004bfc85f7a942a38312b4434beb314f3058e`) maps
+Android LTE-only mode 11 and NR+LTE mode 24 through the jump table at
+`0x15e66b` in `requestSetPreferredNetworkType()`. Its normal non-test-SIM
+path formats the arguments at `0x30fb58` as `AT+ERAT=%d,%d`.
+
+| Android mode | ERAT write | SIM2 mainline observation |
+| --- | --- | --- |
+| LTE-only | `3,0` | ERAT configured fields `3,0`, COPS AcT 7, IPv4 DNS passed on repeat |
+| NR+LTE | `19,128` | ERAT configured fields `19,128`, COPS AcT 11, IPv4 DNS passed once and did not reply on another run |
+
+The two modes reached packet attach. SIM1 remained at AcT 7 throughout.
+With extended `C5GREG` reporting enabled for the comparison, SIM2 reported
+5GS home registration in both modes. Accordingly, use the COPS access
+technology to distinguish these two observations; the C5GREG registration
+flag alone does not distinguish the radio link. The test did not
+independently inspect the serving cell or dual connectivity, test
+IPv6 in NR, or exercise a band mask.
+
+ERAT readback begins with two runtime fields. Save and restore the third
+and fourth fields, which track the configured pair (here `6,4`). Setting
+the first two fields back as though they were policy initially caused a
+temporary loss of registration; restoring `6,4` brought LTE back. The
+final test confirmed both slots back at `7,0,6,4,0` and EPS registered,
+the reporting mode restored, data selection reset to slot 1, and both
+CID 1 contexts inactive.
+
+The session tool accepts `--rat lte-only` and `--rat nr-lte` together
+with `--slot`. It checks the policy readback, waits for packet attach,
+and restores the saved policy on normal exit, SIGINT/SIGTERM or a handled
+failure. NR+LTE permits LTE fallback: check the printed AcT when validating
+a specific link. Use an IPv4-only PDP for SIM2 until its dual-stack issue
+is understood.

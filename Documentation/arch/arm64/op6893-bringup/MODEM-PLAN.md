@@ -616,6 +616,7 @@ R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、
 - [x] 双卡在位时实测先后选择数据卡：卡 1 IPv4/IPv6、卡 2 IPv4 均通过。
 - [x] 会话工具接入 MUX 选卡和独立 IPv6 重试；实测卡 2 IPv4-only 可用。
 - [ ] 验证两卡槽各自单独插卡；排查卡 2 双栈 PDP 无 RA 且 IPv4 DNS 无回包。
-- [ ] 从 Android 设置切换捕获 LTE-only/允许 NR 的命令与读回值，再验证主线注册和数据。
+- [x] 从同机 Android RIL 确认 LTE-only/NR+LTE 参数，主线实测切换和 IPv4 流量。
+- [ ] 验收 NR 的持续数据、IPv6 及小区与频段，区分实网 SA/NSA。
 
 详见 [SIM/RAT 实测与后续](MODEM-SIM-RAT.md)。
