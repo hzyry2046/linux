@@ -335,9 +335,9 @@ ssize_t ccci_md_net_status(struct ccci_md_net *net, char *buf, size_t size)
 	used = ret;
 	for (u32 i = 0; i < lhif.ports && used < size; i++)
 		used += scnprintf(buf + used, size - used,
-				  "lhif%u net_if=%u lhif_q=%u queue=%u\n", i,
+				  "lhif%u net_if=%u lhif_q=%u queue=%u requests=%u\n", i,
 				  lhif.port[i].net_if, lhif.port[i].lhif_q,
-				  lhif.port[i].queue);
+				  lhif.port[i].queue, lhif.port[i].requests);
 	return used;
 }
 

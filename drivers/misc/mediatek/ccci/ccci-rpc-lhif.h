@@ -23,6 +23,7 @@ struct ccci_rpc_lhif_port {
 	u32 net_if;
 	u32 lhif_q;
 	u32 queue;
+	u32 requests;
 };
 
 struct ccci_rpc_lhif_state {

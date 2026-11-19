@@ -25,6 +25,9 @@ POLICY_PRIORITY = 11000
 RAT_PROFILES = {'lte-only': ('3', '0'), 'nr-lte': ('19', '128')}
 COPS_ACT = re.compile(r'\+COPS:\s*\d+,\s*\d+,\s*"[^"]*",\s*(\d+)')
 PHY_COMMAND = 'AT+EPHYCONFIG=2'
+NET_CHANNEL = UL_STATUS.with_name('net_channel')
+LHIF_ROW = re.compile(r'^lhif\d+ net_if=(\d+) lhif_q=\d+ queue=([0-3])'
+                      r'(?: requests=(\d+))?$', re.M)
 
 
 def context_states(at):
@@ -102,10 +105,33 @@ def report_radio(at):
 
 
 def tx_queue(status):
-    mapping = re.search(r'^lhif\d+ net_if=0 lhif_q=\d+ queue=([0-3])$', status, re.M)
-    if not mapping:
-        raise AtError('missing queue mapping for CCMNI channel 0')
-    return int(mapping[1])
+    for port, queue, _ in LHIF_ROW.findall(status):
+        if port == '0':
+            return int(queue)
+    raise AtError('missing queue mapping for CCMNI channel 0')
+
+
+def lhif_state():
+    status = MD_NET.read_text()
+    count = re.search(r'\blhif_requests=(\d+)\b', status)
+    rows = LHIF_ROW.findall(status)
+    if not count or any(not requests for _, _, requests in rows):
+        raise AtError('per-channel LHIF counters are unavailable')
+    return int(count[1]), {int(port): (int(queue), int(requests))
+                           for port, queue, requests in rows}
+
+
+def activation_mapping(before, after):
+    old_count, old = before
+    count, current = after
+    changed = [(port, queue) for port, (queue, seq) in current.items()
+               if seq != old.get(port, (None, 0))[1]]
+    if (count != old_count + 1 or len(changed) != 1 or old.keys() - current.keys()):
+        raise AtError('CID 1 activation has no unique LHIF mapping')
+    port, queue = changed[0]
+    if port > 255 or current[port][1] != old.get(port, (None, 0))[1] + 1:
+        raise AtError('invalid LHIF channel or request counter')
+    return port, queue
 
 
 def check_interface():
@@ -212,17 +238,30 @@ def run_session(at, args, stopping):
     check_interface()
     if args.policy_routing:
         check_policy_routes()
+    if not args.activation_mapping and NET_CHANNEL.exists() and NET_CHANNEL.read_text().strip() != '0':
+        raise AtError('legacy session requires CCMNI channel 0')
     if context_active(at):
         raise AtError('CID 1 already active; refusing to take over')
     with ExitStack() as stack:
         if args.apn:
             pdp = 'IP' if args.ipv4_only else 'IPV4V6'
             at(f'AT+CGDCONT=1,"{pdp}","{args.apn}"')
+        if args.activation_mapping:
+            previous_channel = NET_CHANNEL.read_text()
+            before = lhif_state()
         # A timeout does not prove the command failed to reach the modem.
         stack.callback(deactivate, at)
         at('AT+CGACT=1,1', 14)
         if stopping():
             return True
+        if args.activation_mapping:
+            time.sleep(1)  # let the RPC complete after the AT confirmation
+            channel, queue = activation_mapping(before, lhif_state())
+            stack.callback(NET_CHANNEL.write_text, previous_channel)
+            NET_CHANNEL.write_text(f'{channel}\n')
+            print(f'CID 1 activation: CCMNI channel {channel}, UL queue {queue}', flush=True)
+        else:
+            queue = tx_queue(MD_NET.read_text())
         response = '\n'.join(at('AT+CGPADDR=1'))
         match = re.search(r'\+CGPADDR:\s*1,"([0-9.]+)"', response)
         if not match:
@@ -234,7 +273,6 @@ def run_session(at, args, stopping):
         if v4.is_unspecified:
             raise AtError('CID 1 has an unspecified IPv4 address')
 
-        queue = tx_queue(MD_NET.read_text())
         ul = dict(field.split('=') for field in UL_STATUS.read_text().split())
         if ul['started'] == '0':
             UL_STATUS.with_name('ul_start').write_text(f'{queue} 60 0\n')
@@ -295,6 +333,8 @@ def main():
                         help='temporarily set the selected SIM radio access policy')
     parser.add_argument('--radio-status', action='store_true',
                         help='report serving RAT and band at session start and completion')
+    parser.add_argument('--activation-mapping', action='store_true',
+                        help='select the channel reported by a unique LHIF request during activation')
     parser.add_argument('--ipv4-only', action='store_true',
                         help='request an IPv4-only PDP (requires --apn)')
     parser.add_argument('--target', action='append', type=ipaddress.ip_address, default=[],

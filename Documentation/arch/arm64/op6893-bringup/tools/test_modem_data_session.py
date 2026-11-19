@@ -38,7 +38,8 @@ class SessionTest(unittest.TestCase):
         active = False
         actions = []
         args = SimpleNamespace(policy_routing=True, targets=[], apn='test',
-                               ipv4_only=False, probe=False, seconds=8, radio_status=False)
+                               ipv4_only=False, probe=False, seconds=8, radio_status=False,
+                               activation_mapping=False)
 
         def at(text, _timeout=0):
             nonlocal active
@@ -128,6 +129,15 @@ class SessionTest(unittest.TestCase):
             'Physical channel: NR n41, DL/UL channel 504990/503172, '
             'DL/UL bandwidth fields 20000/20000',
         ])
+
+    def test_activation_mapping_detects_repeated_and_ambiguous_requests(self):
+        before = (8, {0: (0, 3), 1: (0, 5)})
+        self.assertEqual(modem.activation_mapping(before, (9, {0: (0, 3), 1: (0, 6)})),
+                         (1, 0))
+        for after in (before, (10, {0: (0, 4), 1: (0, 6)}),
+                      (9, {0: (0, 3), 1: (0, 5)})):
+            with self.subTest(after=after), self.assertRaises(modem.AtError):
+                modem.activation_mapping(before, after)
 
 
 if __name__ == '__main__':

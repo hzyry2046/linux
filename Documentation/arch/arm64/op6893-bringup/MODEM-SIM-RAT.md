@@ -273,3 +273,48 @@ an LHIF remap for net_if=1, queue 0 (see the UL bring-up section of
 should capture LHIF requests across activation, including repeated
 requests for an existing entry. A final remap table alone cannot
 attribute an entry to that specific activation.
+
+### Mainline activation mapping
+
+On a fresh boot of `9bfc8e0f909c`, SIM2 CID 1 activation added
+`net_if=0, lhif_q=2, queue=0` on LTE; after deactivation and the
+switch to NR n41 (AcT 11), activation added `net_if=1, lhif_q=2,
+queue=0`. The original session tool still used channel 0 in both
+cases: its IPv4 DNS probe matched on LTE and failed on NR.
+
+On image `c0b3b7c2bf0b`, per-interface LHIF counters confirmed the
+same allocation sequence. Within a single NR IPv4 PDP, four probe
+windows used channels 0, 1, 0 and 1, in that order. The host netdev was
+brought down between windows to switch its RX and TX channel together.
+Each channel 0 window saw 0/3 matched UDP DNS replies and zero netdev
+RX packets; each channel 1 window saw 3/3 replies and three netdev RX
+packets. AcT 11 and n41 were reported throughout, and CID 1 stayed
+active. Wrong channel selection therefore explains the failure in this
+comparison even though both channels use hardware queue 0.
+
+The same NR policy can later allocate channel 0: a subsequent session
+using the activation counter selected channel 0 and passed DNS. The
+channel is assigned at activation, not determined by the RAT or SIM.
+On kernels exposing the per-interface counters and the `net_channel`
+selector, opt in with:
+
+```sh
+python3 modem_data_session.py --slot 2 --restore-slot 1 --rat nr-lte \
+    --apn YOUR_APN --ipv4-only --activation-mapping --policy-routing \
+    --radio-status --probe --seconds 30
+```
+
+The tool requires exactly one newly recorded mapping between the
+snapshots around CID 1 activation, including a repeat for a known
+channel. It refuses missing or ambiguous evidence and deactivates the
+PDP. It restores the previous channel after bringing the interface down.
+
+An additional 65-second NR IPv4-only session selected channel 1 and
+passed 6/6 UDP DNS probes and 6/6 TCP connections. DPMAIF reported
+17 downlink packets and two UL power-not-ready events in the probe
+window. Both SIMs read back the original RAT policy and inactive PDPs
+after the run; interface routing and the channel selector were restored.
+
+A separate 35-second dual-stack test on NR n41 selected channel 0;
+both IPv4 DNS and IPv6 DNS returned matching responses after IPv6
+configuration on the same CID. This is a short functional check.

@@ -39,7 +39,6 @@
 
 #define CCCI_DPMAIF_BLOCKS	5
 
-#define CCCI_DPMAIF_NET_CHANNEL	0
 
 struct ccci_dpmaif_ul {
 	void *drb;
@@ -132,6 +131,7 @@ struct ccci_dpmaif {
 	spinlock_t tx_lock;
 	bool net_tx;
 	bool net_rx;
+	u8 net_channel;
 	struct ccci_dpmaif_ul ul;
 	struct ccci_dpmaif_dl dl;
 	/* Last result of the bounded register window. */
@@ -878,7 +878,7 @@ static void dpmaif_dl_drain(struct ccci_dpmaif *dpmaif)
 						memcpy(dl->snap, data, dl->snap_len);
 					}
 					if (dpmaif->net_rx && dl->rx_head && !pit->c_bit &&
-					    dl->rx_channel == CCCI_DPMAIF_NET_CHANNEL &&
+					    dl->rx_channel == dpmaif->net_channel &&
 					    len <= ETH_DATA_LEN)
 						dpmaif_net_receive(dpmaif->net, data, len);
 				}
@@ -1255,7 +1255,7 @@ static netdev_tx_t dpmaif_net_xmit(struct sk_buff *skb, struct net_device *net)
 	spin_lock_irqsave(&dpmaif->tx_lock, flags);
 	if (dpmaif->net_tx && skb->len && skb->len <= net->mtu &&
 	    (skb->protocol == htons(ETH_P_IP) || skb->protocol == htons(ETH_P_IPV6)))
-		ret = dpmaif_ul_send(dpmaif, CCCI_DPMAIF_NET_CHANNEL, skb);
+		ret = dpmaif_ul_send(dpmaif, dpmaif->net_channel, skb);
 	if (ret == -ENOSPC) {
 		netif_stop_queue(net);
 		spin_unlock_irqrestore(&dpmaif->tx_lock, flags);
@@ -1897,12 +1897,49 @@ static ssize_t dl_stop_store(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_WO(dl_stop);
 
+static ssize_t net_channel_show(struct device *dev, struct device_attribute *attr,
+				char *buf)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+	u8 channel;
+
+	mutex_lock(&dpmaif->lock);
+	channel = dpmaif->net_channel;
+	mutex_unlock(&dpmaif->lock);
+
+	return sysfs_emit(buf, "%u\n", channel);
+}
+
+static ssize_t net_channel_store(struct device *dev, struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+	u8 channel;
+	int ret;
+
+	ret = kstrtou8(buf, 10, &channel);
+	if (ret)
+		return ret;
+
+	mutex_lock(&dpmaif->lock);
+	/* Open/stop hold this mutex while enabling or quiescing both paths. */
+	if (dpmaif->net_tx || dpmaif->net_rx)
+		ret = -EBUSY;
+	else
+		dpmaif->net_channel = channel;
+	mutex_unlock(&dpmaif->lock);
+
+	return ret ? ret : count;
+}
+static DEVICE_ATTR_RW(net_channel);
+
 static struct attribute *dpmaif_attrs[] = {
 	&dev_attr_sample.attr,
 	&dev_attr_layout.attr,
 	&dev_attr_ul.attr,
 	&dev_attr_ul_start.attr,
 	&dev_attr_ul_stop.attr,
+	&dev_attr_net_channel.attr,
 	&dev_attr_tx_one.attr,
 	&dev_attr_tx_hex.attr,
 	&dev_attr_dl.attr,

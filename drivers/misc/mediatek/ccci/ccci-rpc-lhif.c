@@ -53,6 +53,7 @@ void ccci_rpc_lhif_report(u32 net_if, u32 lhif_q)
 			port->net_if = net_if;
 			port->lhif_q = lhif_q;
 			port->queue = queue;
+			port->requests++;
 		} else {
 			lhif.dropped++;
 		}

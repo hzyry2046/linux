@@ -615,12 +615,14 @@ R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、
 - [x] 修正 basic MUX FCS，主线取得分卡响应并实测双卡同时 LTE 注册。
 - [x] 双卡在位时实测先后选择数据卡：卡 1 IPv4/IPv6、卡 2 IPv4 均通过。
 - [x] 会话工具接入 MUX 选卡和独立 IPv6 重试；实测卡 2 IPv4-only 可用。
-- [ ] 验证两卡槽各自单独插卡；排查卡 2 双栈 PDP 无 RA 且 IPv4 DNS 无回包。
+- [ ] 验证两卡槽各自单独插卡；用激活映射复测卡 2 的 LTE 双栈。
 - [x] 从同机 Android RIL 确认 LTE-only/NR+LTE 参数，主线实测切换和 IPv4 流量。
 - [x] 实机确认 LTE B3/B40 与 NR n41；同时记录 AcT 和物理信道，避免仅凭 NR 行判定驻留。
 - [x] 相同 PDP 配置下对比 LTE/NR 的 DPMAIF 计数，复现 NR 无下行并新增 UL power-not-ready 事件。
 - [x] 同机 6.6 ACK 对照：SIM2 NR SA 能收包且同样会触发 UL power-not-ready；该中断不能单独解释主线无下行。
-- [ ] 对照 Android 和主线激活数据时的 CID→CCMNI/LHIF 映射：ACK 本次 LTE 用 ccmni0、NR 用 ccmni2，主线固定通道 0。先取得主线映射证据，再决定是否扩展数据接口。
-- [ ] 验收 NR 稳定数据和 IPv6；NSA 与频段掩码单独验证。
+- [x] 确认主线激活 CID 1 时可获得不同的 CCMNI 通道；同一 NR PDP 上用 0/1 往返对照复现并修正固定通道造成的收发失败。
+- [ ] 继续验证自动选择在重复激活、并发 LHIF 请求和长时间使用中的行为；目前映射有歧义时明确停止拨号。
+- [x] 采纳激活映射后实测 NR IPv4 重复探测、双栈 PDP 与 IPv6 DNS。
+- [ ] 验收 NR 长时间稳定性；NSA 与频段掩码单独验证。
 
 详见 [SIM/RAT 实测与后续](MODEM-SIM-RAT.md)。
