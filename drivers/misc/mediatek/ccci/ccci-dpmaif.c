@@ -8,6 +8,12 @@
  * explicitly operator-driven uplink or downlink windows below, and each of
  * them can be dismantled again without leaving a hardware pointer behind.
  */
+#include <linux/if_arp.h>
+#include <linux/ip.h>
+#include <linux/ipv6.h>
+#include <linux/iopoll.h>
+#include <linux/netdevice.h>
+#include <linux/skbuff.h>
 #include <linux/bits.h>
 #include <linux/clk.h>
 #include <linux/device.h>
@@ -33,11 +39,14 @@
 
 #define CCCI_DPMAIF_BLOCKS	5
 
+#define CCCI_DPMAIF_NET_CHANNEL	0
+
 struct ccci_dpmaif_ul {
 	void *drb;
 	dma_addr_t drb_dma;
 	void *payload;
-	dma_addr_t payload_dma;
+	void *data;
+	dma_addr_t data_dma;
 	u32 entries;
 	u32 payload_len;
 	u32 queue;
@@ -91,6 +100,8 @@ struct ccci_dpmaif_dl {
 	u32 last_channel;
 	u32 last_bid;
 	u32 snap_len;
+	u32 rx_channel;
+	bool rx_head;
 	u8 snap[CCCI_DPMAIF_DL_SNAP_LEN];
 	/* Offset of the deferred register that last refused to settle, if any. */
 	u32 fail_reg;
@@ -112,6 +123,11 @@ struct ccci_dpmaif {
 	unsigned int irq_refs;
 	/* Serializes the clock-on/sample/clock-off window and both rings. */
 	struct mutex lock;
+	struct net_device *net;
+	/* Protects the TX ring and IRQ wakeups against atomic transmit. */
+	spinlock_t tx_lock;
+	bool net_tx;
+	bool net_rx;
 	struct ccci_dpmaif_ul ul;
 	struct ccci_dpmaif_dl dl;
 	/* Last result of the bounded register window. */
@@ -252,44 +268,78 @@ static int dpmaif_ul_irq_enable(struct ccci_dpmaif *dpmaif)
 	return 0;
 }
 
+static unsigned int dpmaif_ul_space(struct ccci_dpmaif *dpmaif)
+{
+	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
+	u32 index = readl(dpmaif_ao_ul(dpmaif) + CCCI_DPMAIF_UL_STA0(ul->queue));
+
+	ul->rd = (index >> 16) / CCCI_DPMAIF_UL_DRB_WORDS;
+	if (ul->rd >= ul->entries)
+		return 0;
+	return (ul->rd + ul->entries - ul->wr - 1) % ul->entries;
+}
+
 /* Returns true when this call consumed at least one uplink event. */
 static bool dpmaif_ul_irq(struct ccci_dpmaif *dpmaif)
 {
 	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
 	void __iomem *misc = dpmaif_ap_misc(dpmaif);
-	u32 status, masked;
+	u32 status = 0, masked;
 
+	spin_lock(&dpmaif->tx_lock);
+	if (!ul->started)
+		goto out;
 	status = readl(misc + CCCI_DPMAIF_PD_AP_UL_L2TISAR0);
 	masked = readl(dpmaif_ao_ul(dpmaif) + CCCI_DPMAIF_AO_UL_AP_L2TIMR0);
 	status &= ~masked;
 	if (!status)
-		return false;
-	/* Write back what is handled: the status bits are write-one-to-clear. */
+		goto out;
 	writel(status, misc + CCCI_DPMAIF_PD_AP_UL_L2TISAR0);
 	ul->irqs++;
 	ul->last_status = status;
-	if (status & CCCI_DPMAIF_UL_INT_DONE(ul->queue))
+	if (status & CCCI_DPMAIF_UL_INT_DONE(ul->queue)) {
 		ul->done++;
+		if (dpmaif->net_tx && dpmaif_ul_space(dpmaif) >= 2)
+			netif_wake_queue(dpmaif->net);
+	}
 	if (status & (CCCI_DPMAIF_UL_INT_ERR_MSK | CCCI_DPMAIF_UL_INT_MD_NOTREADY_MSK |
 		      CCCI_DPMAIF_UL_INT_MD_PWR_NOTREADY_MSK))
 		ul->err++;
-	return true;
+out:
+	spin_unlock(&dpmaif->tx_lock);
+	return status != 0;
 }
 
-/* One synthetic frame through the uplink ring; the caller holds the lock. */
-static int dpmaif_ul_send(struct ccci_dpmaif *dpmaif, u32 channel_id)
+/* Caller holds tx_lock; each pair owns a distinct DMA payload until consumed. */
+static int dpmaif_ul_send(struct ccci_dpmaif *dpmaif, u32 channel_id,
+			  const struct sk_buff *skb)
 {
 	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
+	void __iomem *doorbell = dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_ADD_DESC(ul->queue);
 	struct ccci_dpmaif_drb_msg *msg;
 	struct ccci_dpmaif_drb_pd *pd;
+	u32 offset, size, val;
 	dma_addr_t dma;
-	u32 count = 0;
-	u32 size;
 
 	if (!ul->started)
 		return -ENOTCONN;
-	size = ul->payload_len;
-	dma = ul->payload_dma;
+	if (dpmaif_ul_space(dpmaif) < 2)
+		return -ENOSPC;
+	if (readl_poll_timeout_atomic(doorbell, val, !(val & CCCI_DPMAIF_UL_ADD_NOT_READY),
+				      0, 100)) {
+		ul->not_ready++;
+		return -EBUSY;
+	}
+	size = skb ? skb->len : ul->payload_len;
+	offset = ul->wr / 2 * CCCI_DPMAIF_UL_PAYLOAD_MAX;
+	dma = ul->data_dma + offset;
+	if (skb) {
+		if (skb_copy_bits(skb, 0, ul->data + offset, size))
+			return -EINVAL;
+	} else {
+		memcpy(ul->data + offset, ul->payload, size);
+	}
+
 	msg = (struct ccci_dpmaif_drb_msg *)ul->drb + ul->wr;
 	memset(msg, 0, sizeof(*msg));
 	msg->dtyp = CCCI_DPMAIF_DES_MSG;
@@ -297,39 +347,29 @@ static int dpmaif_ul_send(struct ccci_dpmaif *dpmaif, u32 channel_id)
 	msg->packet_len = size;
 	msg->channel_id = channel_id;
 	msg->network_type = ul->network_type & 0x7;
-	ul->wr = (ul->wr + 1) % ul->entries;
 
-	pd = (struct ccci_dpmaif_drb_pd *)ul->drb + ul->wr;
+	pd = (struct ccci_dpmaif_drb_pd *)ul->drb + ul->wr + 1;
 	memset(pd, 0, sizeof(*pd));
 	pd->dtyp = CCCI_DPMAIF_DES_PD;
-	/* The last descriptor of a packet clears c_bit. */
-	pd->c_bit = 0;
 	pd->data_len = size;
 	pd->p_data_addr = lower_32_bits(dma);
 	pd->data_addr_ext = upper_32_bits(dma) & 0xff;
-	ul->wr = (ul->wr + 1) % ul->entries;
+	ul->wr = (ul->wr + 2) % ul->entries;
 
-	/* Publish the descriptors before the doorbell. */
-	wmb();
-	while (readl(dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_ADD_DESC(ul->queue)) &
-	       CCCI_DPMAIF_UL_ADD_NOT_READY) {
-		if (++count >= CCCI_DPMAIF_UL_POLL_LIMIT) {
-			ul->not_ready++;
-			return -EBUSY;
-		}
-	}
-	writel((CCCI_DPMAIF_UL_DRB_WORDS * 2) | CCCI_DPMAIF_UL_ADD_UPDATE,
-	       dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_ADD_DESC(ul->queue));
-	count = 0;
-	while (readl(dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_ADD_DESC(ul->queue)) &
-	       CCCI_DPMAIF_UL_ADD_NOT_READY) {
-		if (++count >= CCCI_DPMAIF_UL_POLL_LIMIT) {
-			ul->not_ready++;
-			return -EBUSY;
-		}
-	}
+	/* writel orders the payload and descriptors before the doorbell. */
+	writel((CCCI_DPMAIF_UL_DRB_WORDS * 2) | CCCI_DPMAIF_UL_ADD_UPDATE, doorbell);
 	ul->sent++;
 	return 0;
+}
+
+static int dpmaif_ul_send_probe(struct ccci_dpmaif *dpmaif, u32 channel)
+{
+	int ret;
+
+	spin_lock_irq(&dpmaif->tx_lock);
+	ret = dpmaif_ul_send(dpmaif, channel, NULL);
+	spin_unlock_irq(&dpmaif->tx_lock);
+	return ret;
 }
 
 /* The interrupt line is shared between the two rings and requested once. */
@@ -364,7 +404,7 @@ static int dpmaif_ul_start(struct ccci_dpmaif *dpmaif, u32 queue)
 
 	if (ul->started)
 		return -EBUSY;
-	if (queue > 4)
+	if (queue > 3)
 		return -EINVAL;
 	ret = clk_prepare_enable(dpmaif->clk_main);
 	if (ret)
@@ -378,11 +418,16 @@ static int dpmaif_ul_start(struct ccci_dpmaif *dpmaif, u32 queue)
 		ret = -ENOMEM;
 		goto out_bus;
 	}
-	ul->payload = dma_alloc_coherent(dpmaif->dev, CCCI_DPMAIF_UL_PAYLOAD_MAX,
-					 &ul->payload_dma, GFP_KERNEL);
+	ul->payload = kmalloc(CCCI_DPMAIF_UL_PAYLOAD_MAX, GFP_KERNEL);
 	if (!ul->payload) {
 		ret = -ENOMEM;
 		goto out_drb;
+	}
+	ul->data = dma_alloc_coherent(dpmaif->dev, ul->entries / 2 * CCCI_DPMAIF_UL_PAYLOAD_MAX,
+				      &ul->data_dma, GFP_KERNEL);
+	if (!ul->data) {
+		ret = -ENOMEM;
+		goto out_payload;
 	}
 	ul->queue = queue;
 	dpmaif_ul_reset_counters(dpmaif);
@@ -393,13 +438,17 @@ static int dpmaif_ul_start(struct ccci_dpmaif *dpmaif, u32 queue)
 	ret = dpmaif_irq_get(dpmaif);
 	if (ret)
 		goto out_unprogram;
+	spin_lock_irq(&dpmaif->tx_lock);
 	ul->started = true;
+	spin_unlock_irq(&dpmaif->tx_lock);
 	return 0;
 
 out_unprogram:
 	dpmaif_ul_unprogram(dpmaif);
-	dma_free_coherent(dpmaif->dev, CCCI_DPMAIF_UL_PAYLOAD_MAX, ul->payload,
-			  ul->payload_dma);
+	dma_free_coherent(dpmaif->dev, ul->entries / 2 * CCCI_DPMAIF_UL_PAYLOAD_MAX,
+			  ul->data, ul->data_dma);
+out_payload:
+	kfree(ul->payload);
 	ul->payload = NULL;
 out_drb:
 	dma_free_coherent(dpmaif->dev, ul->entries * sizeof(struct ccci_dpmaif_drb_pd),
@@ -418,11 +467,14 @@ static void dpmaif_ul_stop(struct ccci_dpmaif *dpmaif)
 
 	if (!ul->started)
 		return;
+	spin_lock_irq(&dpmaif->tx_lock);
 	ul->started = false;
+	spin_unlock_irq(&dpmaif->tx_lock);
 	dpmaif_ul_unprogram(dpmaif);
 	dpmaif_irq_put(dpmaif);
-	dma_free_coherent(dpmaif->dev, CCCI_DPMAIF_UL_PAYLOAD_MAX, ul->payload,
-			  ul->payload_dma);
+	dma_free_coherent(dpmaif->dev, ul->entries / 2 * CCCI_DPMAIF_UL_PAYLOAD_MAX,
+			  ul->data, ul->data_dma);
+	kfree(ul->payload);
 	ul->payload = NULL;
 	dma_free_coherent(dpmaif->dev, ul->entries * sizeof(struct ccci_dpmaif_drb_pd),
 			  ul->drb, ul->drb_dma);
@@ -720,22 +772,53 @@ static void dpmaif_dl_irq_mask(struct ccci_dpmaif *dpmaif)
 	writel(0xffffffff, dpmaif_ap_misc(dpmaif) + CCCI_DPMAIF_PD_AP_DL_L2TISAR0);
 }
 
+static void dpmaif_net_receive(struct net_device *net, const void *data, u32 len)
+{
+	const u8 *ip = data;
+	struct sk_buff *skb;
+	__be16 protocol;
+
+	if (len >= sizeof(struct iphdr) && ip[0] >> 4 == 4) {
+		protocol = htons(ETH_P_IP);
+	} else if (len >= sizeof(struct ipv6hdr) && ip[0] >> 4 == 6) {
+		protocol = htons(ETH_P_IPV6);
+	} else {
+		net->stats.rx_dropped++;
+		return;
+	}
+
+	skb = netdev_alloc_skb_ip_align(net, len);
+	if (!skb) {
+		net->stats.rx_dropped++;
+		return;
+	}
+	skb_put_data(skb, data, len);
+	skb->protocol = protocol;
+	net->stats.rx_packets++;
+	net->stats.rx_bytes += len;
+	netif_rx(skb);
+}
+
 /*
  * Walk every PIT entry the modem has published and hand the buffers back. The
- * payload is copied out only far enough to identify it: this path observes the
- * ring, it does not deliver packets anywhere yet.
+ * When the raw IP interface is up, deliver complete single-buffer packets.
  */
 static void dpmaif_dl_drain(struct ccci_dpmaif *dpmaif)
 {
 	struct ccci_dpmaif_dl *dl = &dpmaif->dl;
 	u32 widx, used, i;
-	u32 bat_add = 0, pit_add = 0;
+	u32 bat_add = 0, frag_add = 0, pit_add = 0;
 	u32 channel = 0, cur_len = 0;
 	bool last = false;
 	u32 last_len = 0;
 
 	widx = readl(dpmaif_ao_dl(dpmaif) + CCCI_DPMAIF_AO_DL_PIT_STA2) &
 	       CCCI_DPMAIF_DL_PIT_WRIDX_MSK;
+	if (widx >= dl->pit_entries || dl->pit_rd >= dl->pit_entries) {
+		dl->overrun++;
+		return;
+	}
+	dma_rmb();
 	used = (widx >= dl->pit_rd) ? widx - dl->pit_rd :
 	       dl->pit_entries - dl->pit_rd + widx;
 
@@ -746,34 +829,48 @@ static void dpmaif_dl_drain(struct ccci_dpmaif *dpmaif)
 			struct ccci_dpmaif_msg_pit *msg = (struct ccci_dpmaif_msg_pit *)pit;
 
 			dl->msg_pits++;
-			channel = msg->channel_id;
-		} else if (pit->ig) {
-			/* A dummy entry: it only asks the AP to move its index. */
-		} else if (pit->buffer_type) {
-			/*
-			 * A fragment entry now that the ring exists, but reassembly is
-			 * not implemented, so only its length is accounted for.
-			 */
+			dl->rx_channel = msg->channel_id;
+			dl->rx_head = !msg->error_bit && !msg->dp;
+			goto next;
+		}
+		if (pit->ig)
+			goto next;
+
+		if (pit->buffer_type) {
 			dl->frag_pits++;
-			cur_len += pit->data_len;
+			dl->rx_head = false;
+			if (pit->buffer_id >= dl->frg.entries) {
+				dl->overrun++;
+			} else {
+				dpmaif_dl_publish(&dl->frg, pit->buffer_id);
+				frag_add++;
+			}
 		} else {
 			dl->last_bid = pit->buffer_id;
 			if (pit->buffer_id >= dl->bat.entries) {
 				dl->overrun++;
 			} else {
-				if (!cur_len && pit->data_len) {
-					u32 n = min_t(u32, pit->data_len,
-						      CCCI_DPMAIF_DL_SNAP_LEN);
+				const void *data = dl->bat.buf[pit->buffer_id].cpu;
+				u32 len = pit->data_len;
 
-					memcpy(dl->snap,
-					       dl->bat.buf[pit->buffer_id].cpu, n);
-					dl->snap_len = n;
+				if (len && len <= dl->bat.buf_sz) {
+					if (!cur_len) {
+						dl->snap_len = min_t(u32, len,
+								  CCCI_DPMAIF_DL_SNAP_LEN);
+						memcpy(dl->snap, data, dl->snap_len);
+					}
+					if (dpmaif->net_rx && dl->rx_head && !pit->c_bit &&
+					    dl->rx_channel == CCCI_DPMAIF_NET_CHANNEL &&
+					    len <= ETH_DATA_LEN)
+						dpmaif_net_receive(dpmaif->net, data, len);
 				}
 				dpmaif_dl_publish(&dl->bat, pit->buffer_id);
 				bat_add++;
 			}
-			cur_len += pit->data_len;
+			dl->rx_head = false;
 		}
+		cur_len += pit->data_len;
+		channel = dl->rx_channel;
 		/* A cleared c_bit marks the last entry of one packet. */
 		if (!pit->c_bit) {
 			dl->pkts++;
@@ -782,6 +879,7 @@ static void dpmaif_dl_drain(struct ccci_dpmaif *dpmaif)
 			cur_len = 0;
 			last = true;
 		}
+next:
 		dl->pit_rd = (dl->pit_rd + 1) % dl->pit_entries;
 		pit_add++;
 	}
@@ -792,6 +890,8 @@ static void dpmaif_dl_drain(struct ccci_dpmaif *dpmaif)
 		dl->last_channel = channel;
 	}
 	if (bat_add && dpmaif_dl_add_bat(dpmaif, bat_add))
+		dl->err++;
+	if (frag_add && dpmaif_dl_add_frg_bat(dpmaif, frag_add))
 		dl->err++;
 	if (dpmaif_dl_add_pit(dpmaif, pit_add))
 		dl->err++;
@@ -1070,6 +1170,7 @@ static void dpmaif_dl_stop(struct ccci_dpmaif *dpmaif)
 	dpmaif_dl_irq_mask(dpmaif);
 	spin_lock_irq(&dl->lock);
 	dl->started = false;
+	dl->rx_head = false;
 	spin_unlock_irq(&dl->lock);
 	dpmaif_irq_put(dpmaif);
 	dpmaif_dl_unprogram(dpmaif);
@@ -1080,6 +1181,116 @@ static void dpmaif_dl_stop(struct ccci_dpmaif *dpmaif)
 	dpmaif_dl_ring_free(dpmaif, &dl->bat);
 	clk_disable_unprepare(dpmaif->clk_bus);
 	clk_disable_unprepare(dpmaif->clk_main);
+}
+
+static struct ccci_dpmaif *dpmaif_net_priv(struct net_device *net)
+{
+	return *(struct ccci_dpmaif **)netdev_priv(net);
+}
+
+static int dpmaif_net_open(struct net_device *net)
+{
+	struct ccci_dpmaif *dpmaif = dpmaif_net_priv(net);
+
+	mutex_lock(&dpmaif->lock);
+	/* Rings are explicitly armed by the modem bring-up sequence. */
+	if (!dpmaif->ul.started || !dpmaif->dl.started) {
+		mutex_unlock(&dpmaif->lock);
+		return -ENOLINK;
+	}
+	spin_lock_irq(&dpmaif->dl.lock);
+	dpmaif->net_rx = true;
+	spin_unlock_irq(&dpmaif->dl.lock);
+	spin_lock_irq(&dpmaif->tx_lock);
+	dpmaif->net_tx = true;
+	netif_start_queue(net);
+	spin_unlock_irq(&dpmaif->tx_lock);
+	netif_carrier_on(net);
+	mutex_unlock(&dpmaif->lock);
+	return 0;
+}
+
+static int dpmaif_net_stop(struct net_device *net)
+{
+	struct ccci_dpmaif *dpmaif = dpmaif_net_priv(net);
+
+	mutex_lock(&dpmaif->lock);
+	spin_lock_irq(&dpmaif->tx_lock);
+	dpmaif->net_tx = false;
+	netif_stop_queue(net);
+	spin_unlock_irq(&dpmaif->tx_lock);
+	netif_tx_disable(net);
+	spin_lock_irq(&dpmaif->dl.lock);
+	dpmaif->net_rx = false;
+	spin_unlock_irq(&dpmaif->dl.lock);
+	netif_carrier_off(net);
+	mutex_unlock(&dpmaif->lock);
+	return 0;
+}
+
+static netdev_tx_t dpmaif_net_xmit(struct sk_buff *skb, struct net_device *net)
+{
+	struct ccci_dpmaif *dpmaif = dpmaif_net_priv(net);
+	unsigned long flags;
+	int ret = -EINVAL;
+
+	spin_lock_irqsave(&dpmaif->tx_lock, flags);
+	if (dpmaif->net_tx && skb->len && skb->len <= net->mtu &&
+	    (skb->protocol == htons(ETH_P_IP) || skb->protocol == htons(ETH_P_IPV6)))
+		ret = dpmaif_ul_send(dpmaif, CCCI_DPMAIF_NET_CHANNEL, skb);
+	if (ret == -ENOSPC) {
+		netif_stop_queue(net);
+		spin_unlock_irqrestore(&dpmaif->tx_lock, flags);
+		return NETDEV_TX_BUSY;
+	}
+	if (ret) {
+		net->stats.tx_dropped++;
+	} else {
+		net->stats.tx_packets++;
+		net->stats.tx_bytes += skb->len;
+		if (dpmaif_ul_space(dpmaif) < 2)
+			netif_stop_queue(net);
+	}
+	spin_unlock_irqrestore(&dpmaif->tx_lock, flags);
+	dev_kfree_skb_any(skb);
+	return NETDEV_TX_OK;
+}
+
+static const struct net_device_ops dpmaif_net_ops = {
+	.ndo_open = dpmaif_net_open,
+	.ndo_stop = dpmaif_net_stop,
+	.ndo_start_xmit = dpmaif_net_xmit,
+};
+
+static void dpmaif_net_setup(struct net_device *net)
+{
+	net->netdev_ops = &dpmaif_net_ops;
+	net->type = ARPHRD_NONE;
+	net->flags = IFF_POINTOPOINT | IFF_NOARP;
+	net->mtu = ETH_DATA_LEN;
+	net->min_mtu = IPV6_MIN_MTU;
+	net->max_mtu = ETH_DATA_LEN;
+	net->tx_queue_len = 1000;
+}
+
+static int dpmaif_net_register(struct ccci_dpmaif *dpmaif)
+{
+	struct net_device *net;
+	int ret;
+
+	/* ccmni0 is currently reserved by the legacy CCIF diagnostic endpoint. */
+	net = alloc_netdev(sizeof(struct ccci_dpmaif *), "ccmnidp%d",
+			   NET_NAME_ENUM, dpmaif_net_setup);
+	if (!net)
+		return -ENOMEM;
+	*(struct ccci_dpmaif **)netdev_priv(net) = dpmaif;
+	SET_NETDEV_DEV(net, dpmaif->dev);
+	netif_carrier_off(net);
+	dpmaif->net = net;
+	ret = register_netdev(net);
+	if (ret)
+		free_netdev(net);
+	return ret;
 }
 
 static int dpmaif_collect(struct ccci_dpmaif *dpmaif, struct ccci_dpmaif_sample *sample)
@@ -1179,6 +1390,10 @@ static ssize_t ul_start_store(struct device *dev, struct device_attribute *attr,
 	if (payload < 14 || payload > CCCI_DPMAIF_UL_PAYLOAD_MAX || net_type > 7)
 		return -EINVAL;
 	mutex_lock(&dpmaif->lock);
+	if (ul->started) {
+		mutex_unlock(&dpmaif->lock);
+		return -EBUSY;
+	}
 	ul->entries = CCCI_DPMAIF_UL_DRB_ENTRIES;
 	ul->payload_len = payload;
 	ul->network_type = net_type;
@@ -1194,6 +1409,10 @@ static ssize_t ul_stop_store(struct device *dev, struct device_attribute *attr,
 	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
 
 	mutex_lock(&dpmaif->lock);
+	if (dpmaif->net_tx) {
+		mutex_unlock(&dpmaif->lock);
+		return -EBUSY;
+	}
 	dpmaif_ul_stop(dpmaif);
 	mutex_unlock(&dpmaif->lock);
 	return count;
@@ -1217,6 +1436,10 @@ static ssize_t tx_one_store(struct device *dev, struct device_attribute *attr,
 	if (ret)
 		return ret;
 	mutex_lock(&dpmaif->lock);
+	if (dpmaif->net_tx) {
+		ret = -EBUSY;
+		goto out;
+	}
 	if (!ul->started) {
 		ret = -ENOTCONN;
 		goto out;
@@ -1230,7 +1453,7 @@ static ssize_t tx_one_store(struct device *dev, struct device_attribute *attr,
 	frame[13] = 0xb5;
 	for (i = 14; i < ul->payload_len; i++)
 		frame[i] = (u8)(i - 14);
-	ret = dpmaif_ul_send(dpmaif, channel);
+	ret = dpmaif_ul_send_probe(dpmaif, channel);
 out:
 	mutex_unlock(&dpmaif->lock);
 	return ret ? ret : count;
@@ -1283,6 +1506,10 @@ static ssize_t tx_hex_store(struct device *dev, struct device_attribute *attr,
 	if (!len || (len & 1) || len / 2 > CCCI_DPMAIF_UL_PAYLOAD_MAX)
 		return -EINVAL;
 	mutex_lock(&dpmaif->lock);
+	if (dpmaif->net_tx) {
+		ret = -EBUSY;
+		goto out;
+	}
 	if (!ul->started) {
 		ret = -ENOTCONN;
 		goto out;
@@ -1299,7 +1526,7 @@ static ssize_t tx_hex_store(struct device *dev, struct device_attribute *attr,
 		frame[i / 2] = (u8)((hi << 4) | lo);
 	}
 	ul->payload_len = len / 2;
-	ret = dpmaif_ul_send(dpmaif, channel);
+	ret = dpmaif_ul_send_probe(dpmaif, channel);
 out:
 	mutex_unlock(&dpmaif->lock);
 	return ret ? ret : count;
@@ -1563,6 +1790,10 @@ static ssize_t poke_store(struct device *dev, struct device_attribute *attr,
 	if (ret)
 		return ret;
 	mutex_lock(&dpmaif->lock);
+	if (dpmaif->net_tx) {
+		mutex_unlock(&dpmaif->lock);
+		return -EBUSY;
+	}
 	if (dpmaif->ul.started || dpmaif->dl.started) {
 		ret = -EBUSY;
 		goto out;
@@ -1632,6 +1863,10 @@ static ssize_t dl_stop_store(struct device *dev, struct device_attribute *attr,
 	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
 
 	mutex_lock(&dpmaif->lock);
+	if (dpmaif->net_tx) {
+		mutex_unlock(&dpmaif->lock);
+		return -EBUSY;
+	}
 	dpmaif_dl_stop(dpmaif);
 	mutex_unlock(&dpmaif->lock);
 	return count;
@@ -1665,7 +1900,7 @@ static int dpmaif_probe(struct platform_device *pdev)
 	};
 	struct ccci_dpmaif *dpmaif;
 	struct device *dev = &pdev->dev;
-	int i;
+	int i, ret;
 
 	dpmaif = devm_kzalloc(dev, sizeof(*dpmaif), GFP_KERNEL);
 	if (!dpmaif)
@@ -1673,6 +1908,7 @@ static int dpmaif_probe(struct platform_device *pdev)
 	dpmaif->dev = dev;
 	mutex_init(&dpmaif->lock);
 	spin_lock_init(&dpmaif->dl.lock);
+	spin_lock_init(&dpmaif->tx_lock);
 	for (i = 0; i < CCCI_DPMAIF_BLOCKS; i++) {
 		struct resource *res;
 
@@ -1698,6 +1934,9 @@ static int dpmaif_probe(struct platform_device *pdev)
 	if (IS_ERR(dpmaif->clk_bus))
 		return dev_err_probe(dev, PTR_ERR(dpmaif->clk_bus), "no dpmaif clock\n");
 	platform_set_drvdata(pdev, dpmaif);
+	ret = dpmaif_net_register(dpmaif);
+	if (ret)
+		return dev_err_probe(dev, ret, "cannot register raw IP netdev\n");
 	dev_info(dev, "dpmaif observed: irq=%d, %d blocks mapped, no register written\n",
 		 dpmaif->irq, CCCI_DPMAIF_BLOCKS);
 	return 0;
@@ -1707,10 +1946,12 @@ static void dpmaif_remove(struct platform_device *pdev)
 {
 	struct ccci_dpmaif *dpmaif = platform_get_drvdata(pdev);
 
+	unregister_netdev(dpmaif->net);
 	mutex_lock(&dpmaif->lock);
 	dpmaif_dl_stop(dpmaif);
 	dpmaif_ul_stop(dpmaif);
 	mutex_unlock(&dpmaif->lock);
+	free_netdev(dpmaif->net);
 }
 
 static const struct of_device_id dpmaif_of_ids[] = {
