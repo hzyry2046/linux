@@ -1496,3 +1496,21 @@ not-ready（其中一次两者同时置位），长度错误和门铃超时均�
 是按样本窗口归属。这组样本支持未就绪事件集中在空闲后首包，且首包仍
 可正常收到回复。它不能证明中断源确实是某个睡眠状态，也不能用来定位
 丢包。保留中断诊断，不因该事件重发已经提交的描述符。
+
+## IPv6 真机验收
+
+在 `b4fbbdd8d476` 的双栈 PDP 上，`AT+CGPADDR=1` 的 16 字节
+IPv6 字段高 64 位为 0，低 64 位是接口 ID。用户态用该 ID 设置
+链路本地地址，向 all-routers 发送 RS，从返回的 RA 取得可自动配置的
+/64 前缀，再用同一个 ID 配置全局地址。只为测试解析器添加主机路由，
+USB SSH 保持在线。
+
+绑定 `ccmnidp0` 的 IPv6 UDP socket 收到匹配的 DNS 回复，IPv6 ping
+5/5。本次复测新增 8 个上行包，硬件消费指针追平写指针。已验证工具
+[modem_ipv6_probe.py](tools/modem_ipv6_probe.py) 接受设备上的
+`AT+CGPADDR=1` 日志，测试退出后清理临时地址、路由和设置；报告不含
+运营商地址。见[实测数据](evidence/modem-dpmaif-ipv6.json)。
+
+本地内核的 `inet6_set_iftoken()` 拒绝 `IFF_NOARP` 接口，因此
+`ccmnidp0` 暂不能直接通过 `ip token` 让内核采用 PDP 分配的 ID。
+现有路径由用户态处理 RA；仍需整合 PDP 重连、地址和路由的管理。

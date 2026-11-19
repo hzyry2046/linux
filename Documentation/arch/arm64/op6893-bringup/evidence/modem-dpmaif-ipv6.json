@@ -1,0 +1,15 @@
+{
+  "ra_received": true,
+  "autonomous_prefix": true,
+  "dns_matched": true,
+  "ul_before": "started=1 queue=0 entries=2048 payload=60 wr=164 sent=82 done=82 irqs=114 err=32 not_ready=0 last_status=0x00000001 rd_words=328 len_err=0 md_not_ready=1 md_power_not_ready=32 err_status=0x00008400",
+  "ping": [
+    5,
+    5
+  ],
+  "ul_after": "started=1 queue=0 entries=2048 payload=60 wr=180 sent=90 done=90 irqs=128 err=38 not_ready=0 last_status=0x00000001 rd_words=360 len_err=0 md_not_ready=1 md_power_not_ready=38 err_status=0x00008400",
+  "image": "b4fbbdd8d476",
+  "interface": "ccmnidp0",
+  "pdp_type": "IPV4V6",
+  "address_setup": "AT+CGPADDR PDP IID plus prefix from ICMPv6 Router Advertisement; userspace configured addresses and a resolver-only host route."
+}
