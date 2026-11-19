@@ -1,5 +1,11 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-19 更新：主线已到 HS2、CCISM、SIM、LTE 注册、PDP 激活和 DPMAIF
+上行描述符完成；仍未验收主线 IP 通信。6.6 ACK 的同板蜂窝流量与下行环读回
+已采样，主线已修正两处 DPMAIF 初始化差异，待真机验证。见
+[基带放行与数据面记录](MODEM-BOOT-RELEASE.md)。
+
+
 2026-11-17 MD首次真机放行与真实数据实测：SCP常驻→`takeover/on`冷上电→
 `prepare`门→唯一一次`(6,0)`放行（`boot_ret=0`）→HS1被接受、runtime发布、
 endpoint arm；随后在真实NVRAM私有副本上完成整轮FS扫描（859请求/964发送/

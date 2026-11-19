@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-19",
+  "ack": {
+    "image": "boot-review6.img",
+    "release": "6.6.30-4k-g061b7bdafc86 #67",
+    "sha256": "808994b5a0bd47ee50bb0053a0afbee899a7deb1e22b19b690861ef62f9e2c37"
+  },
+  "probe": "Read-only DPMAIF v2 AO registers; Android stock modem stack",
+  "traffic": {
+    "interface": "ccmni0",
+    "ipv4_ping_sent": 5,
+    "ipv4_ping_received": 5,
+    "note": "Background traffic present; the delta is not attributable to ping alone."
+  },
+  "snapshots": {
+    "before": {
+      "dl_irq_mask": "0x000000be",
+      "pktinfo0": "0x000104ff",
+      "pktinfo1": "0x00000c08",
+      "pktinfo2": "0x7c000d00",
+      "thres": "0x80be203e",
+      "bat_sta1": "0x00412000",
+      "bat_sta2": "0x0cce0ccd",
+      "pit_sta1": "0x01004000",
+      "pit_sta2": "0x199c199c",
+      "pit_sta3": "0x1d9c0001",
+      "frg_thres": "0x10000f3e",
+      "frgbat_sta1": "0x00412000",
+      "frgbat_sta2": "0x00001fff",
+      "pit_sta4": "0x00000001",
+      "ccmni0_packets": {
+        "rx": 3275,
+        "tx": 3669
+      }
+    },
+    "after": {
+      "dl_irq_mask": "0x000000be",
+      "pktinfo0": "0x000104ff",
+      "pktinfo1": "0x00000c08",
+      "pktinfo2": "0x7c000d00",
+      "thres": "0x80be203e",
+      "bat_sta1": "0x00412000",
+      "bat_sta2": "0x0cfe0cfd",
+      "pit_sta1": "0x01004000",
+      "pit_sta2": "0x19fc19fc",
+      "pit_sta3": "0x1dfc0001",
+      "frg_thres": "0x10000f3e",
+      "frgbat_sta1": "0x00412000",
+      "frgbat_sta2": "0x00001fff",
+      "pit_sta4": "0x00000001",
+      "ccmni0_packets": {
+        "rx": 3321,
+        "tx": 3724
+      }
+    }
+  }
+}

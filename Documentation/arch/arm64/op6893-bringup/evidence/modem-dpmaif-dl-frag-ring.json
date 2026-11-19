@@ -52,6 +52,6 @@
     "ring_state": "frg=256/1920, frg_thres=0x10000f3e (feature on, buffer size 15*128, threshold 62), pktinfo1=0x00000c08 (MTU 3080), bat_init not busy",
     "uplink": "four frames sent and consumed, sent=4 done=4 irqs=4 err=0 last_status=0x1",
     "downlink": "AO_DL_BAT_STA2 stayed 0 and AO_DL_PIT_STA2 stayed 0x400 over 90s: the engine never took a buffer and never began a transfer",
-    "verdict": "with the packet queue enabled, the fragment ring installed and the vendor MTU, every downlink register the driver programs matches the vendor and the engine still does not start, so the missing input is on the modem side"
+    "verdict": "no DPMAIF downlink progress was observed; the result does not distinguish missing modem input from AP ring initialization differences. See modem-dpmaif-ack-review6.json for the comparison."
   }
 }

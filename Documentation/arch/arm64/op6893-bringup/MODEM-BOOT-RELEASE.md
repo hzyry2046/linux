@@ -1317,11 +1317,11 @@ BAT 队列（`BAT_INIT_CON1` bit16 + 只更新使能位的 `BAT_INIT` 命令）�
 `AO_DL_PIT_STA2` 停在 `0x400`、`AO_DL_BAT_STA2` 停在 0——引擎从未取过一个下行缓冲，也就是
 从未开始传输。
 
-### AP 侧现在已与厂商对齐
+### 当时已核对的 AP 侧配置
 
 逐项核对过的：BAT 基址/大小/使能及初始化握手（含只更新使能位那一步）、PIT 基址/大小/使能
 与 dummy AP 索引、`RDY_CHK_THRES`（拆开是 CHKSUM_ON + PKT_ALIGN_EN + `BAT_CHECK_THRES` 62
-+ PIT burst + `CHK_RB_PITNUM` 62，与厂商 setter 逐位一致）、上行消息描述符（与
++ PIT burst；低位配置见文末）、上行消息描述符（与
 `struct dpmaif_drb_msg` 字段完全相同，`count_l` 为 0 与厂商对普通 skb 的取值一致，校验和
 卸载标志为 0 因为探针自己算校验和）、以及两个 add 门铃的 `count|UPDATE` 形式与 not-ready
 轮询。
@@ -1336,10 +1336,7 @@ bufsz 15×128 + 阈值 62，`pktinfo1=0xc08` 即 MTU 3080，`bat_init` 不 busy�
 消费（`done=4 err=0`），但 `AO_DL_BAT_STA2` 仍是 0、`AO_DL_PIT_STA2` 仍是 `0x400`——引擎
 依旧从未取过缓冲、从未开始传输。
 
-**结论**：AP 侧能对照厂商的寄存器已经全部对齐（只剩 MD 域总线重映射未配），引擎仍不启动。
-所以缺的输入在 MD 侧，不在 AP 侧的编程。
-
-仍然存在的差异只剩 MD 域总线重映射未配置。
+**此次实测只表明下行环没有进展，不能定位丢包在 AP 还是 MD。** 后续 6.6 对照发现了 AP 侧启动差异，见文末。
 
 ### MD 镜像里的明文串说明了它的 IP 栈结构
 
@@ -1405,3 +1402,30 @@ rqos 插件），以及接口名格式串 `ccmni%d`。
 `evidence/modem-dpmaif-dl-notify-fault.json`；BAT 队列使能缺失与 AP/厂商对齐清单见
 `evidence/modem-dpmaif-dl-queue-enable.json`；分片环、MTU 与 MD 中间件清单见
 `evidence/modem-dpmaif-dl-frag-ring.json`。
+
+# 6.6 ACK 下行对照（2026-11-19）
+
+同一台设备用 `boot-review6.img` 启动 Android，`/proc/version` 报告
+`6.6.30-4k-g061b7bdafc86 #67`。用匹配该构建 ABI 的临时只读模块采集
+DPMAIF v2 AO 状态；不依赖 `/dev/mem`。通过 `ccmni0` 发送的 5 次 IPv4
+ping 全部收到回复；采样区间有后台流量，环指针及网卡计数的增量不能归给
+这 5 次 ping。原始日志留在构建工作区，脱敏快照见
+[evidence/modem-dpmaif-ack-review6.json](evidence/modem-dpmaif-ack-review6.json)。
+
+ACK 的 BAT/fragment BAT 各 8192 项，PIT 16384 项。空闲的 fragment BAT
+写指针为 8191。6.6 的 `dpmaif_alloc_bat_req()` 和
+`dpmaif_alloc_bat_frg()` 都显式保留一个空槽，启动门铃只报告实际发布数。
+此前主线一次报告整环，写指针回绕为 0；因此此前 `BAT_STA2=0` 无法
+证明主线队列与 ACK 等价。厂商 v2 启动只设置 PIT 可用索引和
+`UL_RESERVE_RW`，此前主线额外把 PIT 写索引设为 1024。厂商对
+`PIT_INIT_CON2` 的重写是在运行过程中保存、恢复硬件索引，不是启动设置。
+
+主线提交 `458685b0c` 修正两处初始化，并补上 BAT/fragment BAT 和
+PIT 状态读回。4.19 和 6.6 的 v2 reorder 阈值 setter 都写
+`PKTINFO0[7:0]`（源码设 64）。ACK 运行后读到该字段为 255；
+`RDY_CHK_THRES[7:0]=0x3e` 含有 BAT 阈值，不是 reorder 阈值。
+目前没有证据表明应把运行时读值直接写成初始化常量。
+
+修订后需要用一次主线真机测试记录启动后、发包前和发包后的 AO 状态，
+并用 `8192/16384` 对照 ACK 环布局。先确认 BAT 和 PIT 消费指针是否
+推进，再决定是完善下行收包还是继续追踪 MD 转发。
