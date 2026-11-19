@@ -57,7 +57,7 @@ def ra_prefix(message):
     return None
 
 
-def solicit(link_local, report):
+def solicit(link_local, report, attempts=3):
     idx = socket.if_nametoindex(IFACE)
     with socket.socket(socket.AF_INET6, socket.SOCK_RAW, socket.IPPROTO_ICMPV6) as sock:
         bind_interface(sock)
@@ -65,7 +65,7 @@ def solicit(link_local, report):
         sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_MULTICAST_HOPS, 255)
         sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_RECVHOPLIMIT, 1)
         sock.bind((str(link_local), 0, 0, idx))
-        for _ in range(3):
+        for _ in range(attempts):
             sock.sendto(b'\x85' + b'\0' * 7, ('ff02::2', 0, 0, idx))
             deadline = time.monotonic() + 3
             while (remaining := deadline - time.monotonic()) > 0:
@@ -89,13 +89,14 @@ def solicit(link_local, report):
     return None
 
 
-def dns_reply():
+def dns_reply(resolver=RESOLVER):
     token = secrets.randbits(16)
     question = b'\x03www\x07example\x03com\x00\x00\x01\x00\x01'
-    with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as sock:
+    family = socket.AF_INET6 if ipaddress.ip_address(resolver).version == 6 else socket.AF_INET
+    with socket.socket(family, socket.SOCK_DGRAM) as sock:
         bind_interface(sock)
         sock.settimeout(5)
-        sock.connect((RESOLVER, 53))
+        sock.connect((resolver, 53))
         sock.send(struct.pack('!6H', token, 0x100, 1, 0, 0, 0) + question)
         try:
             data = sock.recv(4096)

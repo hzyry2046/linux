@@ -1,0 +1,24 @@
+{
+  "image": "b4fbbdd8d476",
+  "interface": "ccmnidp0",
+  "context": 1,
+  "reconnect_trigger": "CID deactivated using the session-owned AT connection",
+  "events": [
+    "CID 1 active, IPv4 and IPv6 configured",
+    "IPv4 DNS: matched",
+    "IPv6 DNS: matched",
+    "injected modem CID 1 deactivation",
+    "CID 1 disconnected",
+    "waiting before the next CID 1 activation",
+    "no IPv6 router advertisement received",
+    "waiting before the next CID 1 activation",
+    "CID 1 active, IPv4 and IPv6 configured",
+    "IPv4 DNS: matched",
+    "IPv6 DNS: matched",
+    "CID 1 deactivated and link cleaned up"
+  ],
+  "final_context_active": false,
+  "final_interface_up": false,
+  "final_ipv4_routes": 0,
+  "final_ipv6_routes": 0
+}

@@ -1514,3 +1514,24 @@ USB SSH 保持在线。
 本地内核的 `inet6_set_iftoken()` 拒绝 `IFF_NOARP` 接口，因此
 `ccmnidp0` 暂不能直接通过 `ip token` 让内核采用 PDP 分配的 ID。
 现有路径由用户态处理 RA；仍需整合 PDP 重连、地址和路由的管理。
+
+## 双栈会话启停与重连
+
+在已到 HS2、已注册网络且已启用下行环的设备上，将
+[modem_data_session.py](tools/modem_data_session.py) 与
+`modem_at_probe.py`、`modem_at_mux.py`、`modem_ipv6_probe.py` 放在同一目录。
+例如以 root 运行：
+
+```sh
+python3 modem_data_session.py --apn ctnet --probe --seconds 20
+```
+
+将 APN 换成现场值；工具拒绝接管已激活的 CID 1。省略 `--seconds`
+则前台保持会话，SIGINT/SIGTERM 请求清理并停用 CID。工具按 LHIF 映射
+检查或启用上行环，配置双栈地址，只添加所指定目标的主机路由。
+DPMAIF 环保留给后续会话，默认路由保持不变。
+
+真机在同一 AT 连接中注入 CID 停用，工具检测到掉线并重连。第一次
+重连未收到 IPv6 RA，清理后等待 10 秒再次激活；第二次重连成功且双栈
+DNS 通过。退出后确认 CID 1 未激活，接口下线，地址和路由清理完毕。
+见[实测记录](evidence/modem-dpmaif-data-session.json)。
