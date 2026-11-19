@@ -5,8 +5,9 @@
 拿到地址，但 IPv4 DNS 无回包且未收到 IPv6 RA。
 SIM2 实测 LTE B3/B40 和 NR n41（AcT 11，与 SA 驻网一致）。相同 SIM 和
 IPv4-only PDP 配置下，LTE 重复探测通过；NR 曾收到 DNS 回包，但后续复测
-无下行并出现 DPMAIF UL power-not-ready 事件。NR 数据稳定性、IPv6、NSA
-和锁频段仍待验证。
+无下行并出现 DPMAIF UL power-not-ready 事件。同机 Android/6.6 的 SIM2
+NR SA 在出现同类事件时仍能经 ccmni2 收包；主线固定使用通道 0，待核对
+承载映射。NR 数据稳定性、IPv6、NSA 和锁频段仍待验证。
 见 [SIM/RAT 实测](MODEM-SIM-RAT.md)。
 
 2026-11-19 更新：主线已在真机通过 `ccmnidp0` 跑通 IPv4。绑定网卡的

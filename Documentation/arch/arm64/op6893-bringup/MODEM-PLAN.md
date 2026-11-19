@@ -619,7 +619,8 @@ R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、
 - [x] 从同机 Android RIL 确认 LTE-only/NR+LTE 参数，主线实测切换和 IPv4 流量。
 - [x] 实机确认 LTE B3/B40 与 NR n41；同时记录 AcT 和物理信道，避免仅凭 NR 行判定驻留。
 - [x] 相同 PDP 配置下对比 LTE/NR 的 DPMAIF 计数，复现 NR 无下行并新增 UL power-not-ready 事件。
-- [ ] 对照同机 Android 在 NR 首次发包前后的 DPMAIF、MD 唤醒及电源状态，定位 SIM2 NR 数据失败原因。
+- [x] 同机 6.6 ACK 对照：SIM2 NR SA 能收包且同样会触发 UL power-not-ready；该中断不能单独解释主线无下行。
+- [ ] 对照 Android 和主线激活数据时的 CID→CCMNI/LHIF 映射：ACK 本次 LTE 用 ccmni0、NR 用 ccmni2，主线固定通道 0。先取得主线映射证据，再决定是否扩展数据接口。
 - [ ] 验收 NR 稳定数据和 IPv6；NSA 与频段掩码单独验证。
 
 详见 [SIM/RAT 实测与后续](MODEM-SIM-RAT.md)。

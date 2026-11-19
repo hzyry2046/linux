@@ -227,6 +227,37 @@ pairs per mode. LTE passed all three pairs; NR failed all three:
 The v2 ACK register header agrees with the mainline UL power-not-ready
 mask (bits 19:15). UL done counts IRQ events; neither those events nor
 interface TX counters prove that a particular packet reached the radio.
-The next comparison should capture DPMAIF and MD wake/power state around
-the first NR send on the working Android stack. The counter by itself
-does not identify a failing rail or wake handshake.
+The counter by itself does not identify a failing rail or wake handshake.
+
+### Same-device Android comparison
+
+With `boot-review6.img` (`6.6.30-4k-g061b7bdafc86`), Android selected
+SIM2 for mobile data. A temporary kprobe recorded the v2 ISR's four
+register values after its reads and before it acknowledged either
+direction. The loaded `ccci_dpmaif` module build ID
+`e695f488e64f783e834131e8cb176792ff84724b` matched the disassembled
+module: at `drv2_isr+0xa4`, x21/x22 hold UL status/mask and x19/x20
+hold DL status/mask. Counts below use status with the masked bits
+removed. The vendor ISR acknowledges UL power-not-ready along with the
+other enabled bits; it has no special retry for that event.
+
+| Android SIM2 data RAT | Interface with IPv4 | Ping replies | UL power-not-ready ISR samples (5 s idle / ping window) | DL done ISR samples (idle / ping) |
+| --- | --- | --- | --- | --- |
+| LTE | ccmni0 | 5/6 | 3/5 (queues 0 and 1) | 18/12 |
+| NR_SA | ccmni2 | 3/6 | 0/4 (queue 0) | 6/12 |
+
+The read-only AO snapshots showed PIT write and read indices advance in
+both runs (LTE +78; NR +46). The IRQ and ring counts include Android
+background traffic; they cannot be attributed to individual pings. The
+Android run used ICMP, not the mainline UDP/TCP probe, and Android chose
+the PDP itself. The user's Android network policy was restored to the
+original LTE-capable mask, and the trace instance and module were removed.
+
+This establishes that power-not-ready can coexist with working NR
+downlink on this board. It also exposes a bearer-selection difference:
+Android used ccmni2 for the observed NR session, while mainline's
+single-interface test sends and receives DPMAIF channel 0. The ACK
+driver uses the CCMNI index as the UL descriptor channel. Compare
+the modem's CID-to-interface and LHIF mapping during activation before
+changing the mainline channel; Android's interface number alone does
+not establish which channel the modem assigned to mainline CID 1.
