@@ -608,3 +608,12 @@ R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、
 - [x] actual C cache/boot/rtc32k ASan/UBSan、既有服务回归、启用/恢复ARM64构建与binding校验；本轮完全离线，无新增蜂窝实测。
 - [ ] 首次上机：私有FS runner+policy→`md_power on`→`md_boot prepare`→`release`，观察HS1/HS2/CCISM，再按上述停止顺序收尾。
 - [ ] ADC名称→通道完整表、真实用户策略内容和SCP/CCISM真机状态仍待补齐；HS2/CCISM不等于radio READY。
+
+## 双卡与 LTE/NR 制式
+
+- [x] 审计同机 Android MUX 通道表和主线只读 RAT 查询。
+- [ ] 对照 Android 启动字节流，让主线取得可归属的分卡 AT 应答。
+- [ ] 验证卡 1/卡 2 单独插入、双卡注册及默认数据卡切换。
+- [ ] 从 Android 设置切换捕获 LTE-only/允许 NR 的命令与读回值，再验证主线注册和数据。
+
+详见 [SIM/RAT 实测与后续](MODEM-SIM-RAT.md)。

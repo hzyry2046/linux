@@ -1,5 +1,9 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
+2026-11-19 SIM/RAT 补充：已核实 Android 双卡通道映射；主线 MD 确认可读
+RAT/5G 配置，两个 SIM 通道均应答建立请求，但 AT 回复仍无通道标签。
+双卡独立注册、数据选卡、LTE/NR 切换和锁频段未验收。见 [SIM/RAT 实测](MODEM-SIM-RAT.md)。
+
 2026-11-19 更新：主线已在真机通过 `ccmnidp0` 跑通 IPv4。绑定网卡的
 普通 UDP socket 收到匹配的 DNS 回复，ping 5 发 4 收。暂由用户态完成
 PDP 激活和地址配置。约 24 秒的并行 TCP/UDP DNS 与 1500 字节 IPv4
