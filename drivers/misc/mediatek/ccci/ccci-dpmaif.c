@@ -56,6 +56,10 @@ struct ccci_dpmaif_ul {
 	u32 done;
 	u32 irqs;
 	u32 err;
+	u32 len_err;
+	u32 md_not_ready;
+	u32 md_power_not_ready;
+	u32 err_status;
 	u32 not_ready;
 	u32 last_status;
 	/* Message-descriptor metadata the modem reads for this packet. */
@@ -182,6 +186,10 @@ static void dpmaif_ul_reset_counters(struct ccci_dpmaif *dpmaif)
 	ul->done = 0;
 	ul->irqs = 0;
 	ul->err = 0;
+	ul->len_err = 0;
+	ul->md_not_ready = 0;
+	ul->md_power_not_ready = 0;
+	ul->err_status = 0;
 	ul->not_ready = 0;
 	ul->last_status = 0;
 }
@@ -284,7 +292,7 @@ static bool dpmaif_ul_irq(struct ccci_dpmaif *dpmaif)
 {
 	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
 	void __iomem *misc = dpmaif_ap_misc(dpmaif);
-	u32 status = 0, masked;
+	u32 status = 0, masked, errors;
 
 	spin_lock(&dpmaif->tx_lock);
 	if (!ul->started)
@@ -302,9 +310,18 @@ static bool dpmaif_ul_irq(struct ccci_dpmaif *dpmaif)
 		if (dpmaif->net_tx && dpmaif_ul_space(dpmaif) >= 2)
 			netif_wake_queue(dpmaif->net);
 	}
-	if (status & (CCCI_DPMAIF_UL_INT_ERR_MSK | CCCI_DPMAIF_UL_INT_MD_NOTREADY_MSK |
-		      CCCI_DPMAIF_UL_INT_MD_PWR_NOTREADY_MSK))
+	errors = status & (CCCI_DPMAIF_UL_INT_ERR_MSK | CCCI_DPMAIF_UL_INT_MD_NOTREADY_MSK |
+			   CCCI_DPMAIF_UL_INT_MD_PWR_NOTREADY_MSK);
+	if (errors) {
 		ul->err++;
+		ul->err_status |= errors;
+		if (errors & CCCI_DPMAIF_UL_INT_ERR_MSK)
+			ul->len_err++;
+		if (errors & CCCI_DPMAIF_UL_INT_MD_NOTREADY_MSK)
+			ul->md_not_ready++;
+		if (errors & CCCI_DPMAIF_UL_INT_MD_PWR_NOTREADY_MSK)
+			ul->md_power_not_ready++;
+	}
 out:
 	spin_unlock(&dpmaif->tx_lock);
 	return status != 0;
@@ -1359,14 +1376,20 @@ static ssize_t ul_show(struct device *dev, struct device_attribute *attr, char *
 {
 	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
 	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
+	u32 rd_words = 0;
 	ssize_t ret;
 
 	mutex_lock(&dpmaif->lock);
+	spin_lock_irq(&dpmaif->tx_lock);
+	if (ul->started)
+		rd_words = readl(dpmaif_ao_ul(dpmaif) + CCCI_DPMAIF_UL_STA0(ul->queue)) >> 16;
 	ret = sysfs_emit(buf,
-			 "started=%u queue=%u entries=%u payload=%u wr=%u sent=%u done=%u irqs=%u err=%u not_ready=%u last_status=0x%08x\n",
+			 "started=%u queue=%u entries=%u payload=%u wr=%u sent=%u done=%u irqs=%u err=%u not_ready=%u last_status=0x%08x rd_words=%u len_err=%u md_not_ready=%u md_power_not_ready=%u err_status=0x%08x\n",
 			 ul->started, ul->queue, ul->entries, ul->payload_len, ul->wr,
 			 ul->sent, ul->done, ul->irqs, ul->err, ul->not_ready,
-			 ul->last_status);
+			 ul->last_status, rd_words, ul->len_err, ul->md_not_ready,
+			 ul->md_power_not_ready, ul->err_status);
+	spin_unlock_irq(&dpmaif->tx_lock);
 	mutex_unlock(&dpmaif->lock);
 	return ret;
 }
