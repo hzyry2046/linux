@@ -466,15 +466,17 @@ static int dpmaif_dl_update(struct ccci_dpmaif *dpmaif, u32 reg, u32 value)
 }
 
 /*
- * Every entry of a BAT ring points at one buffer of the pool. Publishing an
- * entry again after the modem used it is what keeps the ring flowing, so the
- * same helper fills the ring at start and refills it while draining.
+ * Keep the software buffer array indexed by the published BAT slot. During
+ * refill, move the consumed buffer to the producer slot and keep the old
+ * producer buffer in the consumed slot for later use.
  */
 static void dpmaif_dl_publish(struct ccci_dpmaif_bat_ring *ring, u32 bid)
 {
 	struct ccci_dpmaif_bat *entry = (struct ccci_dpmaif_bat *)ring->ring + ring->wr;
 	u64 addr = (u64)ring->buf[bid].dma;
 
+	if (bid != ring->wr)
+		swap(ring->buf[bid], ring->buf[ring->wr]);
 	entry->buffer_addr_ext = upper_32_bits(addr) & 0xff;
 	entry->p_buffer_addr = lower_32_bits(addr);
 	ring->wr = (ring->wr + 1) % ring->entries;
@@ -674,14 +676,6 @@ static void dpmaif_dl_tune(struct ccci_dpmaif *dpmaif)
 	value &= ~(CCCI_DPMAIF_DL_PIT_WRIDX_MSK << 16);
 	value |= (CCCI_DPMAIF_DUMMY_PIT_AIDX & CCCI_DPMAIF_DL_PIT_WRIDX_MSK) << 16;
 	writel(value, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON3);
-	/*
-	 * The same-board driver keeps the write index equal to the AP index (its
-	 * index check rewrites one to match the other), so publish both here.
-	 */
-	value = readl(pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON2);
-	value &= ~CCCI_DPMAIF_DL_PIT_WRIDX_MSK;
-	value |= CCCI_DPMAIF_DUMMY_PIT_AIDX & CCCI_DPMAIF_DL_PIT_WRIDX_MSK;
-	writel(value, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON2);
 	writel(CCCI_DPMAIF_DUMMY_PIT_AIDX | CCCI_DPMAIF_MD_DUMMYPIT_EN,
 	       dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_UL_RESERVE_RW);
 	/*
@@ -972,9 +966,9 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_
 
 	if (dl->started)
 		return -EBUSY;
-	/* Below the hardware check thresholds the ring reports a length error. */
-	if (bat_entries <= CCCI_DPMAIF_DL_HW_CHK_BAT_NUM ||
-	    pit_entries <= CCCI_DPMAIF_DL_HW_CHK_PIT_NUM)
+	/* Keep one BAT slot empty and the initial PIT AP index within the ring. */
+	if (bat_entries <= CCCI_DPMAIF_DL_HW_CHK_BAT_NUM + 1 ||
+	    pit_entries <= CCCI_DPMAIF_DUMMY_PIT_AIDX)
 		return -EINVAL;
 	if (bat_entries > CCCI_DPMAIF_BAT_SIZE_MSK || pit_entries > CCCI_DPMAIF_PIT_SIZE_MSK)
 		return -EINVAL;
@@ -1002,9 +996,9 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_
 	}
 
 	memset(dl->pit, 0, (size_t)pit_entries * CCCI_DPMAIF_DL_PIT_BYTE_SIZE);
-	for (i = 0; i < dl->bat.entries; i++)
+	for (i = 0; i < dl->bat.entries - 1; i++)
 		dpmaif_dl_publish(&dl->bat, i);
-	for (i = 0; i < dl->frg.entries; i++)
+	for (i = 0; i < dl->frg.entries - 1; i++)
 		dpmaif_dl_publish(&dl->frg, i);
 	dl->fail_reg = 0;
 	dpmaif_dl_hw_prepare(dpmaif);
@@ -1019,16 +1013,15 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_
 	if (ret)
 		goto out_unprogram;
 	/*
-	 * Read the index back rather than assume the hardware starts at zero: the
-	 * PIT init already published the ring's capacity, and adding the full ring
-	 * again on top of that would overrun it.
+	 * Start at the hardware read index. The AP availability index was
+	 * programmed separately and must not be used as a producer index.
 	 */
-	dl->pit_rd = readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA2) &
+	dl->pit_rd = (readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA2) >> 16) &
 		     CCCI_DPMAIF_DL_PIT_WRIDX_MSK;
-	ret = dpmaif_dl_add_frg_bat(dpmaif, dl->frg.entries);
+	ret = dpmaif_dl_add_frg_bat(dpmaif, dl->frg.entries - 1);
 	if (ret)
 		goto out_unprogram;
-	ret = dpmaif_dl_add_bat(dpmaif, dl->bat.entries);
+	ret = dpmaif_dl_add_bat(dpmaif, dl->bat.entries - 1);
 	if (ret)
 		goto out_unprogram;
 	ret = dpmaif_dl_queue_enable(dpmaif, true, true);
@@ -1395,6 +1388,12 @@ static ssize_t dl_regs_show(struct device *dev, struct device_attribute *attr, c
 		       readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA0),
 		       readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA1),
 		       readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA3));
+	n += scnprintf(buf + n, PAGE_SIZE - n,
+		       "ao_dl: bat_sta1=0x%08x frgbat_sta1=0x%08x frgbat_sta2=0x%08x pit_sta4=0x%08x\n",
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_BAT_STA1),
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_FRGBAT_STA1),
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_FRGBAT_STA2),
+		       readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA4));
 	n += scnprintf(buf + n, PAGE_SIZE - n,
 		       "pd_dl: bat_init=0x%08x con0=0x%08x con1=0x%08x add=0x%08x reserve=0x%08x\n",
 		       readl(pd + CCCI_DPMAIF_PD_DL_BAT_INIT),
