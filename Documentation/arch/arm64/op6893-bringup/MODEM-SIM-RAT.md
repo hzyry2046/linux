@@ -89,12 +89,29 @@ registration can lag RF enable; use the read-only second command to poll
 them. The isolated CFUN test was with both cards inserted; physical single
 card configurations still need separate tests.
 
+## Sequential data selection
+
 From DLCI 3 the firmware acknowledged `AT+EDATASIM=1`, then `=2`, then
 `=1`; both subscriptions stayed registered. `EDATASIM?` returned ERROR
-on both DLCIs. This establishes that the selection command is accepted,
-not that data actually moved. Next, identify the PDP and LHIF/DPMAIF
-mapping on each slot and prove socket traffic after selection in both
-directions. The data-session tool currently uses the legacy AT context.
+on both DLCIs. A test harness reused the existing session code with the
+appropriate framed AT context and the shared `ccmnidp0` data interface:
+
+| Selected slot | PDP and data result |
+| --- | --- |
+| 1 (DLCI 3) | Dual-stack CID 1; interface-bound IPv4 and IPv6 DNS both passed |
+| 2 (DLCI 8) | Dual-stack activation supplied addresses but no usable IPv6 RA was received in the test window |
+| 2 (DLCI 8), IPv4-only PDP | CID 1 inactive on slot 1 and active on slot 2; interface-bound IPv4 DNS passed |
+
+The IPv4-only run reused the DPMAIF rings initialized on the first slot.
+Only the dedicated interface-bound route was installed; the USB management
+path stayed up. The last test deactivated CID 1 on both slots, checked that
+the interface, policy routes and rules were cleaned up, and sent
+`EDATASIM=1` to restore the initial selection. This was a sequential smoke
+test with both cards inserted. Concurrent traffic and live migration of an
+active PDP were not tested.
+
+The data-session CLI still uses the legacy AT context. Next integrate the
+framed session path and allow IPv4 to stay active while retrying IPv6 RA.
 Capture Android's network-mode settings toggle to disambiguate LTE-only
 and NR-allowed parameters before using them; NR SA/NSA attachment and
 per-band locking remain untested.

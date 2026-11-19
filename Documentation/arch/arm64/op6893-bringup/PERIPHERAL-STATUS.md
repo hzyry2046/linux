@@ -1,8 +1,8 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
 2026-11-19 SIM/RAT 补充：主线已取得分卡 AT 响应，双卡同时在不同运营商
-注册 LTE。数据选卡命令获应答，尚未验证数据随之切换。LTE/NR 制式切换和
-锁频段待验收。见 [SIM/RAT 实测](MODEM-SIM-RAT.md)。
+注册 LTE。已按顺序切换数据卡：卡 1 双栈、卡 2 IPv4 通过；卡 2 未收到 IPv6 RA。
+LTE/NR 制式切换和锁频段待验收。见 [SIM/RAT 实测](MODEM-SIM-RAT.md)。
 
 2026-11-19 更新：主线已在真机通过 `ccmnidp0` 跑通 IPv4。绑定网卡的
 普通 UDP socket 收到匹配的 DNS 回复，ping 5 发 4 收。暂由用户态完成
