@@ -261,3 +261,15 @@ driver uses the CCMNI index as the UL descriptor channel. Compare
 the modem's CID-to-interface and LHIF mapping during activation before
 changing the mainline channel; Android's interface number alone does
 not establish which channel the modem assigned to mainline CID 1.
+
+Android's radio log reported active calls on both ccmni0 and ccmni2 in
+both configurations. Across the switch, the framework call IDs changed
+from 100/302 to 400/502 for ccmni0/ccmni2, respectively. These are Android
+call IDs, not the modem's raw AT CIDs. Select the interface with the
+tested IPv4 bearer rather than assuming ccmni2 is reserved for NR.
+Earlier mainline work also recorded a CID 1 activation associated with
+an LHIF remap for net_if=1, queue 0 (see the UL bring-up section of
+[MODEM-BOOT-RELEASE.md](MODEM-BOOT-RELEASE.md)). The next mainline run
+should capture LHIF requests across activation, including repeated
+requests for an existing entry. A final remap table alone cannot
+attribute an entry to that specific activation.
