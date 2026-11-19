@@ -318,3 +318,24 @@ after the run; interface routing and the channel selector were restored.
 A separate 35-second dual-stack test on NR n41 selected channel 0;
 both IPv4 DNS and IPv6 DNS returned matching responses after IPv6
 configuration on the same CID. This is a short functional check.
+
+### Dual-stack LTE and NR reconnect
+
+On the same image, a 40-second SIM2 LTE-only test selected channel 1
+on UL queue 0. COPS reported AcT 7 at both ends. IPv4 and IPv6 DNS
+both passed on activation and again after 26 seconds.
+
+For NR, the test deactivated CID 1 twice with `AT+CGACT=0,1` after
+both families had passed DNS. The session loop detected each loss,
+waited ten seconds and activated a new PDP. The three activations
+selected CCMNI channels 0, 1 and 0, all on UL queue 0, and both
+families passed DNS after every activation. The final PDP stayed up
+for 190 seconds with seven further matching replies per family at
+roughly 25-second intervals. Radio snapshots showed AcT 11 and n41
+on every activation and at the end of the final session.
+
+Both SIMs read back the original RAT policy and no active PDP after
+exit. The modem acknowledged selection of SIM1, the netdev and policy
+routes were clean, and the channel selector was back to 0. This checks
+recovery from PDP deactivation; loss of radio coverage, modem reset and
+long-duration load remain untested.
