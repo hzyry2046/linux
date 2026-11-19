@@ -1,0 +1,34 @@
+{
+  "image": "1ec804fd5678",
+  "interface": "ccmnidp0",
+  "queue": 0,
+  "ping": [
+    5,
+    4
+  ],
+  "dns_reply": true,
+  "date": "2026-11-19",
+  "boot_sha256": "0adae84065d56b2af5235fdd3f4982b1143a978330608842428d11bb4bd583a6",
+  "geometry": {
+    "bat": 8192,
+    "fragment_bat": 8192,
+    "pit": 16384
+  },
+  "netdev": {
+    "rx_packets": 6,
+    "rx_bytes": 525,
+    "tx_packets": 7,
+    "tx_bytes": 529,
+    "rx_dropped": 0,
+    "tx_dropped": 0
+  },
+  "dpmaif": {
+    "tx_queued": 7,
+    "tx_done_irqs": 7,
+    "tx_error_events": 6,
+    "rx_packets": 7,
+    "rx_errors": 0,
+    "rx_overrun": 0,
+    "fragment_pits": 0
+  }
+}

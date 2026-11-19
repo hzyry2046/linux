@@ -855,8 +855,9 @@ static void dpmaif_dl_drain(struct ccci_dpmaif *dpmaif)
 
 				if (len && len <= dl->bat.buf_sz) {
 					if (!cur_len) {
-						dl->snap_len = min_t(u32, len,
-								  CCCI_DPMAIF_DL_SNAP_LEN);
+						u32 snap = min_t(u32, len, sizeof(dl->snap));
+
+						dl->snap_len = snap;
 						memcpy(dl->snap, data, dl->snap_len);
 					}
 					if (dpmaif->net_rx && dl->rx_head && !pit->c_bit &&

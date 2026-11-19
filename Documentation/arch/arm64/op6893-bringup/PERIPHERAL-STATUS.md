@@ -1,11 +1,9 @@
 # op6893 / MT6893 主线硬件与外设支持状态
 
-2026-11-19 更新：主线已到 HS2、CCISM、SIM、LTE 注册、PDP 激活和 DPMAIF
-上行描述符完成。按 6.6 ACK 修正 DPMAIF 初始化后，主线已在真机收到
-与上行探测匹配的 IPv4 DNS 回复。当前实现通过诊断环收发，尚无 Linux
-蜂窝网卡。见
+2026-11-19 更新：主线已在真机通过 `ccmnidp0` 跑通 IPv4。绑定网卡的
+普通 UDP socket 收到匹配的 DNS 回复，ping 5 发 4 收。暂由用户态完成
+PDP 激活和地址配置；持续流量、IPv6、通话和 GNSS 尚未验收。见
 [基带放行与数据面记录](MODEM-BOOT-RELEASE.md)。
-
 
 2026-11-17 MD首次真机放行与真实数据实测：SCP常驻→`takeover/on`冷上电→
 `prepare`门→唯一一次`(6,0)`放行（`boot_ret=0`）→HS1被接受、runtime发布、
@@ -231,7 +229,7 @@ USB/Wi-Fi SSH 和外置 rootfs 正常；MD/SCP 尚未启动。详见 [R3](MODEM-
 | RTC / 持久时间 | 未启用 | RTC_CLASS 关闭；不能用启动日志时间作为准确实时时钟 |
 | SCP | 短时常驻/awake实测 | READY1、持续CPU消费、awake三次配对、一次MD-invalid传输；STOP双核SET/GIC五路屏蔽 | 无APCCCI状态回复；未验证长期运行、core1独立运行或完整恢复 | [常驻接入](MODEM-SCP-RUNTIME.md) |
 | MD平台与普通CCIF初始化 | 部分，实测 | LK接管、冷上电/关电、唯一一次`(6,0)`放行、HS1接受、runtime发布、真实CCIF RX/TX（964次发送、`tx_error=0`）、停止后GIC屏蔽 | HS2未到达；无热重启、无CCISM后置协议、无注册/数据面；MD异常为自身`MPU_NOT_ALLOW` | [CCIF](MODEM-CCIF.md)、[放行](MODEM-BOOT-RELEASE.md) |
-| modem / 蜂窝 / GNSS | 部分支持 | HS2、CCISM、SIM、LTE 注册、PDP 和 DPMAIF 双向 IPv4 DNS 探测已上机验证 | 尚未接入 Linux netdev；通话和 GNSS 未验收 | [实测](MODEM-BOOT-RELEASE.md) |
+| modem / 蜂窝 / GNSS | 部分支持 | HS2、CCISM、SIM、LTE 注册、PDP 和 `ccmnidp0` 的 IPv4 ICMP/UDP 已上机验证 | PDP 和 IP 地址需手动配置；持续流量、IPv6、通话和 GNSS 未验收 | [实测](MODEM-BOOT-RELEASE.md) |
 | NFC / 指纹 / 振动 / IMU 等传感器 | 未验证、未建立支持 | 需逐项识别本机硬件及资源，不能借用同品牌另一机型结论 |
 | UFS 写入、USB host、运行时自动挂起 | 未验证 | 目前测试策略不覆盖这些行为 |
 | pstore 故障恢复链路 | 历史不可靠，非保证能力 | 用户指出 fastboot oem peek 可读保留内存；不能把无 pstore 当作内核未执行的证明 |
