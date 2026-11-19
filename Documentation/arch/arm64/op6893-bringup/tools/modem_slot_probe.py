@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: GPL-2.0-only
 """Query one or both SIM contexts via the op6893 Android-style basic MUX.
 
-Requires a modem already in basic MUX mode. This probe does not change radio
-settings, select a data SIM, or use unframed replies for a slot result.
+Use --enter-basic once after HS2 to switch from raw AT to basic MUX.
+Without --radio-on, query only. Slot results always require framed replies.
 """
 
 import argparse
@@ -12,15 +12,25 @@ import re
 import select
 import time
 
-from modem_at_mux import FLAG, fcs
+from modem_at_mux import FLAG
 from modem_at_probe import AtError, FdReader, _write_retry
 
 SLOTS = {1: 3, 2: 8}
 SABM, UA, DM, DISC, UIH = 0x2f, 0x63, 0x0f, 0x43, 0xef
-QUERIES = ('AT+CPIN?', 'AT+CEREG?', 'AT+COPS?', 'AT+ERAT?',
+QUERIES = ('AT+CFUN?', 'AT+CPIN?', 'AT+CEREG?', 'AT+COPS?', 'AT+ERAT?',
            'AT+E5GOPT?', 'AT+C5GREG?')
 MAX_PAYLOAD = 512
 MAX_REPLY = 4096
+
+
+def basic_fcs(header):
+    """Reflected CRC-8 used by the vendor's basic-mode header."""
+    crc = 0xff
+    for byte in header:
+        crc ^= byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ (0xe0 if crc & 1 else 0)
+    return crc ^ 0xff
 
 
 def frame(dlci, control, payload=b''):
@@ -32,7 +42,28 @@ def frame(dlci, control, payload=b''):
     else:
         size = bytes((2 * length + 1,))
     header = bytes((dlci * 4 + 3, control)) + size
-    return bytes((FLAG,)) + header + payload + bytes((fcs(header), FLAG))
+    return bytes((FLAG,)) + header + payload + bytes((basic_fcs(header), FLAG))
+
+
+def enter_basic(reader, write):
+    # Mirror the no-PIN Android startup chat. The modem can return only
+    # echoes early after HS2, so SABM/UA remains the mode-switch verdict.
+    for command in (b'AT', b'ATZ', b'ATE0', b'AT+CMUX=0,0,5,512'):
+        data = command + b'\r\n'
+        if _write_retry(write, data) != len(data):
+            raise AtError('short MUX startup write')
+        deadline = time.monotonic() + 0.65
+        reply = b''
+        while (remaining := deadline - time.monotonic()) > 0:
+            ready, _, _ = select.select([reader], [], [], remaining)
+            if not ready:
+                break
+            chunk = reader.read(1024)
+            if not chunk:
+                raise AtError('MUX endpoint closed during startup')
+            reply = (reply + chunk)[-MAX_REPLY:]
+            if b'\r\nERROR\r\n' in reply:
+                raise AtError('modem rejected MUX startup chat')
 
 
 class BasicMux:
@@ -69,7 +100,7 @@ class BasicMux:
                         continue
                     if len(self.buffer) >= end + 2:
                         if (self.buffer[end + 1] != FLAG or
-                                fcs(self.buffer[1:hlen]) != self.buffer[end]):
+                                basic_fcs(self.buffer[1:hlen]) != self.buffer[end]):
                             del self.buffer[0]
                             continue
                         payload = bytes(self.buffer[hlen:end])
@@ -101,6 +132,22 @@ class BasicMux:
         raise AtError(f'DLCI {dlci} did not acknowledge SABM')
 
     def query(self, dlci, command, timeout):
+        return self._at(dlci, command, timeout, prefix=command[2:-1] + ':')
+
+    def radio_on(self, dlci, timeout):
+        def enabled():
+            return '+CFUN: 1' in self.query(dlci, 'AT+CFUN?', timeout)
+
+        if enabled():
+            return
+        try:
+            self._at(dlci, 'AT+CFUN=1', timeout)
+        except AtError:
+            pass  # a lost terminal response does not mean RF stayed off
+        if not enabled():
+            raise AtError(f'DLCI {dlci} radio enable was not confirmed')
+
+    def _at(self, dlci, command, timeout, prefix=None):
         self.send(dlci, UIH, command.encode('ascii') + b'\r')
         deadline = time.monotonic() + timeout
         tail = b''
@@ -124,11 +171,11 @@ class BasicMux:
                 line = part.decode('ascii', 'replace').strip()
                 if line == command:
                     continue
-                if line == 'OK' and not lines:
+                if line == 'OK' and prefix and not lines:
                     raise AtError(f'DLCI {dlci} returned OK without a {command} result')
                 if line in ('OK', 'ERROR') or line.startswith(('+CME ERROR:', '+CMS ERROR:')):
                     return lines + [line]
-                if line.startswith(command[2:-1] + ':') and line.isascii() and line.isprintable():
+                if prefix and line.startswith(prefix) and line.isascii() and line.isprintable():
                     lines.append(line)
         raise AtError(f'DLCI {dlci} timed out on {command}')
 
@@ -137,6 +184,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--device', required=True)
     parser.add_argument('--slot', type=int, choices=SLOTS, action='append')
+    parser.add_argument('--enter-basic', action='store_true',
+                        help='switch from raw AT on a fresh modem boot')
+    parser.add_argument('--radio-on', action='store_true',
+                        help='enable radio on each requested slot before querying it')
     parser.add_argument('--timeout', type=float, default=4.0)
     args = parser.parse_args()
     if not 0 < args.timeout <= 30:
@@ -145,11 +196,15 @@ def main():
     mux = BasicMux(FdReader(fd), lambda data: os.write(fd, data))
     result = 0
     try:
+        if args.enter_basic:
+            enter_basic(mux.reader, mux.write)
         mux.open_channel(0, args.timeout)
         for slot in dict.fromkeys(args.slot or SLOTS):
             dlci = SLOTS[slot]
             try:
                 mux.open_channel(dlci, args.timeout)
+                if args.radio_on:
+                    mux.radio_on(dlci, args.timeout)
                 for command in QUERIES:
                     try:
                         lines = mux.query(dlci, command, args.timeout)

@@ -22,7 +22,7 @@ computes basic-mode FCS over the address, control and length. The existing
 mainline AT client uses a different, already validated default-context
 exchange. It is still used for PDP setup.
 
-## Mainline result
+## Initial mainline result (superseded for slot attribution)
 
 The modem reached HS2. After opening RF by the existing path, the default AT
 context was EPS registered (CEREG stat 1). The following query results omit
@@ -57,12 +57,44 @@ exclusive use of the AT endpoint and no active data session:
 python3 modem_slot_probe.py --device /dev/ccci-at-10209000.modem-platform
 ```
 
-The physical slot test should use different carrier subscriptions or a
-one-card-at-a-time matrix. Capture Android's UART2 startup and per-DLCI AT
-framing, then reproduce the earliest initialization step that makes the
-two slot responses distinct. Only then use the Android settings trace to
-map LTE-only and NR-allowed policy values and data-SIM selection; verify
-actual registration and data after each change. Android boot traffic includes
-ERAT and EDATASIM writes, but it does not isolate the mapping from a settings
-toggle. Neither NR SA/NSA attachment nor LTE/NR band locking was exercised
-on mainline in this run.
+## Framed MUX and dual LTE registration
+
+The original slot probe incorrectly reused the legacy client's CRC table.
+The MD returned the transmitted control header with a different FCS: e.g.
+`f9 03 3f 01 1c f9` for DLCI 0 SABM. The vendor table and these wire bytes
+agree on reflected CRC-8 (polynomial 0xe0 in the right-shift loop), with
+initial state 0xff and final XOR 0xff. The slot probe now uses this FCS for
+basic MUX headers. The legacy default-context data-session codec is unchanged.
+
+On the existing `9bfc8e0f909c` kernel, after HS2, raw startup chat
+`AT`, `ATZ`, `ATE0`, `AT+CMUX=0,0,5,512` followed by correctly framed
+SABM/UA opened DLCI 0, 3 and 8. With only DLCI 3 enabled by `AT+CFUN=1`,
+DLCI 3 read CFUN 1 and CPIN READY; DLCI 8 still read CFUN 0 and CPIN ERROR.
+After RF enable on DLCI 8, both reported CFUN 1, CPIN READY, CEREG state 1
+and COPS access technology 7, with different operators at the same time.
+Both reported packet attach (`CGATT: 1`) but no active CID 1. Both read
+`ERAT: 7,0,6,4,0`, `E5GOPT: 7` and `C5GREG: 0`.
+
+From a fresh HS2, with no active data session:
+
+```sh
+python3 modem_slot_probe.py --device /dev/ccci-at-10209000.modem-platform \
+    --enter-basic --radio-on
+python3 modem_slot_probe.py --device /dev/ccci-at-10209000.modem-platform
+```
+
+Run the startup chat only once per MD boot. The first RF enable shortly after
+HS2 can lack a terminal response; the probe uses CFUN readback. CPIN and
+registration can lag RF enable; use the read-only second command to poll
+them. The isolated CFUN test was with both cards inserted; physical single
+card configurations still need separate tests.
+
+From DLCI 3 the firmware acknowledged `AT+EDATASIM=1`, then `=2`, then
+`=1`; both subscriptions stayed registered. `EDATASIM?` returned ERROR
+on both DLCIs. This establishes that the selection command is accepted,
+not that data actually moved. Next, identify the PDP and LHIF/DPMAIF
+mapping on each slot and prove socket traffic after selection in both
+directions. The data-session tool currently uses the legacy AT context.
+Capture Android's network-mode settings toggle to disambiguate LTE-only
+and NR-allowed parameters before using them; NR SA/NSA attachment and
+per-band locking remain untested.

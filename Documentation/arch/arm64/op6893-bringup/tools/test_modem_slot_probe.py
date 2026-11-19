@@ -24,6 +24,11 @@ class SlotProbeTest(unittest.TestCase):
     def feed(self, data):
         os.write(self.write, data)
 
+    def test_vendor_sabm_wire_vectors(self):
+        self.assertEqual(frame(0, 0x3f), bytes.fromhex('f9033f011cf9'))
+        self.assertEqual(frame(3, 0x3f), bytes.fromhex('f90f3f019bf9'))
+        self.assertEqual(frame(8, 0x3f), bytes.fromhex('f9233f01c9f9'))
+
     def test_open_waits_for_matching_dlci(self):
         self.feed(frame(0, UA | 0x10) + frame(3, UA | 0x10))
         with self.assertRaisesRegex(AtError, 'DLCI 8 did not acknowledge'):
