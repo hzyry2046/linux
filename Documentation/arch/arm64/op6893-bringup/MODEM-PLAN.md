@@ -614,7 +614,8 @@ R7.1首轮实测：420ed6e96546已验证当前LK子区、继承ON接管关电、
 - [x] 审计同机 Android MUX 通道表和主线只读 RAT 查询。
 - [x] 修正 basic MUX FCS，主线取得分卡响应并实测双卡同时 LTE 注册。
 - [x] 双卡在位时实测先后选择数据卡：卡 1 IPv4/IPv6、卡 2 IPv4 均通过。
-- [ ] 验证两卡槽各自单独插卡；将 MUX 选卡接入会话工具，复查卡 2 IPv6 RA。
+- [x] 会话工具接入 MUX 选卡和独立 IPv6 重试；实测卡 2 IPv4-only 可用。
+- [ ] 验证两卡槽各自单独插卡；排查卡 2 双栈 PDP 无 RA 且 IPv4 DNS 无回包。
 - [ ] 从 Android 设置切换捕获 LTE-only/允许 NR 的命令与读回值，再验证主线注册和数据。
 
 详见 [SIM/RAT 实测与后续](MODEM-SIM-RAT.md)。

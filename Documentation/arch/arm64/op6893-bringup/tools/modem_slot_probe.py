@@ -132,7 +132,7 @@ class BasicMux:
         raise AtError(f'DLCI {dlci} did not acknowledge SABM')
 
     def query(self, dlci, command, timeout):
-        return self._at(dlci, command, timeout, prefix=command[2:-1] + ':')
+        return self.exchange(dlci, command, timeout, prefix=command[2:-1] + ':')
 
     def radio_on(self, dlci, timeout):
         def enabled():
@@ -141,13 +141,13 @@ class BasicMux:
         if enabled():
             return
         try:
-            self._at(dlci, 'AT+CFUN=1', timeout)
+            self.exchange(dlci, 'AT+CFUN=1', timeout)
         except AtError:
             pass  # a lost terminal response does not mean RF stayed off
         if not enabled():
             raise AtError(f'DLCI {dlci} radio enable was not confirmed')
 
-    def _at(self, dlci, command, timeout, prefix=None):
+    def exchange(self, dlci, command, timeout, prefix=None):
         self.send(dlci, UIH, command.encode('ascii') + b'\r')
         deadline = time.monotonic() + timeout
         tail = b''

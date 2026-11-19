@@ -110,8 +110,37 @@ the interface, policy routes and rules were cleaned up, and sent
 test with both cards inserted. Concurrent traffic and live migration of an
 active PDP were not tested.
 
-The data-session CLI still uses the legacy AT context. Next integrate the
-framed session path and allow IPv4 to stay active while retrying IPv6 RA.
+## Session tool
+
+On a modem already in basic MUX mode, with RF and the downlink ring up:
+
+```sh
+python3 modem_data_session.py --slot 2 --apn YOUR_APN --policy-routing --probe --seconds 45
+python3 modem_data_session.py --slot 2 --apn YOUR_APN --policy-routing --ipv4-only --probe --seconds 15
+```
+
+Install `modem_slot_probe.py` alongside the existing AT and IPv6 helpers.
+Before changing the data SIM, the tool checks both SIMs for active PDP
+contexts and refuses to switch if one is active. On exit, it removes its
+addresses and routes and deactivates CID 1. The selected data SIM stays set;
+a subsequent run with another `--slot` changes it. The no-slot invocation
+continues to use the legacy AT context.
+
+IPv4 and its routes are installed immediately. If the PDP provides no IPv6
+interface ID or a solicitation returns no usable RA, the tool retries IPv6
+on the same PDP. A DNS miss is also diagnostic and does not tear down either
+family. Confirm the printed probe result when using the CLI for traffic
+validation. The regression test injects a missing RA and then a valid RA
+and verifies that IPv4 stays configured across both without PDP reactivation.
+
+On image `9bfc8e0f909c`, the SIM2 dual-stack PDP supplied IPv4, but bound
+IPv4 DNS did not reply and no IPv6 RA arrived even with retries. The IPv4
+policy route remained installed and no PDP reconnect occurred during the
+45-second run. A separate SIM2 IPv4-only PDP passed bound UDP DNS. SIM1
+passed both IPv4 and IPv6 DNS on a repeat dual-stack run; an earlier SIM1
+attempt immediately after SIM2 also had no DNS or RA. This is not enough
+to attribute the misses to an operator or a driver mechanism.
+
 Capture Android's network-mode settings toggle to disambiguate LTE-only
 and NR-allowed parameters before using them; NR SA/NSA attachment and
 per-band locking remain untested.
