@@ -38,7 +38,7 @@ class SessionTest(unittest.TestCase):
         active = False
         actions = []
         args = SimpleNamespace(policy_routing=True, targets=[], apn='test',
-                               ipv4_only=False, probe=False, seconds=8)
+                               ipv4_only=False, probe=False, seconds=8, radio_status=False)
 
         def at(text, _timeout=0):
             nonlocal active
@@ -88,11 +88,46 @@ class SessionTest(unittest.TestCase):
         mux.exchange.side_effect = lambda dlci, *_args, **_kwargs: [
             '+CGACT: 1,0', f'+CGACT: 2,{int(dlci == 8)}', 'OK']
         with (patch.object(modem, 'BasicMux', return_value=mux),
-              patch.object(modem, 'check_interface')):
+              patch.object(modem, 'check_interface'),
+              contextlib.ExitStack() as stack):
             with self.assertRaisesRegex(modem.AtError, 'PDP already active'):
-                modem.select_data_slot(None, None, 1, False)
+                args = SimpleNamespace(slot=1, restore_slot=2, policy_routing=False)
+                modem.select_data_slot(None, None, args, stack)
         self.assertEqual([call.args[:2] for call in mux.exchange.call_args_list],
                          [(3, 'AT+CGACT?'), (8, 'AT+CGACT?')])
+
+    def test_selection_restores_slot_even_after_missing_ack(self):
+        mux = Mock()
+
+        def exchange(_dlci, text, _timeout, prefix=None):
+            if text == 'AT+EDATASIM=2':
+                raise modem.AtError('missing ack')
+            return ['+CGACT: 1,0', 'OK'] if prefix else ['OK']
+
+        mux.exchange.side_effect = exchange
+        args = SimpleNamespace(slot=2, restore_slot=1, policy_routing=False)
+        with (patch.object(modem, 'BasicMux', return_value=mux),
+              patch.object(modem, 'check_interface'),
+              contextlib.redirect_stdout(io.StringIO()), contextlib.ExitStack() as stack):
+            with self.assertRaisesRegex(modem.AtError, 'missing ack'):
+                modem.select_data_slot(None, None, args, stack)
+        self.assertEqual([call.args[:2] for call in mux.exchange.call_args_list][-2:],
+                         [(3, 'AT+EDATASIM=2'), (3, 'AT+EDATASIM=1')])
+
+    def test_radio_status_omits_placeholders_and_identifiers(self):
+        replies = {
+            'AT+COPS?': ['+COPS: 0,0,"carrier",11', 'OK'],
+            'AT+EPHYCONFIG=2': ['+EPHYCONFIG: 1,0,0,0,0,0,0,0',
+                               '+EPHYCONFIG: 128,504990,503172,20000,20000,41,987,1',
+                               '+EPHYCONFIG: 4,1850,2,20000,0,3,654,1,extra', 'OK'],
+        }
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            modem.report_radio(replies.__getitem__)
+        self.assertEqual(out.getvalue().splitlines(), [
+            'COPS AcT: 11',
+            'Physical channel: NR n41, DL/UL channel 504990/503172, '
+            'DL/UL bandwidth fields 20000/20000',
+        ])
 
 
 if __name__ == '__main__':

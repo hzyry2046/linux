@@ -122,9 +122,11 @@ python3 modem_data_session.py --slot 2 --apn YOUR_APN --policy-routing --ipv4-on
 Install `modem_slot_probe.py` alongside the existing AT and IPv6 helpers.
 Before changing the data SIM, the tool checks both SIMs for active PDP
 contexts and refuses to switch if one is active. On exit, it removes its
-addresses and routes and deactivates CID 1. The selected data SIM stays set;
-a subsequent run with another `--slot` changes it. The no-slot invocation
-continues to use the legacy AT context.
+addresses and routes and deactivates CID 1. The selected data SIM stays set
+unless an explicit `--restore-slot` is supplied. The firmware rejects
+`EDATASIM?`, so this option sends the requested selection at exit rather
+than discovering the original setting. The no-slot invocation continues
+to use the legacy AT context.
 
 IPv4 and its routes are installed immediately. If the PDP provides no IPv6
 interface ID or a solicitation returns no usable RA, the tool retries IPv6
@@ -158,9 +160,7 @@ The two modes reached packet attach. SIM1 remained at AcT 7 throughout.
 With extended `C5GREG` reporting enabled for the comparison, SIM2 reported
 5GS home registration in both modes. Accordingly, use the COPS access
 technology to distinguish these two observations; the C5GREG registration
-flag alone does not distinguish the radio link. The test did not
-independently inspect the serving cell or dual connectivity, test
-IPv6 in NR, or exercise a band mask.
+flag alone does not distinguish the radio link.
 
 ERAT readback begins with two runtime fields. Save and restore the third
 and fourth fields, which track the configured pair (here `6,4`). Setting
@@ -173,6 +173,60 @@ CID 1 contexts inactive.
 The session tool accepts `--rat lte-only` and `--rat nr-lte` together
 with `--slot`. It checks the policy readback, waits for packet attach,
 and restores the saved policy on normal exit, SIGINT/SIGTERM or a handled
-failure. NR+LTE permits LTE fallback: check the printed AcT when validating
-a specific link. Use an IPv4-only PDP for SIM2 until its dual-stack issue
-is understood.
+failure. NR+LTE permits LTE fallback: use `--radio-status` to print the
+COPS AcT and physical channel rows at the start and end of the active
+session. Use an IPv4-only PDP for SIM2 until its dual-stack issue is
+understood.
+
+### Physical channel and data checks
+
+The same-device Android RIL's `getPhyChlCfgInfoV2ByQuery` (0x325860) sends
+`AT+EPHYCONFIG=2`. Its parser (0x337800) maps row type 4 to LTE and
+128 to NR; the sixth field carries the band. The session tool reports
+these rows without cell identifiers and skips the zero placeholder.
+The rows alone do not establish the serving RAT or dual connectivity;
+read COPS alongside them.
+
+On image `9bfc8e0f909c`, SIM1 reported AcT 7 and LTE B3. SIM2 under
+NR+LTE reported AcT 11 and NR n41, with DL/UL channel numbers
+504990/503172. This is consistent with NR SA registration; NSA and
+band-mask writes have not been validated. `ENRCABAND?` returned ERROR
+on both SIMs and is not a supported-band inventory.
+
+In one 105-second SIM2 IPv4-only PDP session, the start and end both
+reported AcT 11 and n41 and CID 1 remained active. At ten-second
+intervals, none of ten interface-bound IPv4 UDP DNS probes and none
+of ten TCP connections to the same resolver's port 53 succeeded. An
+earlier session on n41 did return a matching DNS reply. Registration
+and PDP activation are repeatable; usable NR data is not yet repeatable.
+
+A 65-second-per-mode comparison kept SIM2, the IPv4-only PDP setup, the
+DPMAIF rings, the interface-bound routing and the resolver the same:
+
+| Policy | AcT at start/end | UDP DNS | TCP connect | Interface TX/RX delta |
+| --- | --- | --- | --- | --- |
+| LTE-only | 7/7 | 6/6 | 6/6 | +29/+18 |
+| NR+LTE | 11/11 | 0/6 | 0/6 | +30/+0 |
+
+The LTE-only session reported LTE B3 at start and B40 at end, with an
+additional n41 row in both snapshots. As the LTE-only run still had
+AcT 7, an n41 row by itself is insufficient evidence that the data
+bearer is on NR. Neither comparison session reported a CID loss.
+After each run both SIMs read back their original ERAT policy, both had
+no active PDP, the modem acknowledged explicit data selection of SIM1,
+and the cellular interface and dedicated rules/routes were clean.
+
+A shorter repeat sampled DPMAIF counters during three identical probe
+pairs per mode. LTE passed all three pairs; NR failed all three:
+
+| Policy | UL submitted / done IRQ delta | UL power-not-ready IRQ delta | DL IRQ / packet delta |
+| --- | --- | --- | --- |
+| LTE-only | +14/+12 | 0 | +8/+8 |
+| NR+LTE | +15/+15 | +12 | 0/0 |
+
+The v2 ACK register header agrees with the mainline UL power-not-ready
+mask (bits 19:15). UL done counts IRQ events; neither those events nor
+interface TX counters prove that a particular packet reached the radio.
+The next comparison should capture DPMAIF and MD wake/power state around
+the first NR send on the working Android stack. The counter by itself
+does not identify a failing rail or wake handshake.

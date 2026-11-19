@@ -23,6 +23,8 @@ RESOLVERS = ('8.8.8.8', '2001:4860:4860::8888')
 POLICY_TABLE = '6893'
 POLICY_PRIORITY = 11000
 RAT_PROFILES = {'lte-only': ('3', '0'), 'nr-lte': ('19', '128')}
+COPS_ACT = re.compile(r'\+COPS:\s*\d+,\s*\d+,\s*"[^"]*",\s*(\d+)')
+PHY_COMMAND = 'AT+EPHYCONFIG=2'
 
 
 def context_states(at):
@@ -59,13 +61,44 @@ def wait_for_rat(at, mode, stopping):
     deadline = time.monotonic() + 45
     while not stopping() and time.monotonic() < deadline:
         for line in at('AT+COPS?'):
-            match = re.fullmatch(r'\+COPS:\s*\d+,\s*\d+,\s*"[^"]*",\s*(\d+)', line)
+            match = COPS_ACT.fullmatch(line)
             if match and int(match[1]) in allowed and '+CGATT: 1' in at('AT+CGATT?'):
                 print(f'Packet attached, access technology {match[1]}', flush=True)
                 return
         time.sleep(2)
     if not stopping():
         raise AtError('requested RAT policy did not reach packet attach')
+
+
+def report_radio(at):
+    """Report the fields confirmed against the same-device RIL parser."""
+    try:
+        act = next((match[1] for line in at('AT+COPS?')
+                    if (match := COPS_ACT.fullmatch(line))), 'unavailable')
+    except AtError:
+        act = 'unavailable'
+    print(f'COPS AcT: {act}', flush=True)
+
+    try:
+        lines = at(PHY_COMMAND)
+    except AtError:
+        lines = []
+    found = False
+    for line in lines:
+        if not line.startswith('+EPHYCONFIG:'):
+            continue
+        fields = [field.strip() for field in line.split(':', 1)[1].split(',')]
+        if len(fields) != 8 or not all(re.fullmatch(r'[0-9]{1,9}', x) for x in fields):
+            continue
+        rat, dl, ul, dl_bw, ul_bw, band, _, _ = map(int, fields)
+        if rat not in (4, 128) or not band:
+            continue
+        found = True
+        name = 'LTE B' if rat == 4 else 'NR n'
+        print(f'Physical channel: {name}{band}, DL/UL channel {dl}/{ul}, '
+              f'DL/UL bandwidth fields {dl_bw}/{ul_bw}', flush=True)
+    if not found:
+        print('LTE/NR physical channel: unavailable', flush=True)
 
 
 def tx_queue(status):
@@ -211,6 +244,8 @@ def run_session(at, args, stopping):
         setup_ipv4(stack, v4, args)
         print('CID 1 active, IPv4 configured', flush=True)
         deadline = None if args.seconds is None else time.monotonic() + args.seconds
+        if args.radio_status and not stopping():
+            report_radio(at)
         if args.probe:
             probe_dns(4, stopping)
         try:
@@ -243,6 +278,8 @@ def run_session(at, args, stopping):
                 remaining = 1 if deadline is None else deadline - time.monotonic()
                 if remaining > 0:
                     time.sleep(min(1, remaining))
+        if args.radio_status and not stopping():
+            report_radio(at)
     print('CID 1 deactivated and link cleaned up', flush=True)
     return True
 
@@ -252,8 +289,12 @@ def main():
     parser.add_argument('--apn', help='optionally set the CID 1 APN')
     parser.add_argument('--slot', type=int, choices=SLOTS,
                         help='select a data SIM on an already established basic MUX')
+    parser.add_argument('--restore-slot', type=int, choices=SLOTS,
+                        help='explicitly select this SIM at exit (the modem cannot query it)')
     parser.add_argument('--rat', choices=RAT_PROFILES,
                         help='temporarily set the selected SIM radio access policy')
+    parser.add_argument('--radio-status', action='store_true',
+                        help='report serving RAT and band at session start and completion')
     parser.add_argument('--ipv4-only', action='store_true',
                         help='request an IPv4-only PDP (requires --apn)')
     parser.add_argument('--target', action='append', type=ipaddress.ip_address, default=[],
@@ -273,6 +314,8 @@ def main():
         parser.error('--policy-routing and --target are mutually exclusive')
     if args.rat and args.slot is None:
         parser.error('--rat requires --slot')
+    if args.restore_slot is not None and args.slot is None:
+        parser.error('--restore-slot requires --slot')
     if args.ipv4_only and (not args.apn or any(x.version == 6 for x in args.target)):
         parser.error('--ipv4-only requires --apn and accepts only IPv4 targets')
     probes = RESOLVERS[:1] if args.ipv4_only else RESOLVERS
@@ -305,9 +348,9 @@ def main():
         return run_modem(fd, args, stopping)
 
 
-def select_data_slot(reader, write, slot, policy_routing):
+def select_data_slot(reader, write, args, stack):
     check_interface()
-    if policy_routing:
+    if args.policy_routing:
         check_policy_routes()
     mux = BasicMux(reader, write)
     mux.open_channel(0, 8)
@@ -317,7 +360,7 @@ def select_data_slot(reader, write, slot, policy_routing):
     def at_slot(dlci):
         def at(text, timeout=8):
             name = text[2:].split('=', 1)[0].rstrip('?')
-            prefix = f'{name}:' if text.endswith('?') or text == 'AT+CGPADDR=1' else None
+            prefix = f'{name}:' if text.endswith('?') or text in ('AT+CGPADDR=1', PHY_COMMAND) else None
             lines = mux.exchange(dlci, text, timeout, prefix=prefix)
             if lines[-1] != 'OK':
                 raise AtError(f'DLCI {dlci} rejected {name}')
@@ -327,9 +370,15 @@ def select_data_slot(reader, write, slot, policy_routing):
     clients = {number: at_slot(dlci) for number, dlci in SLOTS.items()}
     if any(any(context_states(client).values()) for client in clients.values()):
         raise AtError('PDP already active on a SIM; refusing to change data slot')
-    clients[1](f'AT+EDATASIM={slot}')
-    print(f'Data SIM {slot} selected', flush=True)
-    return clients[slot]
+
+    def select(slot):
+        clients[1](f'AT+EDATASIM={slot}')
+        print(f'Data SIM {slot} selected', flush=True)
+
+    if args.restore_slot is not None and args.restore_slot != args.slot:
+        stack.callback(select, args.restore_slot)
+    select(args.slot)
+    return clients[args.slot]
 
 
 def run_modem(fd, args, stopping):
@@ -348,11 +397,11 @@ def run_modem(fd, args, stopping):
 
         if stopping():
             return 0
-        if args.slot is None:
-            establish(reader, write, 8)
-        else:
-            at = select_data_slot(reader, write, args.slot, args.policy_routing)
         with ExitStack() as stack:
+            if args.slot is None:
+                establish(reader, write, 8)
+            else:
+                at = select_data_slot(reader, write, args, stack)
             if args.rat and not stopping():
                 previous = rat_profile(at)
                 requested = RAT_PROFILES[args.rat]
