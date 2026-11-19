@@ -1535,3 +1535,21 @@ DPMAIF 环保留给后续会话，默认路由保持不变。
 重连未收到 IPv6 RA，清理后等待 10 秒再次激活；第二次重连成功且双栈
 DNS 通过。退出后确认 CID 1 未激活，接口下线，地址和路由清理完毕。
 见[实测记录](evidence/modem-dpmaif-data-session.json)。
+
+## 可选的双栈策略路由
+
+`--policy-routing` 在 table 6893 中为 IPv4 和 IPv6 各添加一条默认路由，
+并用 priority 11000 的 `oif ccmnidp0` 规则选择该表。应用需绑定接口，
+例如通过 `SO_BINDTODEVICE`；无需为每个目的地址预先添加主机路由。
+如果规则优先级或表已占用，工具会在激活 PDP 前退出。此模式要求内核
+启用 `CONFIG_IP_MULTIPLE_TABLES` 和 `CONFIG_IPV6_MULTIPLE_TABLES`。
+
+```sh
+python3 modem_data_session.py --apn ctnet --policy-routing --probe
+```
+
+真机 `9bfc8e0f909c` 上，探测和另外一对解析器的 IPv4/IPv6 DNS 回复均
+匹配，两个额外目标均通过 table 6893 的默认路由；main 表没有新增蜂窝
+默认路由，USB 管理路径仍经 `usb0`。首轮未收到 IPv6 RA，退避重试后
+成功。SIGTERM 后确认策略规则、路由、地址均已清理，且 CID 1 停用。
+见[实测记录](evidence/modem-dpmaif-policy-routing.json)。

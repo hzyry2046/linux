@@ -1,0 +1,15 @@
+{
+  "image": "9bfc8e0f909c",
+  "sha256": "be106a1c4b33c75808840e418beb06d51725dd7e7e27079f2589f368320c52dd",
+  "interface": "ccmnidp0",
+  "table": 6893,
+  "priority": 11000,
+  "host_routes_for_probes": false,
+  "alternate_ipv4_dns_matched": true,
+  "alternate_ipv6_dns_matched": true,
+  "usb_management_device": "usb0",
+  "main_table_cellular_defaults": false,
+  "first_attempt_missing_ipv6_ra": true,
+  "rules_and_routes_removed_on_sigterm": true,
+  "cid_active_after_stop": false
+}
