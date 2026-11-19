@@ -63,14 +63,18 @@ def wait_for_rat(at, mode, stopping):
     allowed = {7} if mode == 'lte-only' else {7, 10, 11, 12, 13}
     deadline = time.monotonic() + 45
     while not stopping() and time.monotonic() < deadline:
-        for line in at('AT+COPS?'):
-            match = COPS_ACT.fullmatch(line)
-            if match and int(match[1]) in allowed and '+CGATT: 1' in at('AT+CGATT?'):
-                print(f'Packet attached, access technology {match[1]}', flush=True)
+        if '+CGATT: 1' in at('AT+CGATT?'):
+            if mode is None:
+                print('Packet attached', flush=True)
                 return
+            for line in at('AT+COPS?'):
+                match = COPS_ACT.fullmatch(line)
+                if match and int(match[1]) in allowed:
+                    print(f'Packet attached, access technology {match[1]}', flush=True)
+                    return
         time.sleep(2)
     if not stopping():
-        raise AtError('requested RAT policy did not reach packet attach')
+        raise AtError('timed out waiting for packet attach under the current RAT policy')
 
 
 def report_radio(at):
@@ -458,6 +462,7 @@ def run_modem(fd, args, stopping):
                         if stopping():
                             return 0
                         time.sleep(1)
+                    wait_for_rat(at, args.rat, stopping)
         raise AtError('CID 1 reconnect budget exhausted')
     except subprocess.CalledProcessError as error:
         raise AtError(f'{error.cmd[0]} operation failed') from None

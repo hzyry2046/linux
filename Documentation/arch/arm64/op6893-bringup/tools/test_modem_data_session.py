@@ -12,6 +12,27 @@ import modem_data_session as modem
 
 
 class SessionTest(unittest.TestCase):
+    def test_reconnect_waits_for_packet_attach_without_rat_override(self):
+        events = []
+
+        def at(command):
+            self.assertEqual(command, 'AT+CGATT?')
+            events.append('check attach')
+            if events.count('check attach') == 1:
+                return ['+CGATT: 0', 'OK']
+            return ['+CGATT: 1', 'OK']
+
+        def session(*_args):
+            events.append('activate')
+            return events.count('activate') == 2
+
+        args = SimpleNamespace(slot=2, rat=None, reconnects=1)
+        with (patch.object(modem, 'select_data_slot', return_value=at),
+              patch.object(modem, 'run_session', side_effect=session),
+              patch.object(modem.time, 'sleep'), contextlib.redirect_stdout(io.StringIO())):
+            self.assertEqual(modem.run_modem(0, args, lambda: False), 0)
+        self.assertEqual(events, ['activate', 'check attach', 'check attach', 'activate'])
+
     def test_rat_policy_is_restored_after_session_failure(self):
         calls = []
         profile = ('6', '4')

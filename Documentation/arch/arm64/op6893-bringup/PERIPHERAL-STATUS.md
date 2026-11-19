@@ -8,7 +8,8 @@ IPv4-only PDP 配置下，LTE 重复探测通过；NR 曾收到 DNS 回包，但
 两轮均无 DNS 回包，实际分配的通道 1 两轮均通过。拨号工具可用
 `--activation-mapping` 按本次 LHIF 请求选择通道。SIM2 在 NR n41 上
 IPv4 重复探测通过；LTE 和 NR 的双栈 PDP 均收到 IPv4 和 IPv6 DNS 回包。
-NR 两次主动停用 PDP 后，自动重连选到新通道并恢复双栈。
+NR 两次主动停用 PDP 后，自动重连选到新通道并恢复双栈；射频关开后
+也验证了先等待重新附着，再恢复双栈。
 长期稳定性、自然掉网恢复、NSA 和锁频段仍待验证。
 见 [SIM/RAT 实测](MODEM-SIM-RAT.md)。
 

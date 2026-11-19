@@ -339,3 +339,21 @@ exit. The modem acknowledged selection of SIM1, the netdev and policy
 routes were clean, and the channel selector was back to 0. This checks
 recovery from PDP deactivation; loss of radio coverage, modem reset and
 long-duration load remain untested.
+
+### Recovery after an RF cycle
+
+On the same image, a SIM2 NR test disabled RF with `CFUN=4` after
+dual-stack DNS passed. The modem read back `CFUN: 4`, CID 1 became
+inactive and `CGATT?` reported detached. The original session tool
+retried activation after ten seconds while detached; the modem rejected
+`CGACT` and the tool exited. The test then restored RF.
+
+The updated tool waits for packet attach after the reconnect backoff.
+In a repeat, the test re-enabled RF during that wait. The modem initially
+reported detached and then attached with AcT 11. The new CID 1 selected
+channel 0 instead of the previous channel 1, and both IPv4 and IPv6 DNS
+passed. The tool does not toggle RF itself; the harness did that to
+reproduce a detach that outlasted the backoff. Both SIMs read back their
+original RAT policy and inactive PDPs after exit, and the link, routing
+and channel selector were restored. Natural coverage loss and modem
+reset still need their own checks.
