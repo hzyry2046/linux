@@ -193,3 +193,31 @@ GPR；HALT 等待成功，但 loader 起始处仍读回不一致。这两项实�
 SCP SRAM power-down 状态、时钟和互连资源。保留源 CRC、目标读回及
 失败时不 release 的检查。证据见构建目录下
 `backup/boot-write-md-rearm-v2/` 与 `backup/boot-write-md-rearm-178ecc2ce674/`。
+
+### 同一 AP 启动内两次 MD 握手
+
+`2281dbab1768` 将 TCM 校验移到 DRAM 写入之前；成功的 SCP-only
+恢复通过了两阶段校验。随后 MD 关电后的 SCP 恢复在第一次 TCM 校验
+就读回全零，确认该次故障不依赖后续 DRAM 写入。按实际地址重采后，
+四个 SRAM power-down 寄存器在成功与失败样本均为零；SCP 内部
+selector / sleep debug 分别为 `0x100 / 0x1` 与 `0x200 / 0x4`。
+这只是相关性，不能单凭寄存器快照判定 TCM 实际供电。早期用拼接地址
+采得的全零数据作废。
+
+`99d53ce34639` 在 CCISM 停止、lease 释放后显式发送 vendor
+`SCP_SLEEP_OFF`，随后成功恢复到第四代 READY。该次第二轮 MD 在
+`cold-rails` 被阻止。新镜像 `b34941e0b420` 恢复首启指令电压，并
+处理 SCP RX worker 在主动 STOP 时误报 `-ESHUTDOWN` 的竞态。
+
+真机在同一 AP boot ID 内以 MD 第 6711/6712 代、SCP 第 1/2 代
+分别到达 HS2 与 CCISM RUNNING；两轮最后均确认 MD1 OFF 和
+CCISM STOPPED，SCP 停止后 taint 为 0。第二轮 HS2 后约 490 ms，
+FS channel 15、普通 CCIF TX queue 4 的控制区校验返回
+`-EBADMSG`。发送路径的该错误只来自 ring guard 或控制区的
+长度/指针检查；本次没采到触发失败的字段。此故障仍锁存并阻止再次
+rearm，未做第二代数据面或 IMS/VoLTE 发信和拨出测试。
+
+镜像从主线写入 boot，重启后版本与全分区哈希一致，boot 与父盘均
+恢复只读。外部证据：
+`backup/boot-write-md-rearm-b34941e0b420/{booted,two-md}.log`，
+以及 `backup/boot-write-md-rearm-2281dbab1768/{scp-clock,after-md-failure}.log`。
