@@ -354,7 +354,8 @@ int ccci_ccif_stop(struct ccci_ccif *ccif)
 	/* Consumer callbacks must never acquire the parent MD owner mutex. */
 	ccci_ccif_control_quiesce(ccif->control);
 	ccci_ccif_rx_stop(ccif->rx);
-	if (ccci_ccif_faulted(ccif))
+	/* Protocol faults stay latched for start, but must not prevent shutdown. */
+	if (ccif->error)
 		return -EIO;
 	if (!ccif->prepared)
 		return 0;
