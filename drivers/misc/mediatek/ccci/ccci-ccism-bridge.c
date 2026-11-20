@@ -213,7 +213,7 @@ out:
 	return ret;
 }
 
-int ccci_ccism_bridge_rearm(struct ccci_ccism_bridge *bridge)
+int ccci_ccism_bridge_rearm(struct ccci_ccism_bridge *bridge, bool commit)
 {
 	int ret;
 
@@ -221,8 +221,8 @@ int ccci_ccism_bridge_rearm(struct ccci_ccism_bridge *bridge)
 	if (bridge->leased) {
 		ret = -EBUSY;
 	} else {
-		ret = ccci_ccism_session_rearm(bridge->session);
-		if (!ret) {
+		ret = ccci_ccism_session_rearm(bridge->session, commit);
+		if (!ret && commit) {
 			bridge->attempted = false;
 			bridge->smc_attempted = false;
 		}

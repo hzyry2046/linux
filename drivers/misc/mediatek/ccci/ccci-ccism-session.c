@@ -422,7 +422,7 @@ int ccci_ccism_session_quiesce(struct ccci_ccism_session *session)
 	return ret;
 }
 
-int ccci_ccism_session_rearm(struct ccci_ccism_session *session)
+int ccci_ccism_session_rearm(struct ccci_ccism_session *session, bool commit)
 {
 	unsigned long flags;
 	int ret = 0;
@@ -432,7 +432,7 @@ int ccci_ccism_session_rearm(struct ccci_ccism_session *session)
 	if (!session->quiesced || session->core.state != CCCI_CCISM_STOPPED ||
 	    session->core.error || session->core.cleanup_error || session->queue_error) {
 		ret = -EBUSY;
-	} else {
+	} else if (commit) {
 		memset(&session->core, 0, sizeof(session->core));
 		memzero_explicit(session->queue, sizeof(session->queue));
 		session->head = 0;

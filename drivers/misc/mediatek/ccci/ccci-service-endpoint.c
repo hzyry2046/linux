@@ -585,6 +585,12 @@ int ccci_service_endpoint_offline(struct ccci_service_endpoint *endpoint)
 	return reserved ? -EBUSY : ccci_service_session_offline(endpoint->session);
 }
 
+void ccci_service_endpoint_park(struct ccci_service_endpoint *endpoint)
+{
+	if (endpoint)
+		ccci_service_session_park(endpoint->session);
+}
+
 int ccci_service_endpoint_stop(struct ccci_service_endpoint *endpoint, bool md_stopped)
 {
 	int ret;
@@ -598,7 +604,7 @@ int ccci_service_endpoint_stop(struct ccci_service_endpoint *endpoint, bool md_s
 	return ret;
 }
 
-int ccci_service_endpoint_rearm(struct ccci_service_endpoint *endpoint)
+int ccci_service_endpoint_rearm(struct ccci_service_endpoint *endpoint, bool commit)
 {
 	unsigned long flags;
 	int ret;
@@ -612,8 +618,8 @@ int ccci_service_endpoint_rearm(struct ccci_service_endpoint *endpoint)
 		ret = -EBUSY;
 	spin_unlock_irqrestore(&endpoint->queue_lock, flags);
 	if (!ret)
-		ret = ccci_service_session_rearm(endpoint->session);
-	if (!ret) {
+		ret = ccci_service_session_rearm(endpoint->session, commit);
+	if (!ret && commit) {
 		spin_lock_irqsave(&endpoint->queue_lock, flags);
 		endpoint->error = 0;
 		endpoint->cursor = 0;

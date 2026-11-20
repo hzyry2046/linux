@@ -47,7 +47,7 @@ void ccci_ccism_session_status(struct ccci_ccism_session *session,
  */
 int ccci_ccism_session_quiesce(struct ccci_ccism_session *session);
 /* After quiesce and SCP lease release, with the MD producer also joined. */
-int ccci_ccism_session_rearm(struct ccci_ccism_session *session);
+int ccci_ccism_session_rearm(struct ccci_ccism_session *session, bool commit);
 int ccci_ccism_session_destroy(struct ccci_ccism_session *session);
 
 #endif

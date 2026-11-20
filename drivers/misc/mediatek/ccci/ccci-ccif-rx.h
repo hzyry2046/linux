@@ -50,7 +50,7 @@ void ccci_ccif_rx_interrupt(struct ccci_ccif_rx *rx, int irq);
 int ccci_ccif_rx_start(struct ccci_ccif_rx *rx, ccci_ccif_consume_fn consume, void *context);
 void ccci_ccif_rx_stop(struct ccci_ccif_rx *rx);
 /* After STOP has synchronized both IRQs and joined the worker. */
-int ccci_ccif_rx_rearm(struct ccci_ccif_rx *rx);
+int ccci_ccif_rx_rearm(struct ccci_ccif_rx *rx, bool commit);
 /* Fault closes admission without waiting; power remains held until owner STOP. */
 void ccci_ccif_rx_abort(struct ccci_ccif_rx *rx, int error);
 bool ccci_ccif_rx_started(struct ccci_ccif_rx *rx);

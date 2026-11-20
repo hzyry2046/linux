@@ -121,6 +121,7 @@ TEST = r'''
 
 #include "ccci-md-at.h"
 
+#define memzero_explicit(p, n) memset((p), 0, (n))
 #include "ccci-md-at.c"
 
 /* --- models ------------------------------------------------------------- */
@@ -294,11 +295,20 @@ int main(void)
 	assert(ccci_md_at_stop(at, false) == -EBUSY);
 	at->error = 0;
 	at->stopped = false;
-	at_release(NULL, &file);           /* completion already satisfied */
+	assert(ccci_md_at_stop(at, true) == -EBUSY);
+	assert(ccci_md_at_rearm(at, false) == -EBUSY);
+	at_release(NULL, &file);
 	assert(!ccci_md_at_stop(at, true));
 	assert(at->stopped && at->error == -ESHUTDOWN);
 	assert(ccci_md_at_status(at, status, sizeof(status)) > 0 && strstr(status, "stopped=1"));
 	assert(ccci_md_at_offline(at) == 0);
+	at->ring[0] = 0xff;
+	assert(!ccci_md_at_rearm(at, false) && at->ring[0] == 0xff);
+	assert(!ccci_md_at_rearm(at, true));
+	assert(!at->ring[0] && !at_queued(at) && !at->hs2);
+	assert(!open_pipe(at, &file));
+	assert(at_write(&file, (const char *)frame, 8, NULL) == -ENOTCONN);
+	at_release(NULL, &file);
 	at_remove(at);
 
 	/* --- a fresh pipe reports honest counters ------------------------- */

@@ -346,15 +346,20 @@ int ccci_ccif_handshake_start(struct ccci_ccif *ccif, const struct ccci_runtime_
 	return ret;
 }
 
+void ccci_ccif_quiesce_rx(struct ccci_ccif *ccif)
+{
+	/* Consumer callbacks must never acquire the parent MD owner mutex. */
+	ccci_ccif_control_quiesce(ccif->control);
+	ccci_ccif_rx_stop(ccif->rx);
+}
+
 int ccci_ccif_stop(struct ccci_ccif *ccif)
 {
 	int ret;
 
-	/* Drain any sender before closing consumers or resetting/powering off. */
+	ccci_ccif_quiesce_rx(ccif);
+	/* Drain any sender before resetting/powering off. */
 	ccif_tx_gate(ccif, false);
-	/* Consumer callbacks must never acquire the parent MD owner mutex. */
-	ccci_ccif_control_quiesce(ccif->control);
-	ccci_ccif_rx_stop(ccif->rx);
 	/* Protocol faults stay latched for start, but must not prevent shutdown. */
 	if (ccif->error)
 		return -EIO;
@@ -373,7 +378,7 @@ int ccci_ccif_stop(struct ccci_ccif *ccif)
 	return 0;
 }
 
-int ccci_ccif_rearm(struct ccci_ccif *ccif)
+int ccci_ccif_rearm(struct ccci_ccif *ccif, bool commit)
 {
 	int ret;
 
@@ -382,10 +387,10 @@ int ccci_ccif_rearm(struct ccci_ccif *ccif)
 	ret = ccif_irqs_masked(ccif);
 	if (ret)
 		return ret;
-	ret = ccci_ccif_rx_rearm(ccif->rx);
+	ret = ccci_ccif_rx_rearm(ccif->rx, commit);
 	if (!ret)
-		ret = ccci_ccif_control_rearm(ccif->control);
-	if (ret)
+		ret = ccci_ccif_control_rearm(ccif->control, commit);
+	if (ret || !commit)
 		return ret;
 
 	mutex_lock(&ccif->tx_lock);

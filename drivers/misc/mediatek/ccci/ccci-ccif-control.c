@@ -267,14 +267,14 @@ int ccci_ccif_control_error(struct ccci_ccif_controller *control)
 	return ret;
 }
 
-int ccci_ccif_control_rearm(struct ccci_ccif_controller *control)
+int ccci_ccif_control_rearm(struct ccci_ccif_controller *control, bool commit)
 {
 	int ret = 0;
 
 	mutex_lock(&control->lock);
 	if (control->active || control->hs.error) {
 		ret = -EBUSY;
-	} else {
+	} else if (commit) {
 		memset(&control->hs, 0, sizeof(control->hs));
 		memset(control->offers, 0, sizeof(control->offers));
 		control->port = NULL;

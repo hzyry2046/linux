@@ -19,6 +19,7 @@ ccci_nvram_cache_create(struct device *dev, const struct ccci_smem_layout *smem)
  * the same-board first-start clear. Never re-clears on a later reconnect.
  */
 int ccci_nvram_cache_prepare(struct ccci_nvram_cache *cache);
+int ccci_nvram_cache_resume(struct ccci_nvram_cache *cache);
 /* Parent lock held, MD domain already proven off; keeps the mapping. */
 int ccci_nvram_cache_stop(struct ccci_nvram_cache *cache);
 int ccci_nvram_cache_offline(struct ccci_nvram_cache *cache);

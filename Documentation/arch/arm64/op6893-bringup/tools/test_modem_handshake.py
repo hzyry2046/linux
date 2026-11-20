@@ -316,7 +316,7 @@ static void controller_tests(void){
  now_ms=1000000;run_work(&controller->timer.work);assert(controller->timer.work.pending && !ccci_ccif_control_error(controller));
  char status[4096];assert(ccci_ccif_control_status(controller,status)>0 && strstr(status,"hs2_seen=1"));
  assert(!control_fault_calls && accepted_hs1==1 && accepted_hs2==1);
- assert(ccci_ccif_rx_rearm(rx)==-EBUSY && ccci_ccif_control_rearm(controller)==-EBUSY);
+ assert(ccci_ccif_rx_rearm(rx, true)==-EBUSY && ccci_ccif_control_rearm(controller, true)==-EBUSY);
 
  assert(ccci_ccif_control_set_fault(controller,control_fault,&dev)==-EBUSY);
  /* Raw RX faults never call the control consumer; the timer must observe them. */
@@ -327,11 +327,11 @@ static void controller_tests(void){
  ccci_ccif_control_quiesce(controller);ccci_ccif_rx_stop(rx);assert(!rx->armed && !controller->active && !controller->timer.work.pending);
  assert(controller->hs.state==CCCI_HANDSHAKE_FAILED && controller->hs.hs2_seen);
  assert(ccci_ccif_control_start(controller,offers,ports,&dev)==-EIO && rt_zeros==1);
- assert(ccci_ccif_rx_rearm(rx)==-EBUSY && ccci_ccif_control_rearm(controller)==-EBUSY);
+ assert(ccci_ccif_rx_rearm(rx, true)==-EBUSY && ccci_ccif_control_rearm(controller, true)==-EBUSY);
  control_setup();assert(!ccci_ccif_control_start(controller,offers,ports,&dev));
  run_work(&rx->work);assert(rx->armed);
  ccci_ccif_control_quiesce(controller);ccci_ccif_rx_stop(rx);
- assert(!ccci_ccif_rx_rearm(rx) && !ccci_ccif_control_rearm(controller));
+ assert(!ccci_ccif_rx_rearm(rx, true) && !ccci_ccif_control_rearm(controller, true));
  assert(!rx->attempted && !rx->next_queue && !controller->attempted &&
         !controller->fault && !controller->port && controller->hs.state==CCCI_HANDSHAKE_IDLE);
  assert(!ccci_ccif_control_set_fault(controller,control_fault,&dev));

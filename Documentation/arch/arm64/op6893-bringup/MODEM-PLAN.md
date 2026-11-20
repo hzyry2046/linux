@@ -24,13 +24,20 @@ PDP 重连。最新镜像已验证一次 `md_power off` 完成 MD/CCISM 停机�
   arm 使用更大的 SCP generation。FS/RPC 要求旧 backend FD 已关闭，
   新会话使用更大的 MD generation。主机模型已验证旧 FD、旧回复
   和旧代次的拒绝路径。
-- MD owner：还需把以上入口与 dispatcher、AT、CCMNI、boot 和
-  power 的复位接成一个显式命令，验证断开用户态服务后能安全重开。
-  先证明上一轮停止、重启后的 SCP READY 和共享内存复用，才允许
-  第二次 MD CPU release。当前仍保留 MD 的单次放行门槛。
-- 共享内存：6.6 的 `ap_md_mem.c` 将首启清理和复位清理区分开。复位
-  路径不清 NVRAM cache，另有 CCB DHL 和 RAW DHL 前 1 KiB 的显式
-  清理。复用已有 cache 映射时要保留这套区别。
+- MD owner：已接入显式 `md_boot=rearm`。先关电并读回 MD1 OFF，
+  确认 DPMAIF 已复位、CCIF/CCISM 已退出、旧服务和 AT FD 已关闭、
+  旧 CCIF CCMNI 网口已关闭。预检通过后才重建各端口并重新开放
+  `md_power=on`。SCP 和 MD generation 各自递增；下一次启动仍需
+  重新连接服务后端、完成 prepare，才能放行 CPU。
+- 共享内存：按 6.6 的 `ap_md_mem.c` 区分首启和复位。后续启动
+  复用已映射的 NVRAM cache，不重复首启清零；按 6297 布局清
+  CCB aggregate 的前 2 MiB（CCB DHL）和紧接其后的最多 1 KiB
+  （RAW DHL）。小于或等于 2 MiB 时，vendor 拆分得到的两个区域均为空。
+- 真机验收：同一 AP boot ID 下记录两次 HS2/CCISM RUNNING 和最后一次
+  停机。第二轮使用新的 SCP generation、新服务 FD 和新的 MD generation。
+  镜像 `5006e9c935c4` 已验证首轮 HS2/CCISM、干净关电和重新 arm
+  （CCIF IRQ 仍屏蔽、序列归零）。第二轮被 SCP TCM loader 起始处读回
+  不一致拦截，尚未给 MD 重新上电。后续以 SCP 恢复为当前重点。
 
 历史记录：更新：2026-11-17。**已真机实测**：SCP 常驻/READY1/awake；MD 继承 ON 接管与
 冷上电；普通 CCIF prepare/stop/off；唯一一次 `(6,0)` MD CPU 放行；HS1 被接受、

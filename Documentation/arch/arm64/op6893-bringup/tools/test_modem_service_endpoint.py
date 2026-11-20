@@ -374,13 +374,13 @@ static void bare_request_requires_prefixed_reply(void){
 static void next_generation(void){
  create(true);receive_fs(0);
  size_t n=read_one();
- assert(ccci_service_endpoint_rearm(endpoint)==-EBUSY);
+ assert(ccci_service_endpoint_rearm(endpoint, true)==-EBUSY);
  assert(!ccci_service_endpoint_stop(endpoint,true));
  assert(endpoint_write(&file,(void *)record,n,&offset)==-ESHUTDOWN);
- assert(ccci_service_endpoint_rearm(endpoint)==-EBUSY);
+ assert(ccci_service_endpoint_rearm(endpoint, true)==-EBUSY);
  assert(!endpoint_release(NULL,&file));
- assert(!ccci_service_endpoint_rearm(endpoint));
- assert(ccci_service_endpoint_rearm(endpoint)==-EBUSY);
+ assert(!ccci_service_endpoint_rearm(endpoint, true));
+ assert(ccci_service_endpoint_rearm(endpoint, true)==-EBUSY);
  file.private_data=&endpoint->misc;
  assert(!endpoint_open(NULL,&file));
  assert(ccci_service_endpoint_reserve(endpoint,41)==-ESTALE);

@@ -65,6 +65,7 @@ struct ccci_md_platform {
 	struct ccci_md_net *net;
 	struct ccci_nvram_cache *cache;
 	struct ccci_md_boot *boot;
+	bool dpmaif_off_reset;
 	/* Read-only MD exception record header, mapped only when LK exported it. */
 	void __iomem *ee;
 	size_t ee_bytes;
@@ -295,13 +296,17 @@ static int md_platform_off(struct ccci_md_platform *md)
 	if (ccci_md_boot_active(md->boot)) {
 		if (!regmap_read(md->spm, SPM_PCM_REG13, &r13))
 			ccci_md_boot_note_pcm(md->boot, r13);
+		ccci_ccif_quiesce_rx(md->ccif);
+		ccci_service_endpoint_park(md->services);
 		ret = ccci_ccif_stop(md->ccif);
 		if (!ret)
 			ret = ccci_md_power_off(&md->power);
 		if (!ret)
 			ret = ccci_md_boot_stop(md->boot, true);
-		if (!ret)
+		if (!ret) {
 			ret = ccci_dpmaif_reset_after_off(md->dpmaif);
+			md->dpmaif_off_reset = !ret;
+		}
 		return ret;
 	}
 	ret = ccci_md_boot_offline(md->boot);
@@ -319,8 +324,10 @@ static int md_platform_off(struct ccci_md_platform *md)
 		ret = ccci_md_power_off(&md->power);
 	if (!ret)
 		ret = ccci_nvram_cache_stop(md->cache);
-	if (!ret && md->power.state == CCCI_MD_STOPPED)
+	if (!ret && md->power.state == CCCI_MD_STOPPED) {
 		ret = ccci_dpmaif_reset_after_off(md->dpmaif);
+		md->dpmaif_off_reset = !ret;
+	}
 	return ret;
 }
 
@@ -333,8 +340,10 @@ static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 	mutex_lock(&md->lock);
 	if (sysfs_streq(buf, "on")) {
 		ret = ccci_md_power_on(&md->power);
-		if (!ret)
+		if (!ret) {
+			md->dpmaif_off_reset = false;
 			ccci_dpmaif_allow_start(md->dpmaif);
+		}
 	} else if (sysfs_streq(buf, "takeover")) {
 		if (md->power.state == CCCI_MD_INHERITED)
 			ret = ccci_dpmaif_quiesce(md->dpmaif);
@@ -389,6 +398,17 @@ static ssize_t md_boot_store(struct device *dev, struct device_attribute *attr,
 				 generation, crystal, source);
 		if (!ret)
 			ret = ccci_md_boot_prepare(md->boot, &md->smem, generation, crystal);
+	} else if (sysfs_streq(buf, "rearm")) {
+		if (md->power.state != CCCI_MD_STOPPED || md->power.clocks ||
+		    md->power.domain || md->power.error || !md->dpmaif_off_reset) {
+			ret = -EBUSY;
+			goto out;
+		}
+		ret = md_domain_check(md, false);
+		if (!ret)
+			ret = ccci_md_boot_rearm(md->boot);
+		if (!ret)
+			md->power.attempted = false;
 	} else if (sysfs_streq(buf, "release")) {
 		ret = ccci_md_boot_release(md->boot);
 	} else if (sysfs_streq(buf, "stop")) {

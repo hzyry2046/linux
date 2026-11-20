@@ -94,6 +94,20 @@ out:
 	return ret;
 }
 
+/* Preserve the cache populated by the preceding MD generation. */
+int ccci_nvram_cache_resume(struct ccci_nvram_cache *cache)
+{
+	int ret = -EBUSY;
+
+	mutex_lock(&cache->lock);
+	if (cache->state == NVRAM_STOPPED && cache->map && cache->cleared) {
+		cache->state = NVRAM_PREPARED;
+		ret = 0;
+	}
+	mutex_unlock(&cache->lock);
+	return ret;
+}
+
 int ccci_nvram_cache_stop(struct ccci_nvram_cache *cache)
 {
 	int ret = 0;

@@ -87,7 +87,7 @@ static void backend_fault(void *ctx,u64 gen,int error){
  assert(ctx==&dev&&gen==41&&error<0&&!spin_depth&&session->lock.held);faults++;
 }
 static void backend_closing(void *ctx,u64 gen){
- assert(ctx==&dev&&gen==41&&!spin_depth&&!session->lock.held&&!session->accepting);
+ assert(ctx==&dev&&gen==session->generation&&!spin_depth&&!session->lock.held&&!session->accepting);
  assert(!session->work.work.pending);closed++;
  assert(ccci_service_session_reply(session,gen,last_token,CCCI_SERVICE_FS,0,reply,24)<0);
 }
@@ -193,6 +193,18 @@ static void sessions(void){
  assert(aborts==1&&faults==1&&!sends);stop_destroy();
  /* A request that expired while queued must not reach the backend. */
  create(true);receive();now_ms=60100;run();assert(!submits&&aborts==1&&faults==1);stop_destroy();
+ /* RX joined but still powered: park a pending reply without sending it. */
+ create(true);receive();run();n=fs(reply,15,4);
+ assert(!ccci_service_session_reply(session,41,last_token,CCCI_SERVICE_FS,0,reply,n));
+ ccci_service_session_park(session);
+ service_work(&session->work.work);
+ assert(!sends&&!aborts&&!faults&&!closed&&!session->accepting);
+ assert(!ccci_service_session_stop(session,true));
+ assert(!ccci_service_session_rearm(session,false));
+ assert(!ccci_service_session_rearm(session,true)&&!session->parked);
+ assert(!ccci_service_session_arm(session,42));
+ closed=0;
+ stop_destroy();
  create(true);receive();assert(!ccci_service_session_stop(session,true));
  assert(!submits&&!session->work.work.pending&&closed==1);assert(!ccci_service_session_destroy(session));
  fail_workqueue=true;session=ccci_service_session_create(&dev,&ccif,&backend,&dev);assert(IS_ERR(session));fail_workqueue=false;

@@ -64,6 +64,7 @@ struct ccci_service_session {
 	bool armed;
 	bool accepting;
 	bool stopping;
+	bool parked;
 	bool stopped;
 	bool fault_notified;
 };
@@ -226,7 +227,7 @@ static void service_work(struct work_struct *work)
 	int ret = 0;
 
 	mutex_lock(&session->lock);
-	if (!session->armed || session->stopping || session->stopped)
+	if (!session->armed || session->parked || session->stopping || session->stopped)
 		goto unlock;
 	ccci_service_router_tick(&session->router, session->generation, service_now());
 	while (!session->router.error && budget-- && service_take(session)) {
@@ -487,6 +488,21 @@ int ccci_service_session_offline(struct ccci_service_session *session)
 	return ret;
 }
 
+/* RX joined and parent lifecycle serialized; does not close the backend. */
+void ccci_service_session_park(struct ccci_service_session *session)
+{
+	unsigned long flags;
+
+	/* The worker holds this lock across its last possible TX. */
+	mutex_lock(&session->lock);
+	session->parked = true;
+	spin_lock_irqsave(&session->queue_lock, flags);
+	session->accepting = false;
+	spin_unlock_irqrestore(&session->queue_lock, flags);
+	mutex_unlock(&session->lock);
+	cancel_delayed_work_sync(&session->work);
+}
+
 int ccci_service_session_stop(struct ccci_service_session *session, bool md_stopped)
 {
 	unsigned long flags;
@@ -527,21 +543,23 @@ int ccci_service_session_stop(struct ccci_service_session *session, bool md_stop
 	return ret;
 }
 
-int ccci_service_session_rearm(struct ccci_service_session *session)
+int ccci_service_session_rearm(struct ccci_service_session *session, bool commit)
 {
 	unsigned long flags;
 	int ret;
 
 	mutex_lock(&session->lock);
-	if (!session->stopped) {
-		ret = -EBUSY;
+	spin_lock_irqsave(&session->queue_lock, flags);
+	ret = session->stopped && !session->queue_error ? 0 : -EBUSY;
+	spin_unlock_irqrestore(&session->queue_lock, flags);
+	if (ret || !commit)
 		goto out;
-	}
 	ret = service_router_init(session);
 	if (ret)
 		goto out;
 	spin_lock_irqsave(&session->queue_lock, flags);
 	session->stopped = false;
+	session->parked = false;
 	session->armed = false;
 	session->queue_error = 0;
 	session->tx_packets = 0;

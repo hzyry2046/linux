@@ -32,7 +32,7 @@ int ccci_ccif_control_start(struct ccci_ccif_controller *control,
 void ccci_ccif_control_quiesce(struct ccci_ccif_controller *control);
 int ccci_ccif_control_error(struct ccci_ccif_controller *control);
 /* Called after both the timer and RX worker have been joined. */
-int ccci_ccif_control_rearm(struct ccci_ccif_controller *control);
+int ccci_ccif_control_rearm(struct ccci_ccif_controller *control, bool commit);
 ssize_t ccci_ccif_control_status(struct ccci_ccif_controller *control, char *buf);
 #else
 static inline struct ccci_ccif_controller *
@@ -57,7 +57,10 @@ static inline int ccci_ccif_control_start(struct ccci_ccif_controller *control,
 
 static inline void ccci_ccif_control_quiesce(struct ccci_ccif_controller *control) { }
 static inline int ccci_ccif_control_error(struct ccci_ccif_controller *control) { return 0; }
-static inline int ccci_ccif_control_rearm(struct ccci_ccif_controller *control) { return 0; }
+static inline int ccci_ccif_control_rearm(struct ccci_ccif_controller *control, bool commit)
+{
+	return 0;
+}
 static inline ssize_t ccci_ccif_control_status(struct ccci_ccif_controller *control, char *buf)
 {
 	return -EOPNOTSUPP;

@@ -270,7 +270,7 @@ void ccci_ccif_rx_abort(struct ccci_ccif_rx *rx, int error)
 	ccif_rx_fault(rx, error < 0 ? error : -EPROTO);
 }
 
-int ccci_ccif_rx_rearm(struct ccci_ccif_rx *rx)
+int ccci_ccif_rx_rearm(struct ccci_ccif_rx *rx, bool commit)
 {
 	unsigned long flags;
 	int ret = 0;
@@ -278,7 +278,7 @@ int ccci_ccif_rx_rearm(struct ccci_ccif_rx *rx)
 	spin_lock_irqsave(&rx->gate, flags);
 	if (rx->active || rx->armed || rx->scheduled || rx->consume || rx->error) {
 		ret = -EBUSY;
-	} else {
+	} else if (commit) {
 		rx->attempted = false;
 		rx->next_queue = 0;
 	}

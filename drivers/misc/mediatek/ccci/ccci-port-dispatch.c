@@ -296,6 +296,10 @@ int ccci_port_dispatch_prepare(struct ccci_port_dispatch *dispatch, u64 generati
 		ret = -EALREADY;
 		goto out;
 	}
+	if (generation <= dispatch->generation) {
+		ret = -ESTALE;
+		goto out;
+	}
 	dispatch->attempted = true;
 	dispatch->generation = generation;
 	ret = ccci_service_endpoint_reserve(dispatch->endpoint, generation);
@@ -359,6 +363,49 @@ int ccci_port_dispatch_stop(struct ccci_port_dispatch *dispatch, bool md_stopped
 	mutex_lock(&dispatch->lock);
 	if (!ret)
 		dispatch->state = DISPATCH_STOPPED;
+	mutex_unlock(&dispatch->lock);
+	return ret;
+}
+
+/* CCIF callbacks and fault work are already joined by STOP. */
+int ccci_port_dispatch_rearm(struct ccci_port_dispatch *dispatch, bool commit)
+{
+	int ret;
+
+	mutex_lock(&dispatch->lock);
+	if (dispatch->state != DISPATCH_STOPPED || !dispatch->attempted ||
+	    READ_ONCE(dispatch->error)) {
+		ret = -EBUSY;
+		goto out;
+	}
+
+	/* Reinitialize the service router first; reopen the AT file last. */
+	ret = ccci_service_endpoint_rearm(dispatch->endpoint, commit);
+	if (!ret)
+		ret = ccci_ccism_bridge_rearm(dispatch->bridge, commit);
+	if (!ret)
+		ret = ccci_md_net_rearm(dispatch->net, commit);
+	if (!ret)
+		ret = ccci_md_at_rearm(dispatch->at, commit);
+	if (ret || !commit)
+		goto out;
+
+	dispatch->state = DISPATCH_IDLE;
+	dispatch->attempted = false;
+	dispatch->fault_closed = false;
+	dispatch->ex_ack_logged = false;
+	dispatch->at_frames = 0;
+	dispatch->at_bytes = 0;
+	dispatch->at_last_channel = 0;
+	dispatch->at_last_size = 0;
+	dispatch->at_preview_len = 0;
+	dispatch->at_preview_enabled = false;
+	memzero_explicit(dispatch->at_preview, sizeof(dispatch->at_preview));
+	dispatch->observed = 0;
+	dispatch->observed_other = 0;
+	dispatch->last_channel = 0;
+	dispatch->last_size = 0;
+out:
 	mutex_unlock(&dispatch->lock);
 	return ret;
 }

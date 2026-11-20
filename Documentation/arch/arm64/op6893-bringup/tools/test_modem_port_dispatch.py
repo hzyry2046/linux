@@ -113,6 +113,14 @@ static int ccci_ccif_stop(struct ccci_ccif *p){(void)p;note('J');if(!fail_ccif_s
 static int ccci_service_endpoint_stop(struct ccci_service_endpoint *p,bool stopped){(void)p;assert(stopped&&rx_joined);note('e');return fail_ep_stop;}
 static int ccci_ccism_bridge_stop(struct ccci_ccism_bridge *p,bool stopped){(void)p;assert(stopped&&rx_joined);note('b');return fail_bridge_stop;}
 static int ccci_ccism_bridge_offline(struct ccci_ccism_bridge *p){(void)p;note('o');return fail_offline;}
+static int ccci_service_endpoint_rearm(struct ccci_service_endpoint *p,bool c)
+{(void)p;assert(rx_joined);note(c?'F':'f');return 0;}
+static int deny_rearm;
+static int ccci_ccism_bridge_rearm(struct ccci_ccism_bridge *p,bool c)
+{(void)p;assert(rx_joined);note(c?'M':'m');return deny_rearm;}
+int ccci_md_at_rearm(struct ccci_md_at *a,bool c){(void)a;(void)c;return 0;}
+int ccci_md_net_rearm(struct ccci_md_net *n,bool c){(void)n;(void)c;return 0;}
+#define memzero_explicit(p, n) memset((p), 0, (n))
 #include "ccci-port-dispatch.c"
 static struct device dev;static struct ccci_ccif ccif;static struct ccci_ccism_bridge bridge;static struct ccci_service_endpoint endpoint;
 static void clearlog(void){logn=0;logbuf[0]=0;}
@@ -178,7 +186,14 @@ int main(void){
   assert(d->observed&(1ULL<<4));assert(d->last_channel==4&&d->last_size==24);
   assert(!ccci_port_dispatch_status(d,status)||strstr(status,"observed=0x"));}
  unsigned before=logn;assert(ccci_port_dispatch_stop(d,false)==-EBUSY&&logn==before);
- clearlog();assert(!ccci_port_dispatch_stop(d,true));assert(!strcmp(logbuf,"Jebo"));dev.cleanup(dev.context);
+ clearlog();assert(!ccci_port_dispatch_stop(d,true));assert(!strcmp(logbuf,"Jebo"));
+ clearlog();deny_rearm=-EBUSY;assert(ccci_port_dispatch_rearm(d,false)==-EBUSY);
+ assert(!strcmp(logbuf,"fm") && d->state==DISPATCH_STOPPED && d->attempted);
+ deny_rearm=0;assert(!ccci_port_dispatch_rearm(d,false));
+ assert(!ccci_port_dispatch_rearm(d,true));
+ assert(d->state==DISPATCH_IDLE && !d->attempted);
+ assert(ccci_port_dispatch_prepare(d,77)==-ESTALE);
+ dev.cleanup(dev.context);
  assert(at_stopped==1&&net_stopped==1);
  /* FS before runtime/HS1 is terminal, with no synchronous abort I/O. */
  d=running();clearlog();assert(consumer(consumer_ctx,&fe)==-EPROTO);assert(!logn&&d->fault_work.pending);

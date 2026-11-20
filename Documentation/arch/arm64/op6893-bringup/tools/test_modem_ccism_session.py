@@ -153,10 +153,10 @@ static void session_tests(void){
  assert(sess->core.error==-EIO && s_faults==1);s_state(61,CCCI_SCP_STATE_STOP,0);s_run();
  assert(sess->core.state==CCCI_CCISM_STOPPED);assert(!ccci_ccism_session_destroy(sess));
  /* Rearm consumes clean STOP only and cannot reuse the old SCP epoch. */
- s_running();assert(ccci_ccism_session_rearm(sess)==-EBUSY);
+ s_running();assert(ccci_ccism_session_rearm(sess, true)==-EBUSY);
  during_wait=s_stop_reply;assert(!ccci_ccism_session_stop(sess,true));during_wait=NULL;
  assert(!ccci_ccism_session_quiesce(sess));assert(sess->stop_done.done);
- assert(!ccci_ccism_session_rearm(sess) && !sess->stop_done.done);
+ assert(!ccci_ccism_session_rearm(sess, true) && !sess->stop_done.done);
  assert(ccci_ccism_session_arm(sess,61)==-ESTALE);
  assert(!ccci_ccism_session_arm(sess,62));
  assert(!ccci_ccism_session_stop(sess,true));assert(!ccci_ccism_session_destroy(sess));

@@ -40,9 +40,10 @@ struct ccci_md_net {
 	struct net_device *ndev;
 	/* Serializes lifecycle and the transmit worker against stop. */
 	struct mutex lock;
-	/* Protects only the transmit skb queue. */
-	spinlock_t queue_lock;
+	/* tx_queue.lock also protects the xmit admission gate. */
 	struct sk_buff_head tx_queue;
+	bool accepting;
+	bool rearmable;
 	struct work_struct tx_work;
 	int error;
 	bool hs2;
@@ -59,15 +60,23 @@ struct ccci_md_net {
 	u32 rx_dropped;
 };
 
-static int net_fault(struct ccci_md_net *net, int error)
+/* net->lock serializes gate changes and worker wakeups. */
+static void net_update_tx(struct ccci_md_net *net)
 {
-	mutex_lock(&net->lock);
-	if (!net->error)
-		net->error = error;
-	mutex_unlock(&net->lock);
-	if (net->ndev)
+	unsigned long flags;
+
+	lockdep_assert_held(&net->lock);
+	spin_lock_irqsave(&net->tx_queue.lock, flags);
+	net->accepting = net->opened && net->enabled && net->hs2 &&
+			 !net->stopped && !net->error;
+	if (net->accepting) {
+		netif_carrier_on(net->ndev);
+		netif_wake_queue(net->ndev);
+	} else {
+		netif_stop_queue(net->ndev);
 		netif_carrier_off(net->ndev);
-	return error;
+	}
+	spin_unlock_irqrestore(&net->tx_queue.lock, flags);
 }
 
 static void net_tx_work(struct work_struct *work)
@@ -80,7 +89,7 @@ static void net_tx_work(struct work_struct *work)
 
 		mutex_lock(&net->lock);
 		ret = net->error;
-		if (!ret && !net->hs2)
+		if (!ret && (!net->hs2 || !net->opened || !net->enabled))
 			ret = -ENOTCONN;
 		if (!ret) {
 			/* Only a resolved remap replaces the shared queue default. */
@@ -108,11 +117,12 @@ static void net_tx_work(struct work_struct *work)
 		}
 		mutex_unlock(&net->lock);
 		dev_kfree_skb_any(skb);
-		if (ret)
+		if (ret && ret != -ENOTCONN)
 			break;
 	}
-	if (net->ndev && skb_queue_empty(&net->tx_queue) && !READ_ONCE(net->error))
-		netif_wake_queue(net->ndev);
+	mutex_lock(&net->lock);
+	net_update_tx(net);
+	mutex_unlock(&net->lock);
 }
 
 static netdev_tx_t net_start_xmit(struct sk_buff *skb, struct net_device *ndev)
@@ -126,18 +136,19 @@ static netdev_tx_t net_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 		ndev->stats.tx_dropped++;
 		return NETDEV_TX_OK;
 	}
-	spin_lock_irqsave(&net->queue_lock, flags);
-	full = skb_queue_len(&net->tx_queue) >= CCCI_NET_QUEUE_DEPTH;
-	if (!full)
-		__skb_queue_tail(&net->tx_queue, skb);
-	spin_unlock_irqrestore(&net->queue_lock, flags);
-	if (full) {
-		/* No silent drop: the queue is full and the stack must retry. */
-		ndev->stats.tx_dropped++;
-		net->tx_dropped++;
+	spin_lock_irqsave(&net->tx_queue.lock, flags);
+	if (!net->accepting) {
+		spin_unlock_irqrestore(&net->tx_queue.lock, flags);
 		return NETDEV_TX_BUSY;
 	}
-	schedule_work(&net->tx_work);
+	full = skb_queue_len(&net->tx_queue) >= CCCI_NET_QUEUE_DEPTH;
+	if (!full) {
+		__skb_queue_tail(&net->tx_queue, skb);
+		schedule_work(&net->tx_work);
+	}
+	spin_unlock_irqrestore(&net->tx_queue.lock, flags);
+	if (full)
+		return NETDEV_TX_BUSY;
 	ndev->stats.tx_packets++;
 	ndev->stats.tx_bytes += skb->len;
 	return NETDEV_TX_OK;
@@ -148,18 +159,13 @@ static int net_open(struct net_device *ndev)
 	struct ccci_md_net *net = netdev_priv(ndev);
 
 	mutex_lock(&net->lock);
+	if (net->stopped) {
+		mutex_unlock(&net->lock);
+		return -ESHUTDOWN;
+	}
 	net->opened = true;
-	/*
-	 * Carrier and the queue need the operator gate: the MD asserts on data
-	 * that arrives before its data path is ready.
-	 */
-	if (net->hs2 && net->enabled && !net->error)
-		netif_carrier_on(ndev);
+	net_update_tx(net);
 	mutex_unlock(&net->lock);
-	if (net->enabled)
-		netif_start_queue(ndev);
-	else
-		netif_stop_queue(ndev);
 	return 0;
 }
 
@@ -167,11 +173,10 @@ static int net_close(struct net_device *ndev)
 {
 	struct ccci_md_net *net = netdev_priv(ndev);
 
-	netif_stop_queue(ndev);
 	mutex_lock(&net->lock);
 	net->opened = false;
+	net_update_tx(net);
 	mutex_unlock(&net->lock);
-	netif_carrier_off(ndev);
 	return 0;
 }
 
@@ -231,12 +236,8 @@ int ccci_md_net_hs2(struct ccci_md_net *net)
 	mutex_lock(&net->lock);
 	if (!net->error)
 		net->hs2 = true;
-	if (net->hs2 && net->opened && net->enabled && !net->error) {
-		netif_carrier_on(net->ndev);
-		netif_start_queue(net->ndev);
-	}
+	net_update_tx(net);
 	mutex_unlock(&net->lock);
-	schedule_work(&net->tx_work);
 	return net->error;
 }
 
@@ -247,15 +248,12 @@ void ccci_md_net_abort(struct ccci_md_net *net, int error)
 	mutex_lock(&net->lock);
 	if (!net->error)
 		net->error = error < 0 ? error : -EIO;
+	net_update_tx(net);
 	mutex_unlock(&net->lock);
-	if (net->ndev)
-		netif_carrier_off(net->ndev);
-	netif_stop_queue(net->ndev);
 }
 
 int ccci_md_net_stop(struct ccci_md_net *net, bool md_stopped)
 {
-	struct sk_buff *skb;
 
 	if (!net)
 		return 0;
@@ -265,29 +263,49 @@ int ccci_md_net_stop(struct ccci_md_net *net, bool md_stopped)
 	net->stopped = true;
 	if (!net->error)
 		net->error = -ESHUTDOWN;
+	net_update_tx(net);
 	mutex_unlock(&net->lock);
+	/* Synchronize xmit after closing the gate, then join its worker. */
+	netif_tx_disable(net->ndev);
 	cancel_work_sync(&net->tx_work);
-	if (net->ndev) {
-		netif_carrier_off(net->ndev);
-		netif_stop_queue(net->ndev);
-	}
-	while ((skb = skb_dequeue(&net->tx_queue)) != NULL) {
-		net->tx_dropped++;
-		dev_kfree_skb_any(skb);
-	}
+	mutex_lock(&net->lock);
+	net->tx_dropped += skb_queue_len(&net->tx_queue);
+	skb_queue_purge(&net->tx_queue);
+	net->rearmable = true;
+	mutex_unlock(&net->lock);
 	return 0;
 }
 
 int ccci_md_net_offline(struct ccci_md_net *net)
 {
+	return ccci_md_net_stop(net, true);
+}
+
+int ccci_md_net_rearm(struct ccci_md_net *net, bool commit)
+{
+	int ret = 0;
+
 	if (!net)
 		return 0;
 	mutex_lock(&net->lock);
-	net->stopped = true;
-	if (!net->error)
-		net->error = -ESHUTDOWN;
+	if (!net->rearmable || net->opened) {
+		ret = -EBUSY;
+	} else if (commit) {
+		net->enabled = false;
+		net->hs2 = false;
+		net->stopped = false;
+		net->rearmable = false;
+		net->error = 0;
+		net->tx_packets = 0;
+		net->tx_bytes = 0;
+		net->tx_dropped = 0;
+		net->tx_busy = 0;
+		net->rx_packets = 0;
+		net->rx_bytes = 0;
+		net->rx_dropped = 0;
+	}
 	mutex_unlock(&net->lock);
-	return 0;
+	return ret;
 }
 
 /* Operator gate for the data path; refuse after the generation stopped. */
@@ -301,13 +319,7 @@ int ccci_md_net_enable(struct ccci_md_net *net, bool enable)
 		return -ESHUTDOWN;
 	}
 	net->enabled = enable;
-	if (enable && net->hs2 && net->opened) {
-		netif_carrier_on(net->ndev);
-		netif_start_queue(net->ndev);
-	} else {
-		netif_carrier_off(net->ndev);
-		netif_stop_queue(net->ndev);
-	}
+	net_update_tx(net);
 	mutex_unlock(&net->lock);
 	return 0;
 }
@@ -345,7 +357,7 @@ static void net_unregister(void *context)
 {
 	struct ccci_md_net *net = context;
 
-	cancel_work_sync(&net->tx_work);
+	ccci_md_net_stop(net, true);
 	unregister_netdev(net->ndev);
 	free_netdev(net->ndev);
 }
@@ -366,7 +378,6 @@ struct ccci_md_net *ccci_md_net_create(struct device *dev, struct ccci_ccif *cci
 	net->ccif = ccif;
 	net->ndev = ndev;
 	mutex_init(&net->lock);
-	spin_lock_init(&net->queue_lock);
 	skb_queue_head_init(&net->tx_queue);
 	INIT_WORK(&net->tx_work, net_tx_work);
 	SET_NETDEV_DEV(ndev, dev);

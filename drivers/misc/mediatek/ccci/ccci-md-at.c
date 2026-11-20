@@ -35,7 +35,7 @@ struct ccci_md_at {
 	struct ccci_ccif *ccif;
 	struct miscdevice misc;
 	struct kref refs;
-	/* Lifecycle serialization for hs2/stop/offline only. */
+	/* Serializes file ownership, HS2 and stop/rearm. */
 	struct mutex lock;
 	/* Ring and counters: shared with the RX worker. */
 	spinlock_t ring_lock;
@@ -47,6 +47,7 @@ struct ccci_md_at {
 	struct file *open_file;
 	int error;
 	bool removed;
+	bool rearmable;
 	bool hs2;
 	bool stopped;
 	u32 rx_frames;
@@ -156,7 +157,42 @@ int ccci_md_at_stop(struct ccci_md_at *at, bool md_stopped)
 	if (open && !wait_for_completion_timeout(&at->closed,
 						 msecs_to_jiffies(CCCI_AT_STOP_MS)))
 		return -EBUSY;
+	mutex_lock(&at->lock);
+	at->rearmable = true;
+	mutex_unlock(&at->lock);
 	return 0;
+}
+
+/* Dispatcher has joined RX; stop prevents a new file until commit. */
+int ccci_md_at_rearm(struct ccci_md_at *at, bool commit)
+{
+	unsigned long flags;
+	int ret = 0;
+
+	if (!at)
+		return 0;
+	mutex_lock(&at->lock);
+	spin_lock_irqsave(&at->ring_lock, flags);
+	if (at->removed || !at->rearmable || at->open_file) {
+		ret = -EBUSY;
+	} else if (commit) {
+		memzero_explicit(at->ring, CCCI_AT_RING);
+		at->head = 0;
+		at->tail = 0;
+		at->rx_frames = 0;
+		at->rx_bytes = 0;
+		at->rx_dropped = 0;
+		at->tx_frames = 0;
+		at->tx_bytes = 0;
+		at->tx_error = 0;
+		at->hs2 = false;
+		at->rearmable = false;
+		at->stopped = false;
+		at->error = 0;
+	}
+	spin_unlock_irqrestore(&at->ring_lock, flags);
+	mutex_unlock(&at->lock);
+	return ret;
 }
 
 static int at_open(struct inode *inode, struct file *file)
@@ -195,11 +231,12 @@ static int at_release(struct inode *inode, struct file *file)
 		return 0;
 	mutex_lock(&at->lock);
 	spin_lock_irqsave(&at->ring_lock, flags);
-	if (at->open_file == file)
+	if (at->open_file == file) {
 		at->open_file = NULL;
+		complete_all(&at->closed);
+	}
 	spin_unlock_irqrestore(&at->ring_lock, flags);
 	mutex_unlock(&at->lock);
-	complete_all(&at->closed);
 	return 0;
 }
 

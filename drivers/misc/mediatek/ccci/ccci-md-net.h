@@ -25,6 +25,7 @@ int ccci_md_net_hs2(struct ccci_md_net *net);
 void ccci_md_net_abort(struct ccci_md_net *net, int error);
 int ccci_md_net_stop(struct ccci_md_net *net, bool md_stopped);
 int ccci_md_net_offline(struct ccci_md_net *net);
+int ccci_md_net_rearm(struct ccci_md_net *net, bool commit);
 int ccci_md_net_enable(struct ccci_md_net *net, bool enable);
 ssize_t ccci_md_net_status(struct ccci_md_net *net, char *buf, size_t size);
 #else
@@ -39,6 +40,10 @@ static inline int ccci_md_net_receive(struct ccci_md_net *net,
 static inline int ccci_md_net_hs2(struct ccci_md_net *net) { return 0; }
 static inline void ccci_md_net_abort(struct ccci_md_net *net, int error) { }
 static inline int ccci_md_net_stop(struct ccci_md_net *net, bool md_stopped) { return 0; }
+static inline int ccci_md_net_rearm(struct ccci_md_net *net, bool commit)
+{
+	return 0;
+}
 static inline int ccci_md_net_offline(struct ccci_md_net *net) { return 0; }
 static inline int ccci_md_net_enable(struct ccci_md_net *net, bool enable)
 {

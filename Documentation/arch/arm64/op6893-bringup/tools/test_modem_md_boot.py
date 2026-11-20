@@ -193,12 +193,17 @@ static bool of_property_present(struct device_node *n, const char *name)
 	return n && n->no_external_32k;
 }
 
+static int deny_dispatch_rearm;
+int ccci_ccif_rearm(struct ccci_ccif *c, bool commit)
+{ (void)c; note(commit ? 'A' : 'a'); return 0; }
+int ccci_port_dispatch_rearm(struct ccci_port_dispatch *d, bool commit)
+{ (void)d; note(commit ? 'B' : 'b'); return deny_dispatch_rearm; }
 int ccci_ccif_prepare(struct ccci_ccif *c) { (void)c; note('C'); return fail_ccif_prepare; }
 int ccci_ccif_stop(struct ccci_ccif *c) { (void)c; note('K'); return fail_ccif_stop; }
 int ccci_port_dispatch_prepare(struct ccci_port_dispatch *d, u64 g)
 {
 	(void)d;
-	assert(g == 0x1234);
+	assert(g == 0x1234 || g == 0x1235);
 	note('P');
 	return fail_dispatch_prepare;
 }
@@ -246,6 +251,13 @@ int ccci_smem_clear_first(struct device *dev, const struct ccci_smem_layout *sme
 	(void)dev;
 	assert(smem);
 	note('M');
+	return fail_smem_clear;
+}
+
+int ccci_smem_clear_restart(const struct ccci_smem_layout *smem)
+{
+	assert(smem);
+	note('D');
 	return fail_smem_clear;
 }
 
@@ -470,6 +482,20 @@ static void test_boot(void)
 	assert(ccci_md_boot_status(f.boot, buf) > 0 && strstr(buf, "state=stopped"));
 	assert(ccci_md_boot_stop(f.boot, true) == 0);
 	assert(!strcmp(order, "CMRPST"));
+	deny_dispatch_rearm = -EBUSY;
+	assert(ccci_md_boot_rearm(f.boot) == -EBUSY);
+	assert(!strcmp(order, "CMRPSTab"));
+	deny_dispatch_rearm = 0;
+	assert(!ccci_md_boot_rearm(f.boot));
+	assert(ccci_md_boot_release(f.boot) == -EAGAIN);
+	assert(ccci_md_boot_prepare(f.boot, &f.layout, 0x1234,
+				    CCCI_RUNTIME_CRYSTAL_ABSENT) == -ESTALE);
+	assert(ccci_md_boot_prepare(f.boot, &f.layout, 0x1235,
+				    CCCI_RUNTIME_CRYSTAL_ABSENT) == 0);
+	assert(!ccci_md_boot_release(f.boot));
+	assert(smc_calls == 2);
+	assert(!ccci_md_boot_stop(f.boot, true));
+	assert(!strcmp(order, "CMRPSTababABCDRPST"));
 	boot_free(&f);
 
 	/* The mask reaches publication: exactly the selected offers are dropped. */

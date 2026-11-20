@@ -10,6 +10,7 @@
 #include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/io.h>
+#include <linux/sizes.h>
 #include <linux/string.h>
 #include <linux/types.h>
 
@@ -98,4 +99,20 @@ int ccci_smem_clear_first(struct device *dev, const struct ccci_smem_layout *sme
 	cleared = true;
 	dev_info(dev, "SMEM first-start clear: %llu bytes\n", bytes);
 	return 0;
+}
+
+int ccci_smem_clear_restart(const struct ccci_smem_layout *smem)
+{
+	struct ccci_smem_region dhl = smem->users[CCCI_SMEM_CCB];
+
+	if (!clear_enabled || dhl.size <= SZ_2M)
+		return 0;
+
+	/*
+	 * The LK parser validated this aggregate and checked that its extent
+	 * does not overlap any other user. Same-board 6297 splits it into
+	 * the first 2 MiB of CCB DHL and the remainder of RAW DHL.
+	 */
+	dhl.size = SZ_2M + min_t(u32, dhl.size - SZ_2M, SZ_1K);
+	return clear_region(&dhl);
 }

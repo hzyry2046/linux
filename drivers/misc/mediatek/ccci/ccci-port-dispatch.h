@@ -32,6 +32,7 @@ int ccci_port_dispatch_start(struct ccci_port_dispatch *dispatch,
 /* Real MD stop proof required. Joins ordinary RX before stopping services. */
 int ccci_port_dispatch_stop(struct ccci_port_dispatch *dispatch, bool md_stopped);
 int ccci_port_dispatch_offline(struct ccci_port_dispatch *dispatch);
+int ccci_port_dispatch_rearm(struct ccci_port_dispatch *dispatch, bool commit);
 /* Before start only: the AT byte pipe is immutable through a generation. */
 int ccci_port_dispatch_set_at(struct ccci_port_dispatch *dispatch, struct ccci_md_at *at);
 /* Before start only: the CCMNI netdev owner is immutable per generation. */

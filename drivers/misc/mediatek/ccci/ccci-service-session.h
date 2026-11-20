@@ -58,9 +58,10 @@ void ccci_service_session_status(struct ccci_service_session *session,
 /* Refuses an armed generation, including faults, until true stopped close. */
 int ccci_service_session_offline(struct ccci_service_session *session);
 /* md_stopped=false has no side effects; true closes admission and wipes data. */
+void ccci_service_session_park(struct ccci_service_session *session);
 int ccci_service_session_stop(struct ccci_service_session *session, bool md_stopped);
 /* Reinitialize a joined session without reopening admission or reusing its generation. */
-int ccci_service_session_rearm(struct ccci_service_session *session);
+int ccci_service_session_rearm(struct ccci_service_session *session, bool commit);
 /* Stop first; caller must also join MD RX producers before freeing the object. */
 int ccci_service_session_destroy(struct ccci_service_session *session);
 

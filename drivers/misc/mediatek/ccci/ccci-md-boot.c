@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Unique MD boot owner: gated preparation and one explicit CPU release. */
+/* Unique MD boot owner: gated preparation and explicit CPU release. */
 #include <linux/arm-smccc.h>
 #include <linux/device.h>
 #include <linux/errno.h>
@@ -100,10 +100,49 @@ u64 ccci_md_boot_feature_mask(struct ccci_md_boot *boot)
 	return mask;
 }
 
+int ccci_md_boot_rearm(struct ccci_md_boot *boot)
+{
+	int ret;
+
+	if (!boot)
+		return -EOPNOTSUPP;
+	mutex_lock(&boot->lock);
+	if (boot->state != BOOT_STOPPED || !boot->released || boot->error) {
+		ret = -EBUSY;
+		goto out;
+	}
+	/* All sources of new work are stopped while the parent lock is held. */
+	ret = ccci_ccif_rearm(boot->ccif, false);
+	if (!ret)
+		ret = ccci_port_dispatch_rearm(boot->dispatch, false);
+	if (ret)
+		goto out;
+	ret = ccci_ccif_rearm(boot->ccif, true);
+	if (!ret)
+		ret = ccci_port_dispatch_rearm(boot->dispatch, true);
+	if (ret) {
+		boot_fault(boot, ret);
+		goto out;
+	}
+	boot->state = BOOT_IDLE;
+	boot->attempted = false;
+	boot->released = false;
+	boot->cache_prepared = false;
+	boot->dispatch_prepared = false;
+	boot->boot_ret = 0;
+	boot->boot_status0 = 0;
+	boot->boot_status1 = 0;
+	boot->pcm_sampled = false;
+out:
+	mutex_unlock(&boot->lock);
+	return ret;
+}
+
 int ccci_md_boot_prepare(struct ccci_md_boot *boot, const struct ccci_smem_layout *smem,
 			 u64 generation, enum ccci_runtime_crystal crystal)
 {
 	struct ccci_runtime_boot info = { .crystal = crystal };
+	bool restart;
 	int ret;
 
 	if (!boot || !smem || !generation)
@@ -117,6 +156,11 @@ int ccci_md_boot_prepare(struct ccci_md_boot *boot, const struct ccci_smem_layou
 		ret = -EALREADY;
 		goto out;
 	}
+	restart = !!boot->generation;
+	if (generation <= boot->generation) {
+		ret = -ESTALE;
+		goto out;
+	}
 	boot->attempted = true;
 	boot->generation = generation;
 	boot->crystal = crystal;
@@ -124,11 +168,13 @@ int ccci_md_boot_prepare(struct ccci_md_boot *boot, const struct ccci_smem_layou
 	info.booting_start_id = 0;
 	ret = ccci_ccif_prepare(boot->ccif);
 	if (!ret)
-		ret = ccci_nvram_cache_prepare(boot->cache);
+		ret = restart ? ccci_nvram_cache_resume(boot->cache) :
+			ccci_nvram_cache_prepare(boot->cache);
 	if (!ret)
 		boot->cache_prepared = true;
 	if (!ret)
-		ret = ccci_smem_clear_first(boot->dev, smem);
+		ret = restart ? ccci_smem_clear_restart(smem) :
+			ccci_smem_clear_first(boot->dev, smem);
 	if (!ret)
 		ret = ccci_runtime_bootstrap(smem, &info, boot->offers);
 	if (!ret)
