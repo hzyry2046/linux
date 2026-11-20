@@ -1043,23 +1043,32 @@ static void dpmaif_dl_ring_free(struct ccci_dpmaif *dpmaif,
 }
 
 /* Drop every hardware pointer before the rings are freed. */
-static void dpmaif_dl_unprogram(struct ccci_dpmaif *dpmaif)
+static int dpmaif_dl_unprogram(struct ccci_dpmaif *dpmaif)
 {
 	struct ccci_dpmaif_dl *dl = &dpmaif->dl;
 	void __iomem *pd = dpmaif_pd_dl(dpmaif);
 	u32 value;
+	int ret;
 
 	value = readl(pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON3);
 	value &= ~CCCI_DPMAIF_PIT_EN_MSK;
 	writel(value, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON3);
-	dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_PIT_INIT, CCCI_DPMAIF_DL_PIT_INIT_EN);
-	value = readl(pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
-	value &= ~CCCI_DPMAIF_BAT_EN_MSK;
-	writel(value, pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
-	/* Both latches hold the same enable bit, so both must be told it is off. */
-	dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_INIT,
-			 CCCI_DPMAIF_DL_BAT_INIT_EN | CCCI_DPMAIF_DL_BAT_FRG_INIT);
-	dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_INIT, CCCI_DPMAIF_DL_BAT_INIT_EN);
+	ret = dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_PIT_INIT, CCCI_DPMAIF_DL_PIT_INIT_EN);
+	if (ret)
+		return ret;
+	ret = readl_poll_timeout(dpmaif_ao_dl(dpmaif) + CCCI_DPMAIF_AO_DL_PIT_STA3,
+				 value, !(value & CCCI_DPMAIF_PIT_EN_MSK), 1, 10000);
+	if (ret)
+		return dpmaif_dl_timeout(dpmaif, CCCI_DPMAIF_AO_DL_PIT_STA3);
+	ret = readl_poll_timeout(pd + CCCI_DPMAIF_PD_DL_DBG_STA1,
+				 value, value & CCCI_DPMAIF_DL_IDLE, 1, 10000);
+	if (ret)
+		return dpmaif_dl_timeout(dpmaif, CCCI_DPMAIF_PD_DL_DBG_STA1);
+	ret = dpmaif_dl_queue_enable(dpmaif, false, true);
+	if (!ret)
+		ret = dpmaif_dl_queue_enable(dpmaif, false, false);
+	if (ret)
+		return ret;
 
 	writel(0, pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON0);
 	value = readl(pd + CCCI_DPMAIF_PD_DL_PIT_INIT_CON1);
@@ -1073,6 +1082,7 @@ static void dpmaif_dl_unprogram(struct ccci_dpmaif *dpmaif)
 	writel(value, pd + CCCI_DPMAIF_PD_DL_BAT_INIT_CON1);
 	writel(0xffffffff, dpmaif_ap_misc(dpmaif) + CCCI_DPMAIF_PD_AP_IP_BUSY);
 	dl->pit_rd = 0;
+	return 0;
 }
 
 static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_entries)
@@ -1080,9 +1090,10 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_
 	struct ccci_dpmaif_dl *dl = &dpmaif->dl;
 	void __iomem *ao_dl = dpmaif_ao_dl(dpmaif);
 	u32 i;
-	int ret;
+	int ret, stop_ret;
 
-	if (dl->started)
+	/* An unconfirmed stop still owns these DMA mappings and clocks. */
+	if (dl->pit)
 		return -EBUSY;
 	/* Keep one BAT slot empty and the initial PIT AP index within the ring. */
 	if (bat_entries <= CCCI_DPMAIF_DL_HW_CHK_BAT_NUM + 1 ||
@@ -1162,7 +1173,13 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_
 	return 0;
 
 out_unprogram:
-	dpmaif_dl_unprogram(dpmaif);
+	dpmaif_dl_irq_mask(dpmaif);
+	stop_ret = dpmaif_dl_unprogram(dpmaif);
+	if (stop_ret) {
+		dev_err(dpmaif->dev, "DL start error %d; stop error %d, retaining DMA buffers\n",
+			ret, stop_ret);
+		return stop_ret;
+	}
 	dma_free_coherent(dpmaif->dev, (size_t)pit_entries * CCCI_DPMAIF_DL_PIT_BYTE_SIZE,
 			  dl->pit, dl->pit_dma);
 	dl->pit = NULL;
@@ -1177,21 +1194,27 @@ out_main:
 	return ret;
 }
 
-static void dpmaif_dl_stop(struct ccci_dpmaif *dpmaif)
+static int dpmaif_dl_stop(struct ccci_dpmaif *dpmaif)
 {
 	struct ccci_dpmaif_dl *dl = &dpmaif->dl;
 	u32 pit_entries = dl->pit_entries;
+	bool started = dl->started;
+	int ret;
 
-	if (!dl->started)
-		return;
+	if (!dl->pit)
+		return 0;
 	/* Mask first, then take the lock: a drain must not outlive the rings. */
 	dpmaif_dl_irq_mask(dpmaif);
 	spin_lock_irq(&dl->lock);
 	dl->started = false;
 	dl->rx_head = false;
 	spin_unlock_irq(&dl->lock);
-	dpmaif_irq_put(dpmaif);
-	dpmaif_dl_unprogram(dpmaif);
+	if (started)
+		dpmaif_irq_put(dpmaif);
+	dl->fail_reg = 0;
+	ret = dpmaif_dl_unprogram(dpmaif);
+	if (ret)
+		return ret;
 	dma_free_coherent(dpmaif->dev, (size_t)pit_entries * CCCI_DPMAIF_DL_PIT_BYTE_SIZE,
 			  dl->pit, dl->pit_dma);
 	dl->pit = NULL;
@@ -1199,6 +1222,7 @@ static void dpmaif_dl_stop(struct ccci_dpmaif *dpmaif)
 	dpmaif_dl_ring_free(dpmaif, &dl->bat);
 	clk_disable_unprepare(dpmaif->clk_bus);
 	clk_disable_unprepare(dpmaif->clk_main);
+	return 0;
 }
 
 static struct ccci_dpmaif *dpmaif_net_priv(struct net_device *net)
@@ -1820,7 +1844,7 @@ static ssize_t poke_store(struct device *dev, struct device_attribute *attr,
 		mutex_unlock(&dpmaif->lock);
 		return -EBUSY;
 	}
-	if (dpmaif->ul.started || dpmaif->dl.started) {
+	if (dpmaif->ul.started || dpmaif->dl.pit) {
 		ret = -EBUSY;
 		goto out;
 	}
@@ -1855,7 +1879,7 @@ static ssize_t reset_store(struct device *dev, struct device_attribute *attr,
 	int ret;
 
 	mutex_lock(&dpmaif->lock);
-	if (dpmaif->ul.started || dpmaif->dl.started) {
+	if (dpmaif->ul.started || dpmaif->dl.pit) {
 		ret = -EBUSY;
 		goto out;
 	}
@@ -1887,15 +1911,16 @@ static ssize_t dl_stop_store(struct device *dev, struct device_attribute *attr,
 			     const char *buf, size_t count)
 {
 	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+	int ret;
 
 	mutex_lock(&dpmaif->lock);
 	if (dpmaif->net_tx) {
 		mutex_unlock(&dpmaif->lock);
 		return -EBUSY;
 	}
-	dpmaif_dl_stop(dpmaif);
+	ret = dpmaif_dl_stop(dpmaif);
 	mutex_unlock(&dpmaif->lock);
-	return count;
+	return ret ?: count;
 }
 static DEVICE_ATTR_WO(dl_stop);
 
@@ -2011,7 +2036,8 @@ static void dpmaif_remove(struct platform_device *pdev)
 
 	unregister_netdev(dpmaif->net);
 	mutex_lock(&dpmaif->lock);
-	dpmaif_dl_stop(dpmaif);
+	if (dpmaif_dl_stop(dpmaif))
+		dev_err(dpmaif->dev, "DL stop unconfirmed; retaining DMA buffers\n");
 	dpmaif_ul_stop(dpmaif);
 	mutex_unlock(&dpmaif->lock);
 	free_netdev(dpmaif->net);
@@ -2028,6 +2054,7 @@ static struct platform_driver dpmaif_driver = {
 	.remove = dpmaif_remove,
 	.driver = {
 		.name = "op6893-dpmaif",
+		.suppress_bind_attrs = true,
 		.of_match_table = dpmaif_of_ids,
 		.dev_groups = dpmaif_groups,
 	},

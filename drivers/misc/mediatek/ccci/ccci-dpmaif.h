@@ -109,6 +109,8 @@
  * power-down check reads "powered".
  */
 #define CCCI_DPMAIF_PD_DL_RESERVE_RW	0xa8
+#define CCCI_DPMAIF_PD_DL_DBG_STA1	0xb4
+#define CCCI_DPMAIF_DL_IDLE		BIT(25)
 #define CCCI_DPMAIF_DL_POWER_ON		0xff
 #define CCCI_DPMAIF_PD_WDMA_WR_CMD_CON0	0x000
 #define CCCI_DPMAIF_PD_WDMA_CHNL_CMD_CON3	0x014
