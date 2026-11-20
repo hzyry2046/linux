@@ -22,6 +22,7 @@
 #include "ccci-md-platform.h"
 #include "ccci-ccif.h"
 #include "ccci-ccism-bridge.h"
+#include "ccci-dpmaif.h"
 #include "ccci-md-at.h"
 #include "ccci-md-net.h"
 #include "ccci-md-boot.h"
@@ -54,6 +55,7 @@ struct ccci_md_platform {
 	struct device *lookup;
 	struct device *domain;
 	struct ccci_ccif *ccif;
+	struct ccci_dpmaif *dpmaif;
 	struct ccci_ccism_bridge *bridge;
 	struct ccci_service_endpoint *services;
 	struct ccci_port_dispatch *dispatch;
@@ -286,6 +288,10 @@ static int md_platform_off(struct ccci_md_platform *md)
 	u32 r13 = 0;
 	int ret;
 
+	ret = ccci_dpmaif_quiesce(md->dpmaif);
+	if (ret)
+		return ret;
+
 	if (ccci_md_boot_active(md->boot)) {
 		if (!regmap_read(md->spm, SPM_PCM_REG13, &r13))
 			ccci_md_boot_note_pcm(md->boot, r13);
@@ -323,8 +329,15 @@ static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 	mutex_lock(&md->lock);
 	if (sysfs_streq(buf, "on")) {
 		ret = ccci_md_power_on(&md->power);
+		if (!ret)
+			ccci_dpmaif_allow_start(md->dpmaif);
 	} else if (sysfs_streq(buf, "takeover")) {
-		ret = ccci_md_power_takeover(&md->power);
+		if (md->power.state == CCCI_MD_INHERITED)
+			ret = ccci_dpmaif_quiesce(md->dpmaif);
+		else
+			ret = 0;
+		if (!ret)
+			ret = ccci_md_power_takeover(&md->power);
 	} else if (sysfs_streq(buf, "off")) {
 		ret = md_platform_off(md);
 	} else {
@@ -1014,6 +1027,12 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 		ret = md_rails_check(md);
 	if (ret)
 		return dev_err_probe(dev, ret, "cold rail baseline unavailable/unstable\n");
+	md->dpmaif = ccci_dpmaif_find(dev);
+	if (IS_ERR(md->dpmaif))
+		return dev_err_probe(dev, PTR_ERR(md->dpmaif), "DPMAIF unavailable\n");
+	ret = ccci_dpmaif_quiesce(md->dpmaif);
+	if (ret)
+		return dev_err_probe(dev, ret, "DPMAIF not quiescent\n");
 	if (md->smem.users[CCCI_SMEM_MDSS_DBG].present) {
 		const struct ccci_smem_region *ee = &md->smem.users[CCCI_SMEM_MDSS_DBG];
 		u32 bytes = ee->size;

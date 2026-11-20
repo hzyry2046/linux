@@ -28,6 +28,7 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_irq.h>
+#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/spinlock.h>
@@ -131,6 +132,7 @@ struct ccci_dpmaif {
 	spinlock_t tx_lock;
 	bool net_tx;
 	bool net_rx;
+	bool power_blocked;
 	u8 net_channel;
 	struct ccci_dpmaif_ul ul;
 	struct ccci_dpmaif_dl dl;
@@ -219,12 +221,12 @@ static void dpmaif_ul_program(struct ccci_dpmaif *dpmaif)
 	writel(value, ao + CCCI_DPMAIF_AO_UL_CHNL_ARB0);
 }
 
-static void dpmaif_ul_unprogram(struct ccci_dpmaif *dpmaif)
+static int dpmaif_ul_unprogram(struct ccci_dpmaif *dpmaif)
 {
 	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
 	void __iomem *ao = dpmaif_ao_ul(dpmaif);
-	u32 count = 0;
 	u32 value;
+	int ret;
 
 	value = readl(ao + CCCI_DPMAIF_AO_UL_CHNL_ARB0);
 	value &= ~BIT(ul->queue);
@@ -237,12 +239,12 @@ static void dpmaif_ul_unprogram(struct ccci_dpmaif *dpmaif)
 	 * down while the modem still holds descriptors faults the modem itself,
 	 * which is why the same-board driver polls its queues before stopping.
 	 */
-	while (((readl(dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_PD_UL_DBG_STA2) >>
-		 CCCI_DPMAIF_UL_STS_CUR_SHIFT) & CCCI_DPMAIF_UL_IDLE_STS_MSK) !=
-	       CCCI_DPMAIF_UL_IDLE_STS) {
-		if (++count >= CCCI_DPMAIF_UL_POLL_LIMIT)
-			break;
-	}
+	ret = readl_poll_timeout(dpmaif_pd_ul(dpmaif) + CCCI_DPMAIF_PD_UL_DBG_STA2,
+				 value, ((value >> CCCI_DPMAIF_UL_STS_CUR_SHIFT) &
+				 CCCI_DPMAIF_UL_IDLE_STS_MSK) == CCCI_DPMAIF_UL_IDLE_STS,
+				 1, 10000);
+	if (ret)
+		return ret;
 	/*
 	 * Drop the ring base and size before the memory is freed: the hardware
 	 * would otherwise keep DMAing from a buffer that no longer belongs to us.
@@ -254,6 +256,7 @@ static void dpmaif_ul_unprogram(struct ccci_dpmaif *dpmaif)
 	writel(value, ao + CCCI_DPMAIF_UL_DRBSIZE(ul->queue));
 	/* Leave no latched uplink event behind for the next owner. */
 	writel(0xffffffff, dpmaif_ap_misc(dpmaif) + CCCI_DPMAIF_PD_AP_UL_L2TISAR0);
+	return 0;
 }
 
 /*
@@ -414,12 +417,30 @@ static void dpmaif_irq_put(struct ccci_dpmaif *dpmaif)
 	free_irq(dpmaif->irq, dpmaif);
 }
 
+static void dpmaif_ul_free(struct ccci_dpmaif *dpmaif)
+{
+	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
+
+	dma_free_coherent(dpmaif->dev, ul->entries / 2 * CCCI_DPMAIF_UL_PAYLOAD_MAX,
+			  ul->data, ul->data_dma);
+	ul->data = NULL;
+	kfree(ul->payload);
+	ul->payload = NULL;
+	dma_free_coherent(dpmaif->dev, ul->entries * sizeof(struct ccci_dpmaif_drb_pd),
+			  ul->drb, ul->drb_dma);
+	ul->drb = NULL;
+	clk_disable_unprepare(dpmaif->clk_bus);
+	clk_disable_unprepare(dpmaif->clk_main);
+}
+
 static int dpmaif_ul_start(struct ccci_dpmaif *dpmaif, u32 queue)
 {
 	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
-	int ret;
+	int ret, stop_ret;
 
-	if (ul->started)
+	if (dpmaif->power_blocked)
+		return -ESHUTDOWN;
+	if (ul->drb)
 		return -EBUSY;
 	if (queue > 3)
 		return -EINVAL;
@@ -461,9 +482,14 @@ static int dpmaif_ul_start(struct ccci_dpmaif *dpmaif, u32 queue)
 	return 0;
 
 out_unprogram:
-	dpmaif_ul_unprogram(dpmaif);
-	dma_free_coherent(dpmaif->dev, ul->entries / 2 * CCCI_DPMAIF_UL_PAYLOAD_MAX,
-			  ul->data, ul->data_dma);
+	stop_ret = dpmaif_ul_unprogram(dpmaif);
+	if (stop_ret) {
+		dev_err(dpmaif->dev, "UL start error %d; stop error %d, retaining DMA buffers\n",
+			ret, stop_ret);
+		return stop_ret;
+	}
+	dpmaif_ul_free(dpmaif);
+	return ret;
 out_payload:
 	kfree(ul->payload);
 	ul->payload = NULL;
@@ -478,26 +504,23 @@ out_main:
 	return ret;
 }
 
-static void dpmaif_ul_stop(struct ccci_dpmaif *dpmaif)
+static int dpmaif_ul_stop(struct ccci_dpmaif *dpmaif)
 {
 	struct ccci_dpmaif_ul *ul = &dpmaif->ul;
+	bool started = ul->started;
+	int ret;
 
-	if (!ul->started)
-		return;
+	if (!ul->drb)
+		return 0;
 	spin_lock_irq(&dpmaif->tx_lock);
 	ul->started = false;
 	spin_unlock_irq(&dpmaif->tx_lock);
-	dpmaif_ul_unprogram(dpmaif);
-	dpmaif_irq_put(dpmaif);
-	dma_free_coherent(dpmaif->dev, ul->entries / 2 * CCCI_DPMAIF_UL_PAYLOAD_MAX,
-			  ul->data, ul->data_dma);
-	kfree(ul->payload);
-	ul->payload = NULL;
-	dma_free_coherent(dpmaif->dev, ul->entries * sizeof(struct ccci_dpmaif_drb_pd),
-			  ul->drb, ul->drb_dma);
-	ul->drb = NULL;
-	clk_disable_unprepare(dpmaif->clk_bus);
-	clk_disable_unprepare(dpmaif->clk_main);
+	ret = dpmaif_ul_unprogram(dpmaif);
+	if (started)
+		dpmaif_irq_put(dpmaif);
+	if (!ret)
+		dpmaif_ul_free(dpmaif);
+	return ret;
 }
 
 /*
@@ -1092,6 +1115,8 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_
 	u32 i;
 	int ret, stop_ret;
 
+	if (dpmaif->power_blocked)
+		return -ESHUTDOWN;
 	/* An unconfirmed stop still owns these DMA mappings and clocks. */
 	if (dl->pit)
 		return -EBUSY;
@@ -1223,6 +1248,72 @@ static int dpmaif_dl_stop(struct ccci_dpmaif *dpmaif)
 	clk_disable_unprepare(dpmaif->clk_bus);
 	clk_disable_unprepare(dpmaif->clk_main);
 	return 0;
+}
+
+static void dpmaif_put_device(void *data)
+{
+	put_device(data);
+}
+
+struct ccci_dpmaif *ccci_dpmaif_find(struct device *consumer)
+{
+	struct platform_device *pdev;
+	struct device_node *node;
+	struct ccci_dpmaif *dpmaif;
+	int ret;
+
+	if (!of_property_present(consumer->of_node, "mediatek,dpmaif"))
+		return NULL;
+	node = of_parse_phandle(consumer->of_node, "mediatek,dpmaif", 0);
+	if (!node)
+		return ERR_PTR(-EINVAL);
+	if (!of_device_is_compatible(node, "mediatek,mt6893-dpmaif")) {
+		of_node_put(node);
+		return ERR_PTR(-EINVAL);
+	}
+	if (!of_device_is_available(node)) {
+		of_node_put(node);
+		return NULL;
+	}
+	pdev = of_find_device_by_node(node);
+	of_node_put(node);
+	if (!pdev)
+		return ERR_PTR(-EPROBE_DEFER);
+	ret = devm_add_action_or_reset(consumer, dpmaif_put_device, &pdev->dev);
+	if (ret)
+		return ERR_PTR(ret);
+	if (!device_link_add(consumer, &pdev->dev, DL_FLAG_AUTOREMOVE_CONSUMER))
+		return ERR_PTR(-ENOMEM);
+	dpmaif = platform_get_drvdata(pdev);
+	return dpmaif ?: ERR_PTR(-EPROBE_DEFER);
+}
+
+void ccci_dpmaif_allow_start(struct ccci_dpmaif *dpmaif)
+{
+	if (!dpmaif)
+		return;
+	mutex_lock(&dpmaif->lock);
+	dpmaif->power_blocked = false;
+	mutex_unlock(&dpmaif->lock);
+}
+
+int ccci_dpmaif_quiesce(struct ccci_dpmaif *dpmaif)
+{
+	int ul_ret, dl_ret;
+
+	if (!dpmaif)
+		return 0;
+	mutex_lock(&dpmaif->lock);
+	if (dpmaif->net_tx || dpmaif->net_rx) {
+		mutex_unlock(&dpmaif->lock);
+		return -EBUSY;
+	}
+	/* A start must not race the gap between DMA teardown and MD power-off. */
+	dpmaif->power_blocked = true;
+	ul_ret = dpmaif_ul_stop(dpmaif);
+	dl_ret = dpmaif_dl_stop(dpmaif);
+	mutex_unlock(&dpmaif->lock);
+	return ul_ret ?: dl_ret;
 }
 
 static struct ccci_dpmaif *dpmaif_net_priv(struct net_device *net)
@@ -1438,7 +1529,7 @@ static ssize_t ul_start_store(struct device *dev, struct device_attribute *attr,
 	if (payload < 14 || payload > CCCI_DPMAIF_UL_PAYLOAD_MAX || net_type > 7)
 		return -EINVAL;
 	mutex_lock(&dpmaif->lock);
-	if (ul->started) {
+	if (ul->drb) {
 		mutex_unlock(&dpmaif->lock);
 		return -EBUSY;
 	}
@@ -1455,15 +1546,16 @@ static ssize_t ul_stop_store(struct device *dev, struct device_attribute *attr,
 			     const char *buf, size_t count)
 {
 	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+	int ret;
 
 	mutex_lock(&dpmaif->lock);
 	if (dpmaif->net_tx) {
 		mutex_unlock(&dpmaif->lock);
 		return -EBUSY;
 	}
-	dpmaif_ul_stop(dpmaif);
+	ret = dpmaif_ul_stop(dpmaif);
 	mutex_unlock(&dpmaif->lock);
-	return count;
+	return ret ?: count;
 }
 static DEVICE_ATTR_WO(ul_stop);
 
@@ -1840,11 +1932,15 @@ static ssize_t poke_store(struct device *dev, struct device_attribute *attr,
 	if (ret)
 		return ret;
 	mutex_lock(&dpmaif->lock);
+	if (dpmaif->power_blocked) {
+		ret = -ESHUTDOWN;
+		goto out;
+	}
 	if (dpmaif->net_tx) {
 		mutex_unlock(&dpmaif->lock);
 		return -EBUSY;
 	}
-	if (dpmaif->ul.started || dpmaif->dl.pit) {
+	if (dpmaif->ul.drb || dpmaif->dl.pit) {
 		ret = -EBUSY;
 		goto out;
 	}
@@ -1879,7 +1975,11 @@ static ssize_t reset_store(struct device *dev, struct device_attribute *attr,
 	int ret;
 
 	mutex_lock(&dpmaif->lock);
-	if (dpmaif->ul.started || dpmaif->dl.pit) {
+	if (dpmaif->power_blocked) {
+		ret = -ESHUTDOWN;
+		goto out;
+	}
+	if (dpmaif->ul.drb || dpmaif->dl.pit) {
 		ret = -EBUSY;
 		goto out;
 	}
@@ -2021,10 +2121,10 @@ static int dpmaif_probe(struct platform_device *pdev)
 	dpmaif->clk_bus = devm_clk_get(dev, "dpmaif");
 	if (IS_ERR(dpmaif->clk_bus))
 		return dev_err_probe(dev, PTR_ERR(dpmaif->clk_bus), "no dpmaif clock\n");
-	platform_set_drvdata(pdev, dpmaif);
 	ret = dpmaif_net_register(dpmaif);
 	if (ret)
 		return dev_err_probe(dev, ret, "cannot register raw IP netdev\n");
+	platform_set_drvdata(pdev, dpmaif);
 	dev_info(dev, "dpmaif observed: irq=%d, %d blocks mapped, no register written\n",
 		 dpmaif->irq, CCCI_DPMAIF_BLOCKS);
 	return 0;
@@ -2038,7 +2138,8 @@ static void dpmaif_remove(struct platform_device *pdev)
 	mutex_lock(&dpmaif->lock);
 	if (dpmaif_dl_stop(dpmaif))
 		dev_err(dpmaif->dev, "DL stop unconfirmed; retaining DMA buffers\n");
-	dpmaif_ul_stop(dpmaif);
+	if (dpmaif_ul_stop(dpmaif))
+		dev_err(dpmaif->dev, "UL stop unconfirmed; retaining DMA buffers\n");
 	mutex_unlock(&dpmaif->lock);
 	free_netdev(dpmaif->net);
 }

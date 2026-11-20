@@ -345,12 +345,22 @@ struct ccci_dpmaif_dl_state {
 	u8 snap[CCCI_DPMAIF_DL_SNAP_LEN];
 };
 
+struct device;
+struct ccci_dpmaif;
+
 #if IS_ENABLED(CONFIG_OP6893_CCCI_DPMAIF)
+struct ccci_dpmaif *ccci_dpmaif_find(struct device *consumer);
+void ccci_dpmaif_allow_start(struct ccci_dpmaif *dpmaif);
+int ccci_dpmaif_quiesce(struct ccci_dpmaif *dpmaif);
 /* Pure formatter, no I/O: one line per sampled register plus the masks. */
 ssize_t ccci_dpmaif_format(const struct ccci_dpmaif_sample *sample, char *buf, size_t size);
 /* Same idea for the downlink counters and the retained packet head. */
 ssize_t ccci_dpmaif_format_dl(const struct ccci_dpmaif_dl_state *dl, char *buf, size_t size);
 #else
+static inline struct ccci_dpmaif *ccci_dpmaif_find(struct device *consumer) { return NULL; }
+static inline void ccci_dpmaif_allow_start(struct ccci_dpmaif *dpmaif) { }
+static inline int ccci_dpmaif_quiesce(struct ccci_dpmaif *dpmaif) { return 0; }
+
 static inline ssize_t
 ccci_dpmaif_format(const struct ccci_dpmaif_sample *sample, char *buf, size_t size)
 {
