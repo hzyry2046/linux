@@ -255,3 +255,18 @@ dispatch 和 CCIF 均记录 `-ETIMEDOUT`。为做对照，同镜像重启 AP，
 发信或拨出。日志见 `backup/boot-write-md-rearm-716809b113d6/` 下的
 `fourth-md-data.log` 至 `seventh-md-data.log`、`ap-control.log`、
 `ap-second-data.log` 和 `ap-second-final.log`。
+
+随后同镜像做了一组带服务操作号的对照。AP 首轮 MD 6801 先确认
+packet attach，再激活 CID 1（CCMNI channel 0、UL queue 0）。
+LTE AcT 7，IPv4 和 IPv6 DNS 均收到匹配回复，DPMAIF 上行完成
+3 包、下行收到 4 包。退出时 CID、网口和策略路由均已清理，USB
+管理路由正常，父平台完成停环和关电。
+
+同一 AP 上的 MD 6802（SCP 第 2 代）第三次复现 HS1 后超时
+（3525 次服务发送）。用户态共收到 1568 个请求，最后一个是
+`CMPT_Read`（`0x1022`）；两轮在第 1568 个请求上的操作号相同，
+回复均被内核端点接受。MD 6801 随即发出第 1569 个请求，
+MD 6802 则不再发请求，直到会话被超时撤销。端点接受回复不代表
+MD 已消费 CCIF 环中的回复。下一轮对照该事务的阶段掩码、状态、
+长度和 CCIF 读指针，并区分 NVRAM 工作副本变化与传输停滞。日志见
+`traced-first.log`、`traced-second.log` 和对应的 `*-ops.log`。

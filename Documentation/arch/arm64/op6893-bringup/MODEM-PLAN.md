@@ -37,9 +37,11 @@ PDP 重连。最新镜像已验证一次 `md_power off` 完成 MD/CCISM 停机�
 - 真机验收：同一 AP boot ID 下记录两次 HS2/CCISM RUNNING 和最后一次
   停机。第二轮使用新的 SCP generation、新服务 FD 和新的 MD generation。
   `b34941e0b420` 已在同一 AP boot ID 下完成两轮 HS2、CCISM RUNNING
-  和停机。第二轮 HS2 后 FS TX queue 4 触发 `-EBADMSG`，需定位
-  ring guard、长度或指针异常后，再验证连续会话及第二代数据面。
-  见 [SCP 与 MD 恢复](MODEM-SCP-RESET-RESTORE.md#同一-ap-启动内两次-md-握手)。
+  和停机。后续镜像多轮未复现 FS TX queue 4 的 `-EBADMSG`，
+  保留 ring 控制字诊断。相同镜像上，AP 首轮已通过 LTE 双栈；
+  基带重启有时在收到第 1568 个服务请求（`CMPT_Read`）后等不到
+  HS2，需对比回复状态、队列消费和重启后的数据面。
+  见 [SCP 与 MD 恢复](MODEM-SCP-RESET-RESTORE.md#重建后的-atpdp-和-hs2-对照)。
 
 历史记录：更新：2026-11-17。**已真机实测**：SCP 常驻/READY1/awake；MD 继承 ON 接管与
 冷上电；普通 CCIF prepare/stop/off；唯一一次 `(6,0)` MD CPU 放行；HS1 被接受、
