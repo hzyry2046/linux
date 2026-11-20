@@ -136,6 +136,14 @@ int ccci_ccif_ring_verify_empty(struct ccci_ccif_ring *r)
 	return 0;
 }
 
+static int ring_bad_control(struct ccci_ccif_ring *r, bool tx, u32 offset, u32 value,
+			    u32 expected)
+{
+	if (r->ops->bad_control)
+		r->ops->bad_control(r->context, tx, r->slot.offset + offset, value, expected);
+	return -EBADMSG;
+}
+
 static int ring_control(struct ccci_ccif_ring *r, bool tx, u32 *read, u32 *write)
 {
 	u32 value, control = tx ? 20 : 8, length = tx ? r->slot.tx : r->slot.rx;
@@ -145,12 +153,13 @@ static int ring_control(struct ccci_ccif_ring *r, bool tx, u32 *read, u32 *write
 		return -EOPNOTSUPP;
 	for (u32 i = 0; i < 4; i++) {
 		u32 offset = i < 2 ? i * 4 : r->slot.span - 8 + (i - 2) * 4;
+		u32 expected = i < 2 ? CCCI_CCIF_RING_HEADER : CCCI_CCIF_RING_FOOTER;
 
 		ret = ring_get(r, offset, &value);
 		if (ret)
 			return ret;
-		if (value != (i < 2 ? CCCI_CCIF_RING_HEADER : CCCI_CCIF_RING_FOOTER))
-			return -EBADMSG;
+		if (value != expected)
+			return ring_bad_control(r, tx, offset, value, expected);
 	}
 	ret = ring_get(r, control, read);
 	if (!ret)
@@ -159,8 +168,12 @@ static int ring_control(struct ccci_ccif_ring *r, bool tx, u32 *read, u32 *write
 		ret = ring_get(r, control + 8, &value);
 	if (ret)
 		return ret;
-	if (value != length || *read >= length || *write >= length || (*read | *write) & 7)
-		return -EBADMSG;
+	if (value != length)
+		return ring_bad_control(r, tx, control + 8, value, length);
+	if (*read >= length || (*read & 7))
+		return ring_bad_control(r, tx, control, *read, length);
+	if (*write >= length || (*write & 7))
+		return ring_bad_control(r, tx, control + 4, *write, length);
 	r->ops->fence(r->context, false);
 	return 0;
 }

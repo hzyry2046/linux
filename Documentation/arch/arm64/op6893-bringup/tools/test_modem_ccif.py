@@ -28,7 +28,7 @@ static int from(void *c,u32 o,void *p,u32 s){(void)c;bounds(o,s);int r=event();i
 static int to(void *c,u32 o,const void *p,u32 s){(void)c;bounds(o,s);int r=event();if(!r)memcpy(memory+o,p,s);return r;}
 static int zero(void *c,u32 o,u32 s){(void)c;bounds(o,s);int r=event();if(!r)memset(memory+o,0,s);return r;}
 static void fence(void *c,bool publish){(void)c;if(publish)publishes++;else acquires++;}
-static const struct ccci_ccif_ring_ops ops={rd,wr,from,to,zero,fence};
+static const struct ccci_ccif_ring_ops ops={rd,wr,from,to,zero,fence,NULL};
 static struct ccci_ccif_slot slot={16,256,256,552};
 static void clear(void){calls=fail=publishes=acquires=0;}
 static void setup(struct ccci_ccif_ring *r){
@@ -210,8 +210,10 @@ int ccci_ccif_control_set_fault(struct ccci_ccif_controller *c,ccci_ccif_control
 static int control_error;
 int ccci_ccif_control_error(struct ccci_ccif_controller *c){(void)c;return control_error;}
 void ccci_ccif_control_quiesce(struct ccci_ccif_controller *c){(void)c;}
+int ccci_ccif_control_rearm(struct ccci_ccif_controller *c,bool commit){(void)c;(void)commit;return control_error;}
 int ccci_ccif_control_start(struct ccci_ccif_controller *c,const struct ccci_runtime_offer *o,ccci_ccif_consume_fn fn,void *ctx){(void)c;(void)o;(void)fn;(void)ctx;return -EOPNOTSUPP;}
 static int rx_error;
+int ccci_ccif_rx_rearm(struct ccci_ccif_rx *r,bool commit){(void)r;(void)commit;return rx_error;}
 static unsigned rx_stops;
 int ccci_ccif_rx_error(struct ccci_ccif_rx *rx){(void)rx;return rx_error;}
 void ccci_ccif_rx_stop(struct ccci_ccif_rx *rx){(void)rx;rx_stops++;}
@@ -257,13 +259,13 @@ int main(void){
  assert(ccci_ccif_stop(&c)==-EACCES && c.prepared && calls==66);
  assert(ccci_ccif_stop(&c)==-EIO && calls==66);
  setup(&c);rx_error=-EIO;
- assert(ccci_ccif_prepare(&c)==-EIO && ccci_ccif_stop(&c)==-EIO && !calls);
+ assert(ccci_ccif_prepare(&c)==-EIO && !ccci_ccif_stop(&c) && !calls);
  setup(&c);assert(ccci_ccif_receive_start(&c,NULL,NULL)==-EAGAIN);
  assert(!ccci_ccif_prepare(&c));rx_error=-EPROTO;
  assert(ccci_ccif_receive_start(&c,NULL,NULL)==-EIO);
- assert(ccci_ccif_stop(&c)==-EIO && rx_stops==1 && calls==65 && c.prepared);
+ assert(!ccci_ccif_stop(&c) && rx_stops==1 && calls==66 && !c.prepared);
  setup(&c);assert(!ccci_ccif_prepare(&c));control_error=-ETIMEDOUT;
- assert(ccci_ccif_stop(&c)==-EIO && rx_stops==1 && calls==65 && c.prepared);
+ assert(!ccci_ccif_stop(&c) && rx_stops==1 && calls==66 && !c.prepared);
  puts("PASS: extracted actual CCIF prepare/stop: IRQ mask gates, 65 failure positions,");
  puts("      one-shot preparation, RX fault containment and stop fault retention");
 }

@@ -104,7 +104,7 @@ static int bank_from(void *c,u32 o,void *v,u32 n){assert(o+n<=2048);memcpy(v,(u8
 static int bank_to(void *c,u32 o,const void *v,u32 n){assert(o+n<=2048);memcpy((u8 *)c+o,v,n);return 0;}
 static int bank_zero(void *c,u32 o,u32 n){assert(o+n<=2048);memset((u8 *)c+o,0,n);return 0;}
 static void bank_fence(void *c,bool publish){(void)c;(void)publish;}
-static const struct ccci_ccif_ring_ops ops={bank_read,bank_write,bank_from,bank_to,bank_zero,bank_fence};
+static const struct ccci_ccif_ring_ops ops={bank_read,bank_write,bank_from,bank_to,bank_zero,bank_fence,NULL};
 static void interrupt0(void){ccci_ccif_rx_interrupt(rx,100);}
 static void late_irq(void){assert(!rx->active);interrupt0();}
 static void hs1(u8 *p){

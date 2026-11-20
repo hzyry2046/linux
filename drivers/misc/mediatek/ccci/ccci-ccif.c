@@ -106,6 +106,13 @@ static void ccif_bank_barrier(void *context, bool publish)
 	}
 }
 
+/* Report the rejected control word, without another MMIO read or a payload dump. */
+static void ccif_bank_bad_control(void *context, bool tx, u32 offset, u32 value, u32 expected)
+{
+	pr_err_ratelimited("ccci: invalid CCIF %s ring word offset=%#x value=%#x expected_or_limit=%#x\n",
+			   tx ? "TX" : "RX", offset, value, expected);
+}
+
 static const struct ccci_ccif_ring_ops ccif_ring_ops = {
 	.read32 = ccif_bank_read,
 	.write32 = ccif_bank_write,
@@ -113,6 +120,7 @@ static const struct ccci_ccif_ring_ops ccif_ring_ops = {
 	.copy_to = ccif_bank_to,
 	.zero = ccif_bank_zero,
 	.fence = ccif_bank_barrier,
+	.bad_control = ccif_bank_bad_control,
 };
 
 static int ccif_hw_write(void *context, u32 bank, u32 offset, u32 value)
