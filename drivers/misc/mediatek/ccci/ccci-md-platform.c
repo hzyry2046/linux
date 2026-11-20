@@ -520,6 +520,21 @@ static ssize_t ccif_store(struct device *dev, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RW(ccif);
 
+static ssize_t ccif_fs_tx_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	ssize_t ret = -ENODATA;
+
+	if (!md->ccif)
+		return -EOPNOTSUPP;
+	mutex_lock(&md->lock);
+	if (md->power.state == CCCI_MD_POWERED && md->power.domain && md->power.clocks)
+		ret = ccci_ccif_fs_tx_status(md->ccif, buf);
+	mutex_unlock(&md->lock);
+	return ret;
+}
+static DEVICE_ATTR_RO(ccif_fs_tx);
+
 static ssize_t handshake_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct ccci_md_platform *md = dev_get_drvdata(dev);
@@ -994,6 +1009,7 @@ static DEVICE_ATTR_RO(md_ee_raw);
 
 static struct attribute *md_attrs[] = {
 	&dev_attr_md_power.attr, &dev_attr_md_boot.attr, &dev_attr_ccif.attr,
+	&dev_attr_ccif_fs_tx.attr,
 	&dev_attr_handshake.attr, &dev_attr_ccism.attr, &dev_attr_services.attr,
 	&dev_attr_dispatch.attr, &dev_attr_md_ee.attr, &dev_attr_md_ee_raw.attr,
 	&dev_attr_lk_regions.attr, &dev_attr_smem_users.attr,

@@ -178,6 +178,11 @@ static int ring_control(struct ccci_ccif_ring *r, bool tx, u32 *read, u32 *write
 	return 0;
 }
 
+int ccci_ccif_ring_tx_positions(struct ccci_ccif_ring *r, u32 *read, u32 *write)
+{
+	return ring_control(r, true, read, write);
+}
+
 static u32 ring_advance(u32 pos, u32 size, u32 length)
 {
 	/* size <= length and pos < length; use subtraction to avoid overflow. */

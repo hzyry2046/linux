@@ -75,6 +75,8 @@ void ccci_ccif_powered_off(struct ccci_ccif *ccif);
 /* Parent lock held, MD off, all transport users and fault producers joined. */
 int ccci_ccif_rearm(struct ccci_ccif *ccif, bool commit);
 ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf);
+/* Caller holds the parent lifecycle lock and the MD power and clock references. */
+ssize_t ccci_ccif_fs_tx_status(struct ccci_ccif *ccif, char *buf);
 #else
 static inline struct ccci_ccif *ccci_ccif_create(struct platform_device *pdev,
 						 const struct ccci_smem_layout *smem,
@@ -132,6 +134,11 @@ static inline int ccci_ccif_park(struct ccci_ccif *ccif) { return -EOPNOTSUPP; }
 static inline void ccci_ccif_powered_off(struct ccci_ccif *ccif) { }
 static inline int ccci_ccif_stop(struct ccci_ccif *ccif) { return -EOPNOTSUPP; }
 static inline ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline ssize_t ccci_ccif_fs_tx_status(struct ccci_ccif *ccif, char *buf)
 {
 	return -EOPNOTSUPP;
 }

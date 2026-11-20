@@ -440,6 +440,24 @@ ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf)
 			  ccif->layout.debug_md, ccif->layout.debug_size);
 }
 
+ssize_t ccci_ccif_fs_tx_status(struct ccci_ccif *ccif, char *buf)
+{
+	u32 read, write;
+	ssize_t ret;
+
+	if (!ccif->prepared)
+		return -ENODATA;
+
+	mutex_lock(&ccif->tx_lock);
+	ret = ccci_ccif_ring_tx_positions(&ccif->ring[CCCI_CCIF_NORMAL][4], &read, &write);
+	if (!ret)
+		ret = sysfs_emit(buf, "tx_read=%u tx_write=%u busy=%u next_seq=%u\n",
+				 read, write, !!(readl(ccif->ap + 4) & BIT(4)),
+				 ccif->service_sequence[0]);
+	mutex_unlock(&ccif->tx_lock);
+	return ret;
+}
+
 /*
  * One normal-bank transmit with the shared sequence/busy/doorbell rules. The
  * caller has already validated the packet and owns the copy.

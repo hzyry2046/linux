@@ -50,6 +50,7 @@ int ccci_ccif_ring_init(struct ccci_ccif_ring *ring, const struct ccci_ccif_ring
 /* Caller must have stopped MD and disabled/synchronized all ring users. */
 int ccci_ccif_ring_format(struct ccci_ccif_ring *ring);
 int ccci_ccif_ring_verify_empty(struct ccci_ccif_ring *ring);
+int ccci_ccif_ring_tx_positions(struct ccci_ccif_ring *ring, u32 *read, u32 *write);
 /* Serialized SPSC operations. Caller contains non-transient failures. */
 int ccci_ccif_ring_receive(struct ccci_ccif_ring *ring, void *data, u32 capacity, u32 *size);
 int ccci_ccif_ring_transmit(struct ccci_ccif_ring *ring, const void *data, u32 size);
