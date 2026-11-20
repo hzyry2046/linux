@@ -88,6 +88,18 @@ RUNNING。启用 DL 后，先停 UL/DL，再执行一次 `md_power off`：
 STOPPED，SCP 收包入口和桥接时钟引用均已关闭，内核 taint 为 0。
 无需再执行 `md_boot stop`。本轮未重跑蜂窝拨号，也未改变单次放行限制。
 
+### DPMAIF 下行停机确认
+
+`c9f6ded4e67e` 通过主线直写 `boot` 并重启，重启后以 USB SSH、
+新内核版本及全分区直接读回确认。该镜像到达 HS2/CCISM RUNNING 后，
+在同一基带会话内连续两次启动和停止 DL，停后 PIT/BAT DMA 地址
+均归零；一次 `md_power off` 成功，taint 为 0。
+
+下行 stop 现在确认 PIT 禁用和 DL idle，再禁用普通及分片 BAT。
+任一步超时返回错误并保留 DMA 缓冲区和时钟；再次 stop 可继续确认，
+期间拒绝重新启动下行或经诊断入口重置硬件。五条超时分支通过软件
+故障注入测试；真机验证了正常路径，未人为制造硬件超时。
+
 ## 32k 事实来源（本轮核实）
 
 - 本机 A `eccci/ccci_rtc.c` 读取 nvmem cell `external-32k` 的首字节；

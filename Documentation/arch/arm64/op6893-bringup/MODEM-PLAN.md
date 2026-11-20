@@ -7,6 +7,20 @@ PDP 重连。最新镜像已验证一次 `md_power off` 完成 MD/CCISM 停机�
 与 DPMAIF 的代际隔离和复位，再考虑解除各层单次门槛。
 参见 [停机实测](MODEM-BOOT-RELEASE.md#ccism-停机确认竞态修复)。
 
+同次 AP 启动内再次放行 MD 的前置条件：
+
+- DPMAIF：下行已处理 PIT 禁用、DL idle 和两套 BAT 禁用失败时保留
+  DMA 的路径。上行仍会在 idle 等待超时后释放描述符，需对齐下行的
+  错误处理，再由父平台在关电前串行关闭新队列的入口并确认两方向均停止。
+- SCP：现有 lease 的 generation 来自 SCP 的复位，常驻期间不会随
+  MD 代次变化。必须隔离旧 mailbox 消息后才能允许重新获取 lease；
+  仅递增用户态 MD generation 或清除 `client_attempted` 无法完成这一点。
+- CCIF 与服务：必须在 join IRQ/work 和关闭文件入口后，重建 RX、
+  handshake、dispatcher、AT 和服务会话；旧 FD 与请求不能进入新代。
+- 共享内存：6.6 的 `ap_md_mem.c` 将首启清理和复位清理区分开。复位
+  路径不清 NVRAM cache，另有 CCB DHL 和 RAW DHL 前 1 KiB 的显式
+  清理。复用已有 cache 映射时要保留这套区别。
+
 历史记录：更新：2026-11-17。**已真机实测**：SCP 常驻/READY1/awake；MD 继承 ON 接管与
 冷上电；普通 CCIF prepare/stop/off；唯一一次 `(6,0)` MD CPU 放行；HS1 被接受、
 runtime 发布、endpoint arm；真实 NVRAM 下的完整 FS 扫描（859 请求 / 964 次
