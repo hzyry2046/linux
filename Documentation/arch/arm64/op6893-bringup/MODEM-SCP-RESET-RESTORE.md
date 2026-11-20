@@ -153,3 +153,24 @@ CCISM RUNNING，先执行 `md_power off`，再停止 SCP。两次 STOP
 后 `restore-check` 都返回成功，当前两段 CRC 与首启前一致。
 CRC 只用于识别内容变化，没有导出 CRC、header 原文或固件字节。
 本次不写恢复区，不证明内容认证、DMA 已停止或恢复后能收到新 READY。
+
+### 干净停机后的 SCP 恢复执行
+
+`runtime` 的 `restart` 只接在干净的 runtime stop 后：没有 SCP
+租约、awake 引用或错误，接收 IRQ/work 已同步，且复核双核 reset
+仍为 asserted、APCCCI 发送位空闲。分配新代之前，使用首启保存的
+布局与 header，从原保留区读 loader/DRAM 备份到临时 CPU 缓冲区
+并校验；清 TCM 和 live DRAM，恢复 loader/header/DRAM，然后读回
+确认。不会改动备份源。丢弃复位前的已知入站通知并确认 pending 为零，
+建立新的 RX 代次，释放 core0 后才接受 READY，并完成一次 awake 配对。
+
+- `e923c18a14f6`：同一 AP 启动内，第二代 SCP 达到 READY；
+  第三代租约通过真实基带的 HS2/CCISM RUNNING 和干净停机。
+  随后的第四代恢复曾在 READY 前返回 `-EIO`，当时没有阶段诊断。
+- `fd3f311a5e6e`：从主线直写 boot 后确认了新版本、只读标志和
+  全分区哈希。第一代 SCP 上完成基带 HS2/CCISM、MD 关电和 SCP
+  停机；同一 AP 启动内第 2 至 5 代均收到 READY、完成 awake 配对
+  并能停机。taint 为 0，前一次 `-EIO` 未复现；镜像新增失败阶段
+  和读回区域诊断，供下次复现使用。
+
+基带本身的单次放行门槛仍在；上述验证没有第二次放行 MD。
