@@ -113,6 +113,25 @@ HS2/CCISM RUNNING，测试同时启动 UL/DL。网口为 UP 时写
 软件故障注入覆盖上行 idle 超时不释放 DMA/时钟，以及重试只释放一次。
 父平台在 quiesce 失败时返回错误，不进入 CCIF/MD 关电阶段。
 
+### 关电后复位 DPMAIF
+
+同板 6.6 在 `WAITING_TO_STOP` 先停 DPMAIF 队列，MD 关电后
+在 `GATED` 收尾并复位 AO/PD（`ccci_hif.c`、
+`ccci_dpmaif_com.c`、`ccci_dpmaif_drv_v2.c`）。旧主线关电后
+AO 仍保留上轮 PIT/BAT 地址和索引。新主线在确认 MD1 OFF 和
+CCISM 收尾后，对实际用过的 DPMAIF 执行 AO/PD 复位并读回；
+复位失败留待之后的 off 操作重试，期间仍禁止启动新队列。
+
+`94adcfe7773c` 从主线直写 `boot` 后启动，USB SSH、版本及全分区
+哈希均匹配。硬件从 HS2/CCISM RUNNING 启动 UL/DL 后执行一次
+`md_power off`；PIT、普通 BAT、分片 BAT 的地址及所查索引
+归零，INFRA 保护位 10 清除，MD/CCISM 停止，taint 为 0。
+
+中间镜像 `0d94d95ff9f7` 遇到先前锁存的 CCIF `-EBADMSG`，
+停环成功但关电被拦下。修正版保留协议错误，只让已停止收发且能
+确认 IRQ 屏蔽的 CCIF 走硬件复位；CCIF 硬件错误仍阻止关电。
+最终实测未再触发该协议错误，尚未在真机验证这条异常分支。
+
 ## 32k 事实来源（本轮核实）
 
 - 本机 A `eccci/ccci_rtc.c` 读取 nvmem cell `external-32k` 的首字节；
