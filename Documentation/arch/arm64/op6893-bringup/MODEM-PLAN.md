@@ -18,8 +18,16 @@ PDP 重连。最新镜像已验证一次 `md_power off` 完成 MD/CCISM 停机�
   仅递增用户态 MD generation 或清除 `client_attempted` 无法完成这一点。
   已验证首启 loader/DRAM 备份在完整基带会话及干净停止 SCP 后内容一致；
   已验证非 secure 恢复、连续多代 READY，以及恢复后接入一次基带会话，见 [SCP 恢复](MODEM-SCP-RESET-RESTORE.md)。
-- CCIF 与服务：必须在 join IRQ/work 和关闭文件入口后，重建 RX、
-  handshake、dispatcher、AT 和服务会话；旧 FD 与请求不能进入新代。
+- CCIF、CCISM 与服务：驱动已有三个停机后重建入口。CCIF 要求
+  硬件 reset 成功、IRQ 仍屏蔽、收发与定时器已同步退出，任何锁存错误
+  都拒绝重建。CCISM 要求 clean STOP、SCP lease 已释放，且下次
+  arm 使用更大的 SCP generation。FS/RPC 要求旧 backend FD 已关闭，
+  新会话使用更大的 MD generation。主机模型已验证旧 FD、旧回复
+  和旧代次的拒绝路径。
+- MD owner：还需把以上入口与 dispatcher、AT、CCMNI、boot 和
+  power 的复位接成一个显式命令，验证断开用户态服务后能安全重开。
+  先证明上一轮停止、重启后的 SCP READY 和共享内存复用，才允许
+  第二次 MD CPU release。当前仍保留 MD 的单次放行门槛。
 - 共享内存：6.6 的 `ap_md_mem.c` 将首启清理和复位清理区分开。复位
   路径不清 NVRAM cache，另有 CCB DHL 和 RAW DHL 前 1 KiB 的显式
   清理。复用已有 cache 映射时要保留这套区别。
