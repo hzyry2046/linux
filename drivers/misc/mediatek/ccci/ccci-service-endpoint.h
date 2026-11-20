@@ -32,6 +32,8 @@ int ccci_service_endpoint_offline(struct ccci_service_endpoint *endpoint);
 ssize_t ccci_service_endpoint_status(struct ccci_service_endpoint *endpoint, char *buf);
 /* No endpoint mutex held: the stop callback revokes and joins file operations. */
 int ccci_service_endpoint_stop(struct ccci_service_endpoint *endpoint, bool md_stopped);
+/* After stopped cleanup and producer joins; requires the old FD to be closed. */
+int ccci_service_endpoint_rearm(struct ccci_service_endpoint *endpoint);
 #else
 static inline struct ccci_service_endpoint *
 ccci_service_endpoint_create(struct device *dev, struct ccci_ccif *ccif) { return NULL; }

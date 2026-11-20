@@ -371,7 +371,29 @@ static void bare_request_requires_prefixed_reply(void){
  destroy();
  puts("PASS: bare MD request operation accepts only the 0xffff-prefixed reply");
 }
-int main(void){kernel_rpc_ownership();reservation_lifecycle();access_and_lifetime();roundtrip_and_validation();bare_request_requires_prefixed_reply();rpc_and_failed_enqueue();ordering_faults();active_remove_refusal();return 0;}
+static void next_generation(void){
+ create(true);receive_fs(0);
+ size_t n=read_one();
+ assert(ccci_service_endpoint_rearm(endpoint)==-EBUSY);
+ assert(!ccci_service_endpoint_stop(endpoint,true));
+ assert(endpoint_write(&file,(void *)record,n,&offset)==-ESHUTDOWN);
+ assert(ccci_service_endpoint_rearm(endpoint)==-EBUSY);
+ assert(!endpoint_release(NULL,&file));
+ assert(!ccci_service_endpoint_rearm(endpoint));
+ assert(ccci_service_endpoint_rearm(endpoint)==-EBUSY);
+ file.private_data=&endpoint->misc;
+ assert(!endpoint_open(NULL,&file));
+ assert(ccci_service_endpoint_reserve(endpoint,41)==-ESTALE);
+ assert(!ccci_service_endpoint_reserve(endpoint,42));
+ assert(!ccci_service_endpoint_arm(endpoint,42));
+ assert(endpoint_write(&file,(void *)record,n,&offset)==-ESTALE);
+ assert(ccci_service_endpoint_hs2(endpoint,41)==-ESTALE);
+ assert(!ccci_service_endpoint_hs2(endpoint,42));run();
+ assert(endpoint->session->router.hs2_seen);
+ destroy();
+ puts("PASS: old FD must close before rearm; old records and generations remain stale");
+}
+int main(void){next_generation();kernel_rpc_ownership();reservation_lifecycle();access_and_lifetime();roundtrip_and_validation();bare_request_requires_prefixed_reply();rpc_and_failed_enqueue();ordering_faults();active_remove_refusal();return 0;}
 '''
 
 

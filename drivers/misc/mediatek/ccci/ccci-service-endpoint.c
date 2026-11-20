@@ -497,6 +497,8 @@ int ccci_service_endpoint_reserve(struct ccci_service_endpoint *endpoint, u64 ge
 	ret = endpoint->removed ? -ENODEV : endpoint->error;
 	if (!ret && (!endpoint->connected || endpoint->reserved || endpoint->armed))
 		ret = -EBUSY;
+	if (!ret && generation <= endpoint->generation)
+		ret = -ESTALE;
 	if (!ret) {
 		endpoint->generation = generation;
 		endpoint->reserved = true;
@@ -519,6 +521,8 @@ int ccci_service_endpoint_arm(struct ccci_service_endpoint *endpoint, u64 genera
 	if (!ret && (!endpoint->connected || endpoint->armed))
 		ret = -EBUSY;
 	if (!ret && endpoint->reserved && generation != endpoint->generation)
+		ret = -ESTALE;
+	if (!ret && !endpoint->reserved && generation <= endpoint->generation)
 		ret = -ESTALE;
 	if (!ret) {
 		endpoint->generation = generation;
@@ -591,6 +595,31 @@ int ccci_service_endpoint_stop(struct ccci_service_endpoint *endpoint, bool md_s
 	/* Pre-HS1 reservations have no armed session to invoke closing(). */
 	if (!ret)
 		endpoint_closing(endpoint, endpoint->generation);
+	return ret;
+}
+
+int ccci_service_endpoint_rearm(struct ccci_service_endpoint *endpoint)
+{
+	unsigned long flags;
+	int ret;
+
+	if (!endpoint)
+		return -EINVAL;
+	mutex_lock(&endpoint->lock);
+	spin_lock_irqsave(&endpoint->queue_lock, flags);
+	ret = endpoint->removed ? -ENODEV : 0;
+	if (!ret && (endpoint->connected || endpoint->armed || endpoint->reserved))
+		ret = -EBUSY;
+	spin_unlock_irqrestore(&endpoint->queue_lock, flags);
+	if (!ret)
+		ret = ccci_service_session_rearm(endpoint->session);
+	if (!ret) {
+		spin_lock_irqsave(&endpoint->queue_lock, flags);
+		endpoint->error = 0;
+		endpoint->cursor = 0;
+		spin_unlock_irqrestore(&endpoint->queue_lock, flags);
+	}
+	mutex_unlock(&endpoint->lock);
 	return ret;
 }
 

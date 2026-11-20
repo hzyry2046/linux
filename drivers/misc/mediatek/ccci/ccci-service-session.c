@@ -313,14 +313,27 @@ unlock:
 	mutex_unlock(&session->lock);
 }
 
+static int service_router_init(struct ccci_service_session *session)
+{
+	struct ccci_service_storage storage[CCCI_SERVICE_SLOTS];
+	u32 i;
+
+	for (i = 0; i < CCCI_SERVICE_SLOTS; i++)
+		storage[i] = (struct ccci_service_storage) {
+			.request = session->request[i],
+			.reply = session->reply[i],
+			.capacity = sizeof(session->request[i]),
+		};
+	return ccci_service_router_init(&session->router, &service_router_ops, session,
+					storage, session->tx, sizeof(session->tx));
+}
+
 struct ccci_service_session *
 ccci_service_session_create(struct device *dev, struct ccci_ccif *ccif,
 			    const struct ccci_service_backend_ops *ops,
 			    void *context)
 {
-	struct ccci_service_storage storage[CCCI_SERVICE_SLOTS];
 	struct ccci_service_session *session;
-	u32 i;
 	int ret;
 
 	if (!dev || !ccif || !ops || !ops->submit)
@@ -339,14 +352,7 @@ ccci_service_session_create(struct device *dev, struct ccci_ccif *ccif,
 	session->ccif = ccif;
 	session->ops = ops;
 	session->context = context;
-	for (i = 0; i < CCCI_SERVICE_SLOTS; i++)
-		storage[i] = (struct ccci_service_storage) {
-			.request = session->request[i],
-			.reply = session->reply[i],
-			.capacity = sizeof(session->request[i]),
-		};
-	ret = ccci_service_router_init(&session->router, &service_router_ops, session,
-				       storage, session->tx, sizeof(session->tx));
+	ret = service_router_init(session);
 	if (ret) {
 		destroy_workqueue(session->wq);
 		kvfree(session);
@@ -365,6 +371,10 @@ int ccci_service_session_arm(struct ccci_service_session *session, u64 generatio
 	mutex_lock(&session->lock);
 	if (session->stopped || session->stopping) {
 		ret = -ESHUTDOWN;
+		goto unlock;
+	}
+	if (!session->armed && generation && generation <= session->generation) {
+		ret = -ESTALE;
 		goto unlock;
 	}
 	ret = ccci_service_router_begin(&session->router, generation);
@@ -513,6 +523,32 @@ int ccci_service_session_stop(struct ccci_service_session *session, bool md_stop
 	session->stopping = false;
 	session->stopped = true;
 	spin_unlock_irqrestore(&session->queue_lock, flags);
+	mutex_unlock(&session->lock);
+	return ret;
+}
+
+int ccci_service_session_rearm(struct ccci_service_session *session)
+{
+	unsigned long flags;
+	int ret;
+
+	mutex_lock(&session->lock);
+	if (!session->stopped) {
+		ret = -EBUSY;
+		goto out;
+	}
+	ret = service_router_init(session);
+	if (ret)
+		goto out;
+	spin_lock_irqsave(&session->queue_lock, flags);
+	session->stopped = false;
+	session->armed = false;
+	session->queue_error = 0;
+	session->tx_packets = 0;
+	session->tx_error = 0;
+	session->fault_notified = false;
+	spin_unlock_irqrestore(&session->queue_lock, flags);
+out:
 	mutex_unlock(&session->lock);
 	return ret;
 }
