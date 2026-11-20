@@ -16,6 +16,8 @@ PDP 重连。最新镜像已验证一次 `md_power off` 完成 MD/CCISM 停机�
 - SCP：现有 lease 的 generation 来自 SCP 的复位，常驻期间不会随
   MD 代次变化。必须隔离旧 mailbox 消息后才能允许重新获取 lease；
   仅递增用户态 MD generation 或清除 `client_attempted` 无法完成这一点。
+  已验证首启 loader/DRAM 备份在完整基带会话及干净停止 SCP 后内容一致；
+  后续接非 secure 恢复写入和新一代 READY，见 [SCP 恢复](MODEM-SCP-RESET-RESTORE.md)。
 - CCIF 与服务：必须在 join IRQ/work 和关闭文件入口后，重建 RX、
   handshake、dispatcher、AT 和服务会话；旧 FD 与请求不能进入新代。
 - 共享内存：6.6 的 `ap_md_mem.c` 将首启清理和复位清理区分开。复位

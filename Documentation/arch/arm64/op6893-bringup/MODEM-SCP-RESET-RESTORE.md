@@ -139,3 +139,17 @@ core0/core1/TCM 的静默资源归属已在 `db337399ee04` 实机验收，详见
 [统一 owner](MODEM-SCP-CORE-TCM-OWNER.md)。旧 core0/header reader 已通过
 配置互斥关闭，三个窗口尚无读写调用；受限读取迁移及双核停止证据仍待完成。
 此更新不改变上文 R5.19 的离线验证范围，也未开放 reset/恢复或旧消息处理。
+
+### 首启与停机之间的恢复源一致性
+
+测试镜像 `caf2d7ca0e0e` 由主线直写 `boot` 后正常启动，USB SSH
+和分区哈希一致，分区恢复只读。在显式 26 MHz pin 下，`start-check`
+在释放 core0 前、双核 reset 别名读回为 asserted 时，校验首启 header
+的布局；读完整个 8192 字节 loader 和 305120 字节 DRAM 备份，拒绝
+全零或全 0xff，保留 header 快照和两段 CRC。检查失败不会放行 SCP。
+
+两次实测：一次只启动 SCP 并收到 READY；另一次基带达到 HS2 和
+CCISM RUNNING，先执行 `md_power off`，再停止 SCP。两次 STOP
+后 `restore-check` 都返回成功，当前两段 CRC 与首启前一致。
+CRC 只用于识别内容变化，没有导出 CRC、header 原文或固件字节。
+本次不写恢复区，不证明内容认证、DMA 已停止或恢复后能收到新 READY。
