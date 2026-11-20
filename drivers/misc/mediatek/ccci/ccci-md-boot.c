@@ -245,7 +245,7 @@ int ccci_md_boot_stop(struct ccci_md_boot *boot, bool md_stopped)
 		ret = 0;
 		goto out;
 	}
-	/* CCIF was already reset before power-off; this joins services and SCP. */
+	/* CCIF is already parked and MD1 off; now join services and SCP. */
 	ret = boot->dispatch_prepared ? ccci_port_dispatch_stop(boot->dispatch, true) : 0;
 	if (!ret && boot->cache_prepared)
 		ret = ccci_nvram_cache_stop(boot->cache);

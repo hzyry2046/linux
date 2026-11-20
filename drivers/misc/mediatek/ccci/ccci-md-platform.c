@@ -281,8 +281,8 @@ static ssize_t md_power_show(struct device *dev, struct device_attribute *attr, 
 }
 
 /*
- * Active boot: reset/join CCIF while clocks are held, prove MD1 OFF, then stop
- * services and SCP. The CCIF stop inside the dispatcher then returns early.
+ * Active boot: join CCIF while clocks are held, prove MD1 OFF, then stop
+ * services and SCP. Reset CCIF at the next prepare, with the MD CPU held.
  */
 static int md_platform_off(struct ccci_md_platform *md)
 {
@@ -298,11 +298,13 @@ static int md_platform_off(struct ccci_md_platform *md)
 			ccci_md_boot_note_pcm(md->boot, r13);
 		ccci_ccif_quiesce_rx(md->ccif);
 		ccci_service_endpoint_park(md->services);
-		ret = ccci_ccif_stop(md->ccif);
+		ret = ccci_ccif_park(md->ccif);
 		if (!ret)
 			ret = ccci_md_power_off(&md->power);
-		if (!ret)
+		if (!ret) {
+			ccci_ccif_powered_off(md->ccif);
 			ret = ccci_md_boot_stop(md->boot, true);
+		}
 		if (!ret) {
 			ret = ccci_dpmaif_reset_after_off(md->dpmaif);
 			md->dpmaif_off_reset = !ret;

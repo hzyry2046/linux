@@ -42,7 +42,7 @@ struct ccci_ccif {
 	int error;
 	bool prepared;
 	bool attempted;
-	bool reset_at_stop;
+	bool quiesced_at_stop;
 };
 
 static int ccif_bank_read(void *context, u32 offset, u32 *value)
@@ -353,6 +353,23 @@ void ccci_ccif_quiesce_rx(struct ccci_ccif *ccif)
 	ccci_ccif_rx_stop(ccif->rx);
 }
 
+/* Close admission without resetting a CCIF peer that may still be active. */
+int ccci_ccif_park(struct ccci_ccif *ccif)
+{
+	ccif_tx_gate(ccif, false);
+	return ccif_irqs_masked(ccif);
+}
+
+/* Parent has independently confirmed MD1 OFF after parking the transport. */
+void ccci_ccif_powered_off(struct ccci_ccif *ccif)
+{
+	if (!ccif->prepared)
+		return;
+	ccif->prepared = false;
+	ccif->quiesced_at_stop = true;
+	ccif->step = "off-irqs-masked";
+}
+
 int ccci_ccif_stop(struct ccci_ccif *ccif)
 {
 	int ret;
@@ -373,7 +390,7 @@ int ccci_ccif_stop(struct ccci_ccif *ccif)
 	if (ret)
 		return ccif_fail(ccif, ret);
 	ccif->prepared = false;
-	ccif->reset_at_stop = true;
+	ccif->quiesced_at_stop = true;
 	ccif->step = "stopped-irqs-masked";
 	return 0;
 }
@@ -382,7 +399,7 @@ int ccci_ccif_rearm(struct ccci_ccif *ccif, bool commit)
 {
 	int ret;
 
-	if (!ccif->reset_at_stop || ccif->prepared || ccci_ccif_faulted(ccif))
+	if (!ccif->quiesced_at_stop || ccif->prepared || ccci_ccif_faulted(ccif))
 		return -EBUSY;
 	ret = ccif_irqs_masked(ccif);
 	if (ret)
@@ -398,7 +415,7 @@ int ccci_ccif_rearm(struct ccci_ccif *ccif, bool commit)
 	memset(ccif->service_sequence, 0, sizeof(ccif->service_sequence));
 	mutex_unlock(&ccif->tx_lock);
 	ccif->attempted = false;
-	ccif->reset_at_stop = false;
+	ccif->quiesced_at_stop = false;
 	ccif->step = "rearmed-irqs-masked";
 	return 0;
 }

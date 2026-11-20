@@ -70,6 +70,8 @@ int ccci_ccif_net_send(struct ccci_ccif *ccif, u32 index, u32 queue,
 void ccci_ccif_abort(struct ccci_ccif *ccif, int error);
 void ccci_ccif_quiesce_rx(struct ccci_ccif *ccif);
 int ccci_ccif_stop(struct ccci_ccif *ccif);
+int ccci_ccif_park(struct ccci_ccif *ccif);
+void ccci_ccif_powered_off(struct ccci_ccif *ccif);
 /* Parent lock held, MD off, all transport users and fault producers joined. */
 int ccci_ccif_rearm(struct ccci_ccif *ccif, bool commit);
 ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf);
@@ -126,6 +128,8 @@ static inline int ccci_ccif_net_send(struct ccci_ccif *ccif, u32 index,
 static inline void ccci_ccif_abort(struct ccci_ccif *ccif, int error) { }
 
 static inline void ccci_ccif_quiesce_rx(struct ccci_ccif *ccif) { }
+static inline int ccci_ccif_park(struct ccci_ccif *ccif) { return -EOPNOTSUPP; }
+static inline void ccci_ccif_powered_off(struct ccci_ccif *ccif) { }
 static inline int ccci_ccif_stop(struct ccci_ccif *ccif) { return -EOPNOTSUPP; }
 static inline ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf)
 {

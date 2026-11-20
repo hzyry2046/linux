@@ -173,4 +173,21 @@ CRC 只用于识别内容变化，没有导出 CRC、header 原文或固件字�
   并能停机。taint 为 0，前一次 `-EIO` 未复现；镜像新增失败阶段
   和读回区域诊断，供下次复现使用。
 
-基带本身的单次放行门槛仍在；上述验证没有第二次放行 MD。
+### 基带关电后的 TCM 恢复失败
+
+`5006e9c935c4` 和 `178ecc2ce674` 上，首轮 MD 达到 HS2 / CCISM RUNNING，
+随后 MD1 确认 OFF、旧服务 FD 关闭，`md_boot=rearm` 成功。第二代 SCP 在
+`restore-memory` 从 TCM 起始处读回 loader 不一致（`-EIO`）；两核保持
+复位，未进行第二次 MD 上电或放行。`178ecc2ce674` 从主线写入 boot，
+重启后版本、32 MiB 全分区哈希和只读标志均已复核。
+
+`9d016e2a89aa` 使用与 vendor 一致的 32 位 TCM 写入和读回，仍在首字失败。
+一次额外的 `restore-check` 通过，延时 3 秒也没有改变结果。
+`178ecc2ce674` 的实验分支对照 4.19 等到两核 HALT 后再置复位并写 reboot
+GPR；HALT 等待成功，但 loader 起始处仍读回不一致。这两项实验未合入。
+停机本身的 CCIF BUSY 竞态通过推迟硬件 reset 到下一次 prepare 处理。
+
+下次应对比 SCP-only 与 MD 停机后的 TCM 访问条件，重点核查 4.19 的
+SCP SRAM power-down 状态、时钟和互连资源。保留源 CRC、目标读回及
+失败时不 release 的检查。证据见构建目录下
+`backup/boot-write-md-rearm-v2/` 与 `backup/boot-write-md-rearm-178ecc2ce674/`。

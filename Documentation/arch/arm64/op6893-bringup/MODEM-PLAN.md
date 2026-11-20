@@ -19,8 +19,9 @@ PDP 重连。最新镜像已验证一次 `md_power off` 完成 MD/CCISM 停机�
   已验证首启 loader/DRAM 备份在完整基带会话及干净停止 SCP 后内容一致；
   已验证非 secure 恢复、连续多代 READY，以及恢复后接入一次基带会话，见 [SCP 恢复](MODEM-SCP-RESET-RESTORE.md)。
 - CCIF、CCISM 与服务：驱动已有三个停机后重建入口。CCIF 要求
-  硬件 reset 成功、IRQ 仍屏蔽、收发与定时器已同步退出，任何锁存错误
-  都拒绝重建。CCISM 要求 clean STOP、SCP lease 已释放，且下次
+  MD1 OFF、IRQ 仍屏蔽、收发与定时器已同步退出，任何锁存错误都拒绝重建。
+  完整 reset 及读回放到下一次上电后、CPU 放行前，避免运行中的 MD
+  重新设置 BUSY 或通知位。CCISM 要求 clean STOP、SCP lease 已释放，且下次
   arm 使用更大的 SCP generation。FS/RPC 要求旧 backend FD 已关闭，
   新会话使用更大的 MD generation。主机模型已验证旧 FD、旧回复
   和旧代次的拒绝路径。
