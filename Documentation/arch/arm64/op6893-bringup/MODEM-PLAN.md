@@ -9,9 +9,9 @@ PDP 重连。最新镜像已验证一次 `md_power off` 完成 MD/CCISM 停机�
 
 同次 AP 启动内再次放行 MD 的前置条件：
 
-- DPMAIF：下行已处理 PIT 禁用、DL idle 和两套 BAT 禁用失败时保留
-  DMA 的路径。上行仍会在 idle 等待超时后释放描述符，需对齐下行的
-  错误处理，再由父平台在关电前串行关闭新队列的入口并确认两方向均停止。
+- DPMAIF：上下行停止失败都保留 DMA 缓冲区和时钟。已验证父平台
+  在关电前关闭新的 DPMAIF 启动入口并确认两路停止；活动网口会拒绝
+  关电。仍需核对关电到下一次上电间 AO/PD 复位和索引恢复的契约。
 - SCP：现有 lease 的 generation 来自 SCP 的复位，常驻期间不会随
   MD 代次变化。必须隔离旧 mailbox 消息后才能允许重新获取 lease；
   仅递增用户态 MD generation 或清除 `client_attempted` 无法完成这一点。

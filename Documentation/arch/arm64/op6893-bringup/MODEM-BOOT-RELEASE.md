@@ -100,6 +100,19 @@ STOPPED，SCP 收包入口和桥接时钟引用均已关闭，内核 taint 为 0
 期间拒绝重新启动下行或经诊断入口重置硬件。五条超时分支通过软件
 故障注入测试；真机验证了正常路径，未人为制造硬件超时。
 
+### DPMAIF 上行与关电联动
+
+`a119836640ec` 通过主线直写 `boot` 后正常重启。USB SSH 恢复，
+新内核版本和分区直接读回均匹配，分区已恢复只读。基带再到达
+HS2/CCISM RUNNING，测试同时启动 UL/DL。网口为 UP 时写
+`md_power off` 得到 `-EBUSY`，MD 保持上电且 UL 仍运行。
+网口置 DOWN 后，未手工停环，一次 `md_power off` 自动停 UL/DL、
+关电并完成 CCISM 清理；之后两方向的 start 都返回 `-ESHUTDOWN`。
+内核 taint 为 0。本轮没有验收蜂窝数据吞吐。
+
+软件故障注入覆盖上行 idle 超时不释放 DMA/时钟，以及重试只释放一次。
+父平台在 quiesce 失败时返回错误，不进入 CCIF/MD 关电阶段。
+
 ## 32k 事实来源（本轮核实）
 
 - 本机 A `eccci/ccci_rtc.c` 读取 nvmem cell `external-32k` 的首字节；
