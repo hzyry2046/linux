@@ -66,6 +66,7 @@ struct ccci_md_platform {
 	struct ccci_nvram_cache *cache;
 	struct ccci_md_boot *boot;
 	bool dpmaif_off_reset;
+	bool restore_rails;
 	/* Read-only MD exception record header, mapped only when LK exported it. */
 	void __iomem *ee;
 	size_t ee_bytes;
@@ -143,6 +144,48 @@ static int md_rails_check(void *context)
 	if (memcmp(voltage, md->voltage, sizeof(voltage)))
 		return -ESTALE;
 	return md_domain_check(md, md->power.state == CCCI_MD_INHERITED);
+}
+
+/* Only after verified MD1 OFF and a clean transport rearm. */
+static int md_restore_rails(struct ccci_md_platform *md)
+{
+	static const u8 order[] = { 0, 1, 3 };
+	int current_uv[ARRAY_SIZE(md->rails)], ret;
+
+	if (md->power.state != CCCI_MD_STOPPED || md->power.domain ||
+	    md->power.clocks || md->power.attempted)
+		return -EBUSY;
+	ret = md_domain_check(md, false);
+	if (ret)
+		return ret;
+	ret = md_read_rails(md, current_uv);
+	if (ret)
+		return ret;
+	/*
+	 * Restore the observed board transition only. Keep VSRAM_MD at its
+	 * boot setting throughout, with the rising core rails no higher than it.
+	 */
+	if (current_uv[2] != md->voltage[2] || md->voltage[0] > current_uv[2] ||
+	    md->voltage[1] > current_uv[2])
+		return -ESTALE;
+	for (unsigned int i = 0; i < ARRAY_SIZE(md->rails); i++)
+		if (current_uv[i] > md->voltage[i])
+			return -ESTALE;
+	md->power.step = "restore-rails";
+	for (unsigned int i = 0; i < ARRAY_SIZE(order); i++) {
+		unsigned int n = order[i];
+		int uv = md->voltage[n];
+
+		if (current_uv[n] == uv)
+			continue;
+		ret = regulator_set_voltage(md->rails[n], uv, uv);
+		if (!ret && regulator_get_voltage(md->rails[n]) != uv)
+			ret = regulator_sync_voltage(md->rails[n]);
+		if (ret)
+			return ret;
+	}
+	usleep_range(2000, 2500);
+	return md_rails_check(md);
 }
 
 static int md_clocks(void *context, bool on)
@@ -341,8 +384,12 @@ static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 
 	mutex_lock(&md->lock);
 	if (sysfs_streq(buf, "on")) {
+		ret = md->restore_rails ? md_restore_rails(md) : 0;
+		if (ret)
+			goto unlock;
 		ret = ccci_md_power_on(&md->power);
 		if (!ret) {
+			md->restore_rails = false;
 			md->dpmaif_off_reset = false;
 			ccci_dpmaif_allow_start(md->dpmaif);
 		}
@@ -358,6 +405,7 @@ static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 	} else {
 		ret = -EINVAL;
 	}
+unlock:
 	if (ret)
 		dev_err(dev, "MD platform request failed at %s: %d\n", md->power.step, ret);
 	mutex_unlock(&md->lock);
@@ -409,8 +457,10 @@ static ssize_t md_boot_store(struct device *dev, struct device_attribute *attr,
 		ret = md_domain_check(md, false);
 		if (!ret)
 			ret = ccci_md_boot_rearm(md->boot);
-		if (!ret)
+		if (!ret) {
 			md->power.attempted = false;
+			md->restore_rails = true;
+		}
 	} else if (sysfs_streq(buf, "release")) {
 		ret = ccci_md_boot_release(md->boot);
 	} else if (sysfs_streq(buf, "stop")) {

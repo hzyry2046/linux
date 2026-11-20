@@ -1269,3 +1269,19 @@
 	};
 };
 };
+
+/* Observed modem DVFS and LK boot settings; restoration is off-only. */
+&mt6315_3_vbuck1 {
+	regulator-min-microvolt = <550000>;
+	regulator-max-microvolt = <800000>;
+};
+
+&mt6315_3_vbuck3 {
+	regulator-min-microvolt = <600000>;
+	regulator-max-microvolt = <800000>;
+};
+
+&mt6359_vpu {
+	regulator-min-microvolt = <650000>;
+	regulator-max-microvolt = <700000>;
+};
