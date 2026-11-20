@@ -88,7 +88,7 @@ static int prerequisite(void *ctx,u64 gen){
  return 0;
 }
 static void trigger(unsigned b){assert(b<requested_irqs);unsigned r=reads,w=writes,c=checks;assert(handlers[b](100+b,handler_data[b])==IRQ_HANDLED);assert(reads==r && writes==w && checks==c);}
-static void late_irq(void){trigger(0);}
+static void late_irq(void){trigger(0);run_work(&receive->work);}
 static void reset_model(void){
  if(release_action){release_action(release_data);release_action=NULL;}
  for(unsigned i=0;i<allocations_count;i++)free(allocations[i]);allocations_count=0;allocation=NULL;
@@ -161,7 +161,7 @@ int main(void){
  run_work(&receive->work);assert(!receive->fault && !receive->work.pending);
  /* STOP closes before synchronizing; late IRQ cannot queue, no owner-held wait. */
  trigger(0);sync_hook=late_irq;ccci_scp_receive_stop(receive);
- assert(!receive->work.pending && receive->quiesced && !receive->generation && syncs==5 && cancels==1);
+ assert(!receive->fault && !receive->error && !receive->work.pending && receive->quiesced && !receive->generation && syncs==5 && cancels==1);
  for(unsigned b=0;b<5;b++)assert(depths[b]==1 && hardware_masked[b]);
  assert(ccci_scp_receive_start(receive,&layout,17,4)==-ESTALE);
  reset_generation=18;start(4);run_work(&receive->work);assert(!receive->fault);

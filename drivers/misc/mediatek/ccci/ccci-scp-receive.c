@@ -148,14 +148,16 @@ static irqreturn_t ccci_scp_receive_handler(int number, void *data)
 	raw_spin_lock_irqsave(&receive->gate, flags);
 	receive->interrupts++;
 	ccci_scp_receive_mask(receive);
-	if (!receive->closing)
-		receive->quiesced = false;
-	if (!receive->armed || receive->closing || receive->fault) {
+	if (receive->closing)
+		goto out;
+	receive->quiesced = false;
+	if (!receive->armed || receive->fault) {
 		receive->unexpected++;
 		receive->fault = true;
 	}
-	if (!receive->closing && !receive->terminal)
+	if (!receive->terminal)
 		ccci_scp_receive_queue(receive);
+out:
 	raw_spin_unlock_irqrestore(&receive->gate, flags);
 	return IRQ_HANDLED;
 }
@@ -165,7 +167,7 @@ static void ccci_scp_receive_work(struct work_struct *work)
 	struct ccci_scp_receive *receive = container_of(work, struct ccci_scp_receive, work);
 	unsigned long flags;
 	u64 generation;
-	bool valid;
+	bool valid, closing, fault;
 	struct ccci_scp_event event;
 	int ret;
 
@@ -180,7 +182,9 @@ static void ccci_scp_receive_work(struct work_struct *work)
 	ret = valid ? ccci_scp_drain_run(&receive->drain, generation) : -ESHUTDOWN;
 	/* A handler may have reported a fault just after the drain unmasked. */
 	raw_spin_lock_irqsave(&receive->gate, flags);
-	valid = !receive->fault && !receive->closing;
+	closing = receive->closing;
+	fault = receive->fault;
+	valid = !fault && !closing;
 	raw_spin_unlock_irqrestore(&receive->gate, flags);
 	if (!ret && valid && receive->consume) {
 		while (!(ret = ccci_scp_queue_pop(&receive->queue, generation, &event))) {
@@ -192,8 +196,12 @@ static void ccci_scp_receive_work(struct work_struct *work)
 		if (ret == -ENODATA)
 			ret = 0;
 	}
+	/* STOP can close admission while a mailbox response is draining. */
+	if (closing && !fault && (ret == -ESHUTDOWN || !ret))
+		goto out;
 	if (ret || !valid)
 		ccci_scp_receive_fault(receive, ret ? ret : -ESHUTDOWN);
+out:
 	mutex_unlock(receive->owner_lock);
 }
 
