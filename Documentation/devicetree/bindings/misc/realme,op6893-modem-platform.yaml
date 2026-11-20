@@ -93,6 +93,10 @@ properties:
     $ref: /schemas/types.yaml#/definitions/phandle
     description: Unique op6893 SCP runtime provider for a generation-scoped lease
 
+  mediatek,dpmaif:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: DPMAIF data path that must stop DMA before MD1 powers off
+
   mediatek,spm:
     $ref: /schemas/types.yaml#/definitions/phandle
     description: SPM syscon for resource request and domain readback
