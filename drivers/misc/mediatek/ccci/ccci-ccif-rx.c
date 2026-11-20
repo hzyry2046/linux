@@ -270,6 +270,22 @@ void ccci_ccif_rx_abort(struct ccci_ccif_rx *rx, int error)
 	ccif_rx_fault(rx, error < 0 ? error : -EPROTO);
 }
 
+int ccci_ccif_rx_rearm(struct ccci_ccif_rx *rx)
+{
+	unsigned long flags;
+	int ret = 0;
+
+	spin_lock_irqsave(&rx->gate, flags);
+	if (rx->active || rx->armed || rx->scheduled || rx->consume || rx->error) {
+		ret = -EBUSY;
+	} else {
+		rx->attempted = false;
+		rx->next_queue = 0;
+	}
+	spin_unlock_irqrestore(&rx->gate, flags);
+	return ret;
+}
+
 bool ccci_ccif_rx_started(struct ccci_ccif_rx *rx)
 {
 	unsigned long flags;

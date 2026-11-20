@@ -267,6 +267,27 @@ int ccci_ccif_control_error(struct ccci_ccif_controller *control)
 	return ret;
 }
 
+int ccci_ccif_control_rearm(struct ccci_ccif_controller *control)
+{
+	int ret = 0;
+
+	mutex_lock(&control->lock);
+	if (control->active || control->hs.error) {
+		ret = -EBUSY;
+	} else {
+		memset(&control->hs, 0, sizeof(control->hs));
+		memset(control->offers, 0, sizeof(control->offers));
+		control->port = NULL;
+		control->context = NULL;
+		control->fault = NULL;
+		control->fault_context = NULL;
+		control->fault_notified = false;
+		control->attempted = false;
+	}
+	mutex_unlock(&control->lock);
+	return ret;
+}
+
 ssize_t ccci_ccif_control_status(struct ccci_ccif_controller *control, char *buf)
 {
 	char query[CCCI_RUNTIME_FEATURES * 2 + 1], negotiated[CCCI_RUNTIME_FEATURES * 2 + 1];

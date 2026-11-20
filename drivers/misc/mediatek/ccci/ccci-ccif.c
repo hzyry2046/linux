@@ -42,6 +42,7 @@ struct ccci_ccif {
 	int error;
 	bool prepared;
 	bool attempted;
+	bool reset_at_stop;
 };
 
 static int ccif_bank_read(void *context, u32 offset, u32 *value)
@@ -367,7 +368,33 @@ int ccci_ccif_stop(struct ccci_ccif *ccif)
 	if (ret)
 		return ccif_fail(ccif, ret);
 	ccif->prepared = false;
+	ccif->reset_at_stop = true;
 	ccif->step = "stopped-irqs-masked";
+	return 0;
+}
+
+int ccci_ccif_rearm(struct ccci_ccif *ccif)
+{
+	int ret;
+
+	if (!ccif->reset_at_stop || ccif->prepared || ccci_ccif_faulted(ccif))
+		return -EBUSY;
+	ret = ccif_irqs_masked(ccif);
+	if (ret)
+		return ret;
+	ret = ccci_ccif_rx_rearm(ccif->rx);
+	if (!ret)
+		ret = ccci_ccif_control_rearm(ccif->control);
+	if (ret)
+		return ret;
+
+	mutex_lock(&ccif->tx_lock);
+	ccif->tx_sequence = 0;
+	memset(ccif->service_sequence, 0, sizeof(ccif->service_sequence));
+	mutex_unlock(&ccif->tx_lock);
+	ccif->attempted = false;
+	ccif->reset_at_stop = false;
+	ccif->step = "rearmed-irqs-masked";
 	return 0;
 }
 

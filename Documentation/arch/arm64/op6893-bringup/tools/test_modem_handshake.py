@@ -316,6 +316,8 @@ static void controller_tests(void){
  now_ms=1000000;run_work(&controller->timer.work);assert(controller->timer.work.pending && !ccci_ccif_control_error(controller));
  char status[4096];assert(ccci_ccif_control_status(controller,status)>0 && strstr(status,"hs2_seen=1"));
  assert(!control_fault_calls && accepted_hs1==1 && accepted_hs2==1);
+ assert(ccci_ccif_rx_rearm(rx)==-EBUSY && ccci_ccif_control_rearm(controller)==-EBUSY);
+
  assert(ccci_ccif_control_set_fault(controller,control_fault,&dev)==-EBUSY);
  /* Raw RX faults never call the control consumer; the timer must observe them. */
  ccci_ccif_rx_abort(rx,-EPIPE);assert(!control_fault_calls);
@@ -325,6 +327,19 @@ static void controller_tests(void){
  ccci_ccif_control_quiesce(controller);ccci_ccif_rx_stop(rx);assert(!rx->armed && !controller->active && !controller->timer.work.pending);
  assert(controller->hs.state==CCCI_HANDSHAKE_FAILED && controller->hs.hs2_seen);
  assert(ccci_ccif_control_start(controller,offers,ports,&dev)==-EIO && rt_zeros==1);
+ assert(ccci_ccif_rx_rearm(rx)==-EBUSY && ccci_ccif_control_rearm(controller)==-EBUSY);
+ control_setup();assert(!ccci_ccif_control_start(controller,offers,ports,&dev));
+ run_work(&rx->work);assert(rx->armed);
+ ccci_ccif_control_quiesce(controller);ccci_ccif_rx_stop(rx);
+ assert(!ccci_ccif_rx_rearm(rx) && !ccci_ccif_control_rearm(controller));
+ assert(!rx->attempted && !rx->next_queue && !controller->attempted &&
+        !controller->fault && !controller->port && controller->hs.state==CCCI_HANDSHAKE_IDLE);
+ assert(!ccci_ccif_control_set_fault(controller,control_fault,&dev));
+ assert(!ccci_ccif_control_start(controller,offers,ports,&dev));
+ hs1(page+0x100);memcpy(page+0x100+20,query,64);put_unaligned_le32(BIT(15),page+0x10);
+ run_work(&rx->work);
+ assert(rt_zeros==2 && accepted_hs1==1 && controller->hs.state==CCCI_HANDSHAKE_WAIT_HS2);
+
  control_setup();assert(!ccci_ccif_control_start(controller,offers,ports,&dev));run_work(&rx->work);
  now_ms=60100;run_work(&controller->timer.work);
  assert(ccci_ccif_control_error(controller)==-ETIMEDOUT && ccci_ccif_rx_error(rx)==-ETIMEDOUT);
