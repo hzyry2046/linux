@@ -34,6 +34,10 @@ struct ccci_scp_runtime {
 	struct ccci_scp_awake awake;
 	struct ccci_scp_client *client;
 	bool client_attempted;
+	bool clean_stop;
+	bool released;
+	u64 last_generation;
+	const char *step;
 	u32 gpr[2];
 	u32 logger_events;
 	u32 other_events;

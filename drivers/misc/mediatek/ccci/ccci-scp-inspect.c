@@ -10,13 +10,16 @@
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/unaligned.h>
+#include <linux/vmalloc.h>
 
 #include "ccci-scp-inspect.h"
 #include "ccci-scp-restore.h"
 
 struct ccci_scp_inspect {
+	struct device *dev;
 	void __iomem *core[2];
 	void __iomem *header;
+	void __iomem *tcm;
 	struct regmap *top;
 	/* Shared with the resource, receive and future reset owner. */
 	struct mutex *lock;
@@ -303,6 +306,101 @@ out:
 	memzero_explicit(snapshot, sizeof(snapshot));
 	return ret;
 }
+
+static int scp_restore_verify(struct device *dev, const char *region,
+			      void __iomem *target, const u8 *expected, size_t bytes)
+{
+	u8 buffer[128];
+	size_t offset = 0;
+	int ret = 0;
+
+	while (bytes) {
+		size_t chunk = min(bytes, sizeof(buffer));
+
+		memcpy_fromio(buffer, target, chunk);
+		if (expected ? memcmp(buffer, expected, chunk) :
+			       !!memchr_inv(buffer, 0, chunk)) {
+			dev_err(dev, "SCP restore %s readback mismatch near offset %#zx\n",
+				region, offset);
+			ret = -EIO;
+			break;
+		}
+		target += chunk;
+		if (expected)
+			expected += chunk;
+		bytes -= chunk;
+		offset += chunk;
+	}
+	memzero_explicit(buffer, sizeof(buffer));
+	return ret;
+}
+
+/* Only after clean runtime stop and reset readback, with the owner lock held. */
+int ccci_scp_inspect_restore(struct ccci_scp_inspect *inspect, u32 *base, u32 *size)
+{
+	const struct ccci_scp_restore_plan *plan = &inspect->saved_plan;
+	size_t loader_bytes = plan->loader_source.size, dram_bytes = plan->dram_source.size;
+	size_t header_offset = plan->header_target.base - plan->tcm_clear.base;
+	void __iomem *firmware, *dram, *tcm = inspect->tcm;
+	u8 *image, *backup;
+	int ret;
+
+	if (!inspect->restore_captured)
+		return -ENODATA;
+	ret = ccci_scp_inspect_check(inspect);
+	if (ret)
+		return ret;
+	image = kvmalloc(loader_bytes + dram_bytes, GFP_KERNEL);
+	if (!image)
+		return -ENOMEM;
+	backup = image + loader_bytes;
+	firmware = ioremap_wc(inspect->firmware.base, inspect->firmware.size);
+	if (!firmware) {
+		ret = -ENOMEM;
+		goto free;
+	}
+	dram = firmware + (plan->dram_target.base - inspect->firmware.base);
+	/* Restore exactly the bytes checked, even if a source changes later. */
+	memcpy_fromio(image, firmware + (plan->loader_source.base - inspect->firmware.base),
+		      loader_bytes);
+	memcpy_fromio(backup, firmware + (plan->dram_source.base - inspect->firmware.base),
+		      dram_bytes);
+	if (crc32_le(~0U, image, loader_bytes) != inspect->restore_crc[0] ||
+	    crc32_le(~0U, backup, dram_bytes) != inspect->restore_crc[1]) {
+		ret = -ESTALE;
+		goto unmap;
+	}
+	ret = ccci_scp_inspect_check(inspect);
+	if (ret)
+		goto unmap;
+	memcpy(image + header_offset, inspect->saved_header, plan->header_target.size);
+	memset_io(tcm, 0, plan->tcm_clear.size);
+	memcpy_toio(tcm, image, loader_bytes);
+	memset_io(dram, 0, plan->dram_clear.size);
+	memcpy_toio(dram, backup, dram_bytes);
+	/* Complete TCM and DRAM writes before verifying either target. */
+	mb();
+	ret = scp_restore_verify(inspect->dev, "loader", tcm, image, loader_bytes);
+	if (!ret)
+		ret = scp_restore_verify(inspect->dev, "TCM tail", tcm + loader_bytes, NULL,
+					  plan->tcm_clear.size - loader_bytes);
+	if (!ret)
+		ret = scp_restore_verify(inspect->dev, "DRAM image", dram, backup, dram_bytes);
+	if (!ret)
+		ret = scp_restore_verify(inspect->dev, "DRAM tail", dram + dram_bytes, NULL,
+					  plan->dram_clear.size - dram_bytes);
+	if (!ret)
+		ret = ccci_scp_inspect_check(inspect);
+	if (!ret) {
+		*base = inspect->share.base;
+		*size = inspect->share.size;
+	}
+unmap:
+	iounmap(firmware);
+free:
+	kvfree_sensitive(image, loader_bytes + dram_bytes);
+	return ret;
+}
 #endif
 
 static int ccci_scp_inspect_reservation(struct device_node *np, unsigned int index,
@@ -371,8 +469,10 @@ int ccci_scp_inspect_create(struct platform_device *pdev, void __iomem * const m
 	if (IS_ERR(inspect->top))
 		return PTR_ERR(inspect->top);
 	inspect->core[0] = maps[0];
+	inspect->dev = &pdev->dev;
 	inspect->core[1] = maps[1];
 	inspect->header = maps[2] + CCCI_SCP_REGION_OFFSET;
+	inspect->tcm = maps[2];
 	inspect->lock = lock;
 	inspect->check = check;
 	inspect->context = context;

@@ -99,6 +99,13 @@ int ccci_scp_mmio_discard(struct ccci_scp_mmio *mmio,
 	return check(context);
 }
 
+/* The runtime sends only APCCCI_0. Never clear SCP's receive bit from AP. */
+int ccci_scp_mmio_tx_idle(struct ccci_scp_mmio *mmio)
+{
+	mmio->register_reads++;
+	return readl(mmio->ports[1].base + 0x100) & BIT(0) ? -EBUSY : 0;
+}
+
 static int ccci_scp_mmio_check(struct ccci_scp_mmio_port *port)
 {
 	struct ccci_scp_mmio *mmio;

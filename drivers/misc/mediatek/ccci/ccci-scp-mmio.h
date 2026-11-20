@@ -36,6 +36,7 @@ void ccci_scp_mmio_invalidate(struct ccci_scp_mmio *mmio);
 int ccci_scp_mmio_discard(struct ccci_scp_mmio *mmio,
 			  const struct ccci_scp_layout *layout,
 			  int (*check)(void *context), void *context, u32 *discarded);
+int ccci_scp_mmio_tx_idle(struct ccci_scp_mmio *mmio);
 
 /* Owner holds READY, AP awake and serialization; bounded MD1 APCCCI messages. */
 int ccci_scp_mmio_apccci(struct ccci_scp_mmio *mmio,

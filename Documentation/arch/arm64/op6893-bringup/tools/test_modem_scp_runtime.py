@@ -10,6 +10,9 @@ initial = runpy.run_path(str(Path(__file__).with_name('test_modem_scp_initial.py
 block, compile_run = initial['block'], initial['compile_run']
 prefix = initial['prefix'].replace('struct ccci_scp_pin {u32 channel;};',
                                   'struct ccci_scp_pin {u32 channel;bool response;};')
+prefix = (prefix.replace('starts==1 && v==1', 'starts==released+1 && v==1')
+          .replace('lock->held && !starts', 'lock->held')
+          .replace('stops==1 && resets==1 && gen==1', 'gen==starts+1'))
 prefix += r'''
 typedef uint16_t u16;
 #include <stddef.h>
@@ -22,7 +25,8 @@ struct completion {bool done;};
 static int (*consume_fn)(void *,const struct ccci_scp_event *,int);
 static void *consume_ctx;
 static unsigned gets,put_calls,tx_calls;
-static unsigned restore_checks;
+static unsigned restore_checks, restores;
+static int tx_idle_error;
 static int restore_error;
 static int ccci_scp_inspect_restore_check(void *inspect, bool capture)
 {
@@ -31,6 +35,15 @@ static int ccci_scp_inspect_restore_check(void *inspect, bool capture)
  restore_checks++;
  return restore_error;
 }
+static int ccci_scp_mmio_tx_idle(void *mmio)
+{ (void)mmio; assert(lock->held); return tx_idle_error; }
+static int ccci_scp_inspect_restore(void *inspect, u32 *base, u32 *size)
+{
+ (void)inspect; assert(lock->held && released==1);
+ restores++; *base=0x8d000000; *size=0x320000;
+ return restore_error;
+}
+static void reinit_completion(struct completion *c){assert(lock->held);c->done=false;}
 static int get_error,put_error,tx_error;
 static bool inject_fault;
 static void complete_all(struct completion *c){assert(lock->held);c->done=true;}
@@ -40,7 +53,7 @@ static int ccci_scp_receive_consumer(void *r,int (*fn)(void *,const struct ccci_
 }
 static unsigned long wait_for_completion_timeout(struct completion *c,unsigned long ticks){
  assert(!lock->held && ticks==3000 && consume_fn);if(timeout)return 0;
- struct ccci_scp_event e={.generation=stale?2:1,.pin={.channel=21},.bytes=24};
+ struct ccci_scp_event e={.generation=stale?starts+1:starts,.pin={.channel=21},.bytes=24};
  mutex_lock(lock);consume_fn(consume_ctx,&e,0);
  e.pin.channel=channel;e.bytes=4;consume_fn(consume_ctx,&e,0);
  if(inject_fault)consume_fn(consume_ctx,NULL,-EIO);
@@ -54,6 +67,8 @@ static int ccci_scp_decode_state(const void *p,size_t n,u32 *state){
 awake_stubs = r'''
 int ccci_scp_awake_get(struct ccci_scp_awake *a){assert(lock->held);gets++;if(get_error){a->fault=true;return get_error;}a->users++;return 0;}
 int ccci_scp_awake_put(struct ccci_scp_awake *a){assert(lock->held && a->users);put_calls++;if(put_error){a->fault=true;return put_error;}a->users--;return 0;}
+int ccci_scp_awake_init(struct ccci_scp_awake *a,struct regmap *infra)
+{ *a=(struct ccci_scp_awake){.infra=infra};return 0; }
 void ccci_scp_awake_invalidate(struct ccci_scp_awake *a){assert(lock->held);a->fault=true;}
 static int ccci_scp_mmio_md_invalid(void *m,const void *l,u64 gen){(void)m;(void)l;assert(lock->held && gen==1 && gets>put_calls);tx_calls++;return tx_error;}
 '''
@@ -65,17 +80,24 @@ static void setup(struct ccci_scp_resource_owner *o){
  o->core_tcm[0]=cores[0];o->core_tcm[1]=cores[1];o->runtime.owner=o;
  u32 a=0x11223344,b=0x55667788;memcpy(cores[0]+0x44,&a,4);memcpy(cores[0]+0x48,&b,4);
  checks=fail_at=stops=resets=starts=events=writes=released=0;jiffies=0;
- gets=put_calls=tx_calls=restore_checks=0;get_error=put_error=tx_error=restore_error=0;
+ gets=put_calls=tx_calls=restore_checks=0;get_error=put_error=tx_error=restore_error=tx_idle_error=restores=0;
  start_error=pop_error=0;bad_ready=timeout=stale=inject_fault=false;channel=22;
 }
 static int start_with_check(struct ccci_scp_resource_owner *o, bool check)
 {
  mutex_lock(&o->runtime.control);
- int ret=ccci_scp_runtime_start(o,check);
+ int ret=ccci_scp_runtime_start(o,check,false);
  mutex_unlock(&o->runtime.control);
  return ret;
 }
 static int start(struct ccci_scp_resource_owner *o){return start_with_check(o,false);}
+static int restart(struct ccci_scp_resource_owner *o)
+{
+ mutex_lock(&o->runtime.control);
+ int ret=ccci_scp_runtime_start(o,false,true);
+ mutex_unlock(&o->runtime.control);
+ return ret;
+}
 static void stop(struct ccci_scp_resource_owner *o){mutex_lock(&o->runtime.control);assert(!ccci_scp_runtime_stop(o));mutex_unlock(&o->runtime.control);}
 static void failed(struct ccci_scp_resource_owner *o){
  assert(o->runtime.error && !o->runtime.active && !o->runtime.ready && !o->reset_generation && !o->boot_running && o->reset.latched);
@@ -95,7 +117,16 @@ int main(void){
  stop(&o);assert(!o.runtime.active && o.reset.latched && !o.reset_generation && !consume_fn);
  assert(!memcmp(cores[0]+0x44,"\x44\x33\x22\x11\x88\x77\x66\x55",8));
  old=writes;stop(&o);assert(writes==old);
- setup(&o);assert(!start_with_check(&o,true) && restore_checks==1);stop(&o);
+ setup(&o);assert(!start_with_check(&o,true) && restore_checks==1);
+ assert(restart(&o)==-EBUSY && !restores);
+ stop(&o);o.runtime.client_attempted=true;
+ assert(!restart(&o) && restores==1 && o.reset_generation==2 && o.runtime.ready);
+ assert(!o.runtime.client_attempted && o.boot_events==2 && released==2);
+ stop(&o);
+ setup(&o);assert(!start_with_check(&o,true));stop(&o);tx_idle_error=-EBUSY;
+ assert(restart(&o)==-EBUSY && !restores && released==1);failed(&o);
+ setup(&o);assert(!start_with_check(&o,true));stop(&o);timeout=true;
+ assert(restart(&o)==-ETIMEDOUT && restores==1 && released==2);failed(&o);
  setup(&o);restore_error=-ENODATA;
  assert(start_with_check(&o,true)==-ENODATA && restore_checks==1 && !released && !starts);
  failed(&o);

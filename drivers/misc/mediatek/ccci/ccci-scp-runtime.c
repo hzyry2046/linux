@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Explicit, one-generation SCP service using LK's initial image. */
+/* Explicit SCP service using LK's initial image and clean-stop recovery. */
 #include <linux/bitops.h>
 #include <linux/device.h>
 #include <linux/mfd/syscon.h>
@@ -29,6 +29,7 @@ static int ccci_scp_runtime_stop(struct ccci_scp_resource_owner *owner)
 {
 	struct ccci_scp_runtime *runtime = &owner->runtime;
 	struct ccci_scp_reset reset = {};
+	bool clean;
 	int ret;
 
 	lockdep_assert_held(&runtime->control);
@@ -39,7 +40,10 @@ static int ccci_scp_runtime_stop(struct ccci_scp_resource_owner *owner)
 		mutex_unlock(&owner->lock);
 		return runtime->cleanup_error;
 	}
+	clean = runtime->ready && !runtime->client && !runtime->error &&
+		!runtime->awake.users && !runtime->awake.fault;
 	runtime->ready = false;
+	runtime->released = false;
 	ccci_scp_runtime_notify(owner, 0, runtime->error ? runtime->error : -ESHUTDOWN);
 	ccci_scp_awake_invalidate(&runtime->awake);
 	owner->reset_generation = 0;
@@ -56,6 +60,7 @@ static int ccci_scp_runtime_stop(struct ccci_scp_resource_owner *owner)
 	memzero_explicit(runtime->gpr, sizeof(runtime->gpr));
 	runtime->saved = false;
 	runtime->cleanup_error = ret;
+	runtime->clean_stop = clean && !ret;
 	runtime->active = false;
 	owner->boot_running = false;
 	owner->reset = reset;
@@ -84,7 +89,7 @@ static int ccci_scp_runtime_consume(void *context, const struct ccci_scp_event *
 	int ret = error;
 
 	lockdep_assert_held(&owner->lock);
-	if (!ret && (!runtime->active || !event || !owner->reset_generation ||
+	if (!ret && (!runtime->active || !runtime->released || !event || !owner->reset_generation ||
 		     event->generation != owner->reset_generation))
 		ret = -ESTALE;
 	if (ret)
@@ -151,7 +156,7 @@ static int ccci_scp_runtime_awake(struct ccci_scp_resource_owner *owner, bool se
 	int ret, put_ret;
 
 	if (!runtime->active || !runtime->ready || runtime->error ||
-	    owner->reset_generation != 1)
+	    !owner->reset_generation)
 		return -ESHUTDOWN;
 	ret = ccci_scp_inspect_reset_check(owner->inspect);
 	if (ret)
@@ -159,7 +164,8 @@ static int ccci_scp_runtime_awake(struct ccci_scp_resource_owner *owner, bool se
 	ret = ccci_scp_awake_get(&runtime->awake);
 	if (ret)
 		return ret;
-	ret = send ? ccci_scp_mmio_md_invalid(owner->mmio, &owner->layout, 1) : 0;
+	ret = send ? ccci_scp_mmio_md_invalid(owner->mmio, &owner->layout,
+					      owner->reset_generation) : 0;
 	put_ret = ccci_scp_awake_put(&runtime->awake);
 	if (!put_ret)
 		runtime->awake_pairs++;
@@ -172,16 +178,28 @@ static int ccci_scp_runtime_awake(struct ccci_scp_resource_owner *owner, bool se
 	return ret;
 }
 
-static int ccci_scp_runtime_start(struct ccci_scp_resource_owner *owner, bool check_restore)
+static int ccci_scp_runtime_start(struct ccci_scp_resource_owner *owner,
+				  bool check_restore, bool restore)
 {
 	struct ccci_scp_runtime *runtime = &owner->runtime;
 	u32 base, size;
+	u64 generation;
 	int ret;
 
 	lockdep_assert_held(&runtime->control);
 	mutex_lock(&owner->lock);
-	if (runtime->closing || owner->reset_requested) {
+	if (runtime->closing || (!restore && owner->reset_requested)) {
 		ret = -EALREADY;
+		goto unlock;
+	}
+	if (restore && (!runtime->clean_stop || runtime->active || runtime->client ||
+			!owner->reset.latched || runtime->error || runtime->cleanup_error)) {
+		ret = -EBUSY;
+		goto unlock;
+	}
+	generation = runtime->last_generation + 1;
+	if (!generation) {
+		ret = -EOVERFLOW;
 		goto unlock;
 	}
 	ret = ccci_scp_inspect_reset_check(owner->inspect);
@@ -191,6 +209,18 @@ static int ccci_scp_runtime_start(struct ccci_scp_resource_owner *owner, bool ch
 	owner->boot_requested = true;
 	owner->boot_running = true;
 	runtime->active = true;
+	runtime->clean_stop = false;
+	runtime->last_generation = generation;
+	runtime->step = "receive-stop";
+	reinit_completion(&runtime->ready_event);
+	owner->boot_events = 0;
+	owner->boot_ready_channel = 0;
+	runtime->logger_events = 0;
+	runtime->other_events = 0;
+	runtime->apccci_events = 0;
+	runtime->apccci_state = 0;
+	runtime->awake_pairs = 0;
+	runtime->tx_completed = 0;
 	mutex_unlock(&owner->lock);
 
 	ccci_scp_receive_stop(owner->receive);
@@ -198,6 +228,23 @@ static int ccci_scp_runtime_start(struct ccci_scp_resource_owner *owner, bool ch
 	if (ret)
 		goto fail;
 	mutex_lock(&owner->lock);
+	if (restore) {
+		runtime->step = "reset-readback";
+		ret = ccci_scp_runtime_asserted(owner);
+		if (!ret) {
+			runtime->step = "tx-idle";
+			ret = ccci_scp_mmio_tx_idle(owner->mmio);
+		}
+		if (!ret) {
+			runtime->step = "restore-memory";
+			ret = ccci_scp_inspect_restore(owner->inspect, &base, &size);
+		}
+		if (!ret)
+			ret = ccci_scp_awake_init(&runtime->awake, runtime->awake.infra);
+		if (ret)
+			goto unlock_fail;
+		goto discard;
+	}
 	ret = ccci_scp_reset_assert(&owner->reset, owner->core_tcm,
 				    ccci_scp_inspect_reset_check, owner->inspect);
 	ccci_scp_inspect_record_reset(owner->inspect, owner->reset.writes);
@@ -213,17 +260,22 @@ static int ccci_scp_runtime_start(struct ccci_scp_resource_owner *owner, bool ch
 		if (ret)
 			goto unlock_fail;
 	}
+discard:
+	runtime->step = "discard";
 	ret = ccci_scp_mmio_discard(owner->mmio, &owner->layout,
 				    ccci_scp_runtime_asserted, owner, &owner->boot_discarded);
 	if (ret)
 		goto unlock_fail;
-	owner->reset_generation = 1;
+	runtime->client_attempted = false;
+	owner->reset_generation = generation;
+	runtime->step = "receive-start";
 	mutex_unlock(&owner->lock);
-	ret = ccci_scp_receive_start(owner->receive, &owner->layout, 1, 16);
+	ret = ccci_scp_receive_start(owner->receive, &owner->layout, generation, 16);
 	if (ret)
 		goto fail;
 	mutex_lock(&owner->lock);
-	ret = ccci_scp_runtime_asserted(owner);
+	runtime->step = "release";
+	ret = runtime->error ?: ccci_scp_runtime_asserted(owner);
 	if (ret)
 		goto unlock_fail;
 	runtime->gpr[0] = readl(owner->core_tcm[0] + 0x44);
@@ -237,6 +289,9 @@ static int ccci_scp_runtime_start(struct ccci_scp_resource_owner *owner, bool ch
 	ccci_scp_inspect_record_reset(owner->inspect, 3);
 	owner->reset.latched = false;
 	ret = (readl(owner->core_tcm[0] + 4) & 1) ? 0 : -EIO;
+	runtime->released = !ret;
+	if (!ret)
+		runtime->step = "wait-ready";
 	mutex_unlock(&owner->lock);
 	if (ret)
 		goto fail;
@@ -246,6 +301,8 @@ static int ccci_scp_runtime_start(struct ccci_scp_resource_owner *owner, bool ch
 	}
 	mutex_lock(&owner->lock);
 	ret = runtime->error ? runtime->error : ccci_scp_runtime_awake(owner, false);
+	if (!ret)
+		runtime->step = "ready";
 	mutex_unlock(&owner->lock);
 	if (!ret)
 		return 0;
@@ -273,8 +330,10 @@ static ssize_t runtime_store(struct device *dev, struct device_attribute *attr,
 	int ret;
 
 	mutex_lock(&runtime->control);
-	if (sysfs_streq(buf, "start") || sysfs_streq(buf, "start-check")) {
-		ret = ccci_scp_runtime_start(owner, sysfs_streq(buf, "start-check"));
+	if (sysfs_streq(buf, "start") || sysfs_streq(buf, "start-check") ||
+	    sysfs_streq(buf, "restart")) {
+		ret = ccci_scp_runtime_start(owner, sysfs_streq(buf, "start-check"),
+					     sysfs_streq(buf, "restart"));
 	} else if (sysfs_streq(buf, "stop")) {
 		ret = runtime->client ? -EBUSY : ccci_scp_runtime_stop(owner);
 	} else if (sysfs_streq(buf, "restore-check")) {
@@ -322,14 +381,15 @@ static ssize_t runtime_state_show(struct device *dev, struct device_attribute *a
 
 	mutex_lock(&owner->lock);
 	length = sysfs_emit(buf,
-			    "active=%u ready=%u generation=%llu events=%u logger=%u other=%u apccci_events=%u apccci_state=%u awake_pairs=%u awake_users=%u awake_fault=%u awake_cleanup_error=%d tx_completed=%u error=%d cleanup_error=%d modem_started=0\n",
+			    "active=%u ready=%u generation=%llu events=%u logger=%u other=%u apccci_events=%u apccci_state=%u awake_pairs=%u awake_users=%u awake_fault=%u awake_cleanup_error=%d tx_completed=%u error=%d cleanup_error=%d modem_started=0 step=%s last_generation=%llu\n",
 			    runtime->active, runtime->ready, owner->reset_generation,
 			    owner->boot_events,
 			    runtime->logger_events, runtime->other_events, runtime->apccci_events,
 			    runtime->apccci_state, runtime->awake_pairs, runtime->awake.users,
 			    runtime->awake.fault, runtime->awake.cleanup_error,
 			    runtime->tx_completed,
-			    runtime->error, runtime->cleanup_error);
+			    runtime->error, runtime->cleanup_error,
+			    runtime->step ?: "idle", runtime->last_generation);
 	mutex_unlock(&owner->lock);
 	return length;
 }
