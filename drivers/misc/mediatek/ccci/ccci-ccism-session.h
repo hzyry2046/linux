@@ -35,7 +35,7 @@ int ccci_ccism_session_md_event(struct ccci_ccism_session *session,
 				const struct ccci_ccif_event *event);
 /* Matches ccci_scp_state_fn; safe under the SCP provider's mutex. */
 void ccci_ccism_session_scp_notify(void *context, u64 generation, u32 state, int error);
-/* Preserves SCP admission and deadline handling while waiting for STOP. */
+/* Returns after same-generation STOP cleanup, or an error. May sleep. */
 int ccci_ccism_session_stop(struct ccci_ccism_session *session, bool md_stopped);
 void ccci_ccism_session_status(struct ccci_ccism_session *session,
 			       struct ccci_ccism_session_status *status);

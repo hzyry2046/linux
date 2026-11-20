@@ -404,7 +404,7 @@ def main(extra_test='', extra_units=()):
                                        'static inline void ktime_get_real_ts64(struct timespec64 *ts)\n'
                                        '{ ts->tv_sec = 1700000000LL; ts->tv_nsec = 0; }\n')
         for name in ('device.h', 'err.h', 'interrupt.h', 'io.h', 'slab.h', 'spinlock.h',
-                     'workqueue.h', 'kconfig.h', 'ioport.h', 'jiffies.h', 'ktime.h', 'mutex.h', 'sysfs.h'):
+                     'workqueue.h', 'completion.h', 'kconfig.h', 'ioport.h', 'jiffies.h', 'ktime.h', 'mutex.h', 'sysfs.h'):
             (inc/name).write_text('/* Models supplied by the harness. */\n')
         test = TEST if not extra_test else TEST.replace('int main(void){', 'static void handshake_tests(void){') + extra_test
         (root/'test.c').write_text(shim+baseline+GLUE+test)

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Sleepable CCISM sequencing separated from both MD and SCP receive locks. */
+#include <linux/completion.h>
 #include <linux/err.h>
 #include <linux/ktime.h>
 #include <linux/mutex.h>
@@ -34,6 +35,7 @@ struct ccci_ccism_session {
 	/* Protects only admission and bounded copies; never nests a mutex. */
 	spinlock_t queue_lock;
 	struct delayed_work work;
+	struct completion stop_done;
 	struct ccci_ccism core;
 	const struct ccci_ccism_ops *ops;
 	void *context;
@@ -182,16 +184,20 @@ static void ccism_session_work(struct work_struct *work)
 {
 	struct ccci_ccism_session *session =
 		container_of(to_delayed_work(work), struct ccci_ccism_session, work);
+	bool stopping;
 
 	mutex_lock(&session->lock);
 	if (session->quiesced) {
 		mutex_unlock(&session->lock);
 		return;
 	}
+	stopping = session->core.state == CCCI_CCISM_WAIT_STOP;
 	ccism_session_drain(session);
 	ccci_ccism_tick(&session->core, ccism_session_now());
 	ccism_session_report(session);
 	ccism_session_schedule(session);
+	if (stopping && session->core.state != CCCI_CCISM_WAIT_STOP)
+		complete_all(&session->stop_done);
 	mutex_unlock(&session->lock);
 }
 
@@ -210,6 +216,7 @@ ccci_ccism_session_create(struct device *dev, const struct ccci_ccism_ops *ops,
 	mutex_init(&session->lock);
 	spin_lock_init(&session->queue_lock);
 	INIT_DELAYED_WORK(&session->work, ccism_session_work);
+	init_completion(&session->stop_done);
 	session->ops = ops;
 	session->context = context;
 	session->plan = *plan;
@@ -321,23 +328,46 @@ static void ccism_session_discard(struct ccci_ccism_session *session)
 		ccci_ccism_fault(&session->core, error);
 }
 
-int ccci_ccism_session_stop(struct ccci_ccism_session *session, bool md_stopped)
+static int ccism_session_begin_stop(struct ccci_ccism_session *session)
 {
 	int ret;
 
-	if (!md_stopped)
-		return -EBUSY;
-	mutex_lock(&session->lock);
 	/* A repeat must not discard the queued reply to the first STOP. */
-	if (session->core.stop_attempted || session->core.state == CCCI_CCISM_STOPPED) {
-		ret = ccci_ccism_stop(&session->core, true, ccism_session_now());
-		mutex_unlock(&session->lock);
-		return ret;
+	if (session->core.stop_attempted) {
+		if (session->core.state == CCCI_CCISM_WAIT_STOP)
+			return 0;
+		return session->core.cleanup_error ?: session->core.error;
 	}
 	ccism_session_discard(session);
 	ret = ccci_ccism_stop(&session->core, true, ccism_session_now());
 	ccism_session_report(session);
 	ccism_session_schedule(session);
+	return ret;
+}
+
+int ccci_ccism_session_stop(struct ccci_ccism_session *session, bool md_stopped)
+{
+	bool waiting;
+	int ret;
+
+	if (!md_stopped)
+		return -EBUSY;
+	mutex_lock(&session->lock);
+	ret = session->core.state == CCCI_CCISM_STOPPED ? 0 :
+		ccism_session_begin_stop(session);
+	waiting = session->core.state == CCCI_CCISM_WAIT_STOP;
+	mutex_unlock(&session->lock);
+	if (ret || !waiting)
+		return ret;
+
+	/* Leave both session and SCP provider locks available to the receiver. */
+	if (!wait_for_completion_timeout(&session->stop_done,
+					 msecs_to_jiffies(CCCI_CCISM_STOP_MS)))
+		return -ETIMEDOUT;
+
+	mutex_lock(&session->lock);
+	if (session->core.state != CCCI_CCISM_STOPPED)
+		ret = session->core.cleanup_error ?: session->core.error;
 	mutex_unlock(&session->lock);
 	return ret;
 }

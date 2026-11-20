@@ -16,6 +16,11 @@ TEST = r'''
 #define kzalloc_obj(obj) calloc(1,sizeof(obj))
 #define kfree(p) free(p)
 #define min_t(type,a,b) ((type)(a)<(type)(b)?(type)(a):(type)(b))
+struct completion { bool done; };
+static void init_completion(struct completion *c) { c->done = false; }
+static void complete_all(struct completion *c) { c->done = true; }
+static void (*during_wait)(void);
+static unsigned long wait_for_completion_timeout(struct completion *c, unsigned long timeout);
 #include "ccci-ccism-session.c"
 static unsigned s_calls[6],s_faults;
 static bool s_provider,s_in_notify;
@@ -54,6 +59,25 @@ static void s_run(void){assert(sess->work.work.pending);run_work(&sess->work.wor
 static void s_state(u64 generation,u32 state,int error){
  s_in_notify=true;ccci_ccism_session_scp_notify(sess,generation,state,error);s_in_notify=false;
 }
+static unsigned long wait_for_completion_timeout(struct completion *c, unsigned long timeout)
+{
+ assert(!sess->lock.held && timeout==CCCI_CCISM_STOP_MS);
+ if (!c->done && during_wait)
+  during_wait();
+ return c->done;
+}
+static int s_begin_stop(void){
+ mutex_lock(&sess->lock);
+ int ret=ccism_session_begin_stop(sess);
+ mutex_unlock(&sess->lock);
+ return ret;
+}
+static void s_stop_reply(void){
+ s_state(61,CCCI_SCP_STATE_STOP,0);s_run();
+}
+static void s_stop_stale(void){
+ s_state(62,CCCI_SCP_STATE_STOP,0);s_run();
+}
 static void s_message(u32 message){
  u8 p[16]={0};put_unaligned_le32(message,p+4);put_unaligned_le32(2,p+8);
  struct ccci_ccif_event e={.type=CCCI_CCIF_EVENT_RING,.size=16,.data=p};
@@ -66,9 +90,10 @@ static void s_running(void){
  s_message(CCCI_CCISM_DONE);s_run();assert(sess->core.state==CCCI_CCISM_RUNNING && s_calls[3]==2);
 }
 static void s_finish(void){
- assert(!ccci_ccism_session_stop(sess,true));assert(sess->core.state==CCCI_CCISM_WAIT_STOP);
+ assert(!s_begin_stop());assert(sess->core.state==CCCI_CCISM_WAIT_STOP);
  assert(ccci_ccism_session_quiesce(sess)==-EBUSY && sess->scp_open);
- s_state(61,CCCI_SCP_STATE_STOP,0);s_run();assert(sess->core.state==CCCI_CCISM_STOPPED && s_calls[5]==1);
+ during_wait=s_stop_reply;assert(!ccci_ccism_session_stop(sess,true));during_wait=NULL;
+ assert(sess->core.state==CCCI_CCISM_STOPPED && s_calls[5]==1);
  assert(!ccci_ccism_session_quiesce(sess) && !sess->work.work.pending);
  assert(ccci_ccism_session_md_ready(sess)==-ESHUTDOWN || sess->queue_error);
  assert(!ccci_ccism_session_destroy(sess));
@@ -78,10 +103,14 @@ static void session_tests(void){
  s_running();ccci_ccism_session_status(sess,&st);assert(st.state==CCCI_CCISM_RUNNING && st.bridge_touched && st.generation==61);
  unsigned before=s_calls[3];assert(ccci_ccism_session_stop(sess,false)==-EBUSY && sess->md_open && sess->scp_open && s_calls[3]==before);
  assert(ccci_ccism_session_destroy(sess)==-EBUSY);s_finish();assert(!s_faults);
+ /* A normal stop waits for its asynchronous reply in a single call. */
+ s_running();during_wait=s_stop_reply;
+ assert(!ccci_ccism_session_stop(sess,true) && s_calls[3]==3 && s_calls[5]==1);
+ during_wait=NULL;assert(!ccci_ccism_session_destroy(sess));
  /* Repeated STOP preserves an already-enqueued response and its timer. */
- s_running();assert(!ccci_ccism_session_stop(sess,true));
+ s_running();assert(!s_begin_stop());
  s_state(61,CCCI_SCP_STATE_STOP,0);u64 deadline=sess->core.deadline_ms;
- assert(ccci_ccism_session_stop(sess,true)==-EALREADY);
+ assert(ccci_ccism_session_stop(sess,true)==-ETIMEDOUT);
  assert(sess->count==1 && sess->work.work.pending && sess->core.deadline_ms==deadline);
  s_run();assert(sess->core.state==CCCI_CCISM_STOPPED && s_calls[5]==1);
  assert(!ccci_ccism_session_stop(sess,true));assert(!ccci_ccism_session_destroy(sess));
@@ -104,15 +133,21 @@ static void session_tests(void){
  s_new();assert(!ccci_ccism_session_md_ready(sess));s_run();now_ms+=CCCI_CCISM_TIMEOUT_MS;s_run();
  assert(sess->core.error==-ETIMEDOUT && !sess->md_open && s_faults==1);s_finish();
  /* WAIT_STOP has a real bounded timeout; retained clocks forbid freeing. */
- s_running();assert(!ccci_ccism_session_stop(sess,true));now_ms+=CCCI_CCISM_STOP_MS;s_run();
+ s_running();assert(ccci_ccism_session_stop(sess,true)==-ETIMEDOUT);now_ms+=CCCI_CCISM_STOP_MS;s_run();
  assert(sess->core.cleanup_error==-ETIMEDOUT && ccci_ccism_session_destroy(sess)==-EBUSY);
- assert(ccci_ccism_session_stop(sess,true)==-EALREADY);
+ assert(ccci_ccism_session_stop(sess,true)==-ETIMEDOUT && s_calls[3]==3);
  /* Test-only release after asserting the production refusal above. */
+ sess->core.bridge_touched=false;assert(!ccci_ccism_session_destroy(sess));
+ /* The synchronous caller must see a stale reply's cleanup error. */
+ s_running();during_wait=s_stop_stale;
+ assert(ccci_ccism_session_stop(sess,true)==-ESTALE && !s_calls[5]);
+ during_wait=NULL;assert(ccci_ccism_session_stop(sess,true)==-ESTALE && s_calls[3]==3);
+ assert(ccci_ccism_session_destroy(sess)==-EBUSY);
  sess->core.bridge_touched=false;assert(!ccci_ccism_session_destroy(sess));
  /* Stop cancels already-queued forward traffic without powering a bridge. */
  s_new();assert(!ccci_ccism_session_md_ready(sess));assert(!ccci_ccism_session_stop(sess,true));
  assert(sess->core.state==CCCI_CCISM_STOPPED && !s_calls[0]);assert(!ccci_ccism_session_destroy(sess));
- s_running();s_state(61,0,-EIO);assert(!ccci_ccism_session_stop(sess,true));
+ s_running();s_state(61,0,-EIO);assert(!s_begin_stop());
  assert(sess->core.error==-EIO && s_faults==1);s_state(61,CCCI_SCP_STATE_STOP,0);s_run();
  assert(sess->core.state==CCCI_CCISM_STOPPED);assert(!ccci_ccism_session_destroy(sess));
  /* Quiesce cancels armed work, closes all ingress, and cannot be rearmed. */
