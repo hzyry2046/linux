@@ -317,11 +317,16 @@ static int scp_restore_verify(struct device *dev, const char *region,
 	while (bytes) {
 		size_t chunk = min(bytes, sizeof(buffer));
 
+		size_t bad;
+
 		memcpy_fromio(buffer, target, chunk);
-		if (expected ? memcmp(buffer, expected, chunk) :
-			       !!memchr_inv(buffer, 0, chunk)) {
-			dev_err(dev, "SCP restore %s readback mismatch near offset %#zx\n",
-				region, offset);
+		for (bad = 0; bad < chunk; bad++)
+			if (buffer[bad] != (expected ? expected[bad] : 0))
+				break;
+		if (bad < chunk) {
+			dev_err(dev, "SCP restore %s mismatch at %#zx (sample_zero=%u sample_ff=%u)\n",
+				region, offset + bad, !memchr_inv(buffer, 0, chunk),
+				!memchr_inv(buffer, 0xff, chunk));
 			ret = -EIO;
 			break;
 		}
@@ -376,19 +381,25 @@ int ccci_scp_inspect_restore(struct ccci_scp_inspect *inspect, u32 *base, u32 *s
 	memcpy(image + header_offset, inspect->saved_header, plan->header_target.size);
 	memset_io(tcm, 0, plan->tcm_clear.size);
 	memcpy_toio(tcm, image, loader_bytes);
-	memset_io(dram, 0, plan->dram_clear.size);
-	memcpy_toio(dram, backup, dram_bytes);
-	/* Complete TCM and DRAM writes before verifying either target. */
+	/* Finish TCM stores and prove the loader before changing live DRAM. */
 	mb();
-	ret = scp_restore_verify(inspect->dev, "loader", tcm, image, loader_bytes);
+	ret = scp_restore_verify(inspect->dev, "TCM loader", tcm, image, loader_bytes);
 	if (!ret)
 		ret = scp_restore_verify(inspect->dev, "TCM tail", tcm + loader_bytes, NULL,
 					  plan->tcm_clear.size - loader_bytes);
-	if (!ret)
-		ret = scp_restore_verify(inspect->dev, "DRAM image", dram, backup, dram_bytes);
+	if (ret)
+		goto unmap;
+	memset_io(dram, 0, plan->dram_clear.size);
+	memcpy_toio(dram, backup, dram_bytes);
+	/* Complete DRAM stores before readback, including the TCM recheck. */
+	mb();
+	ret = scp_restore_verify(inspect->dev, "DRAM image", dram, backup, dram_bytes);
 	if (!ret)
 		ret = scp_restore_verify(inspect->dev, "DRAM tail", dram + dram_bytes, NULL,
 					  plan->dram_clear.size - dram_bytes);
+	if (!ret)
+		ret = scp_restore_verify(inspect->dev, "TCM loader after DRAM", tcm, image,
+					  loader_bytes);
 	if (!ret)
 		ret = ccci_scp_inspect_check(inspect);
 	if (!ret) {
