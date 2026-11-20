@@ -17,6 +17,8 @@
 #define CCCI_SCP_MMIO_PAGE_BYTES	0x1000
 #define CCCI_SCP_MMIO_COMPLETE	0x94
 #define CCCI_SCP_MMIO_PENDING	0x10c
+#define CCCI_SCP_SLEEP_TX	5
+#define CCCI_SCP_SLEEP_IRQ	2
 
 struct ccci_scp_mmio_port {
 	struct ccci_scp_mmio *owner;
@@ -99,11 +101,12 @@ int ccci_scp_mmio_discard(struct ccci_scp_mmio *mmio,
 	return check(context);
 }
 
-/* The runtime sends only APCCCI_0. Never clear SCP's receive bit from AP. */
+/* Never clear SCP's receive bits from AP. */
 int ccci_scp_mmio_tx_idle(struct ccci_scp_mmio *mmio)
 {
 	mmio->register_reads++;
-	return readl(mmio->ports[1].base + 0x100) & BIT(0) ? -EBUSY : 0;
+	return readl(mmio->ports[1].base + 0x100) &
+	       (BIT(0) | BIT(CCCI_SCP_SLEEP_IRQ)) ? -EBUSY : 0;
 }
 
 static int ccci_scp_mmio_check(struct ccci_scp_mmio_port *port)
@@ -122,13 +125,45 @@ static int ccci_scp_mmio_check(struct ccci_scp_mmio_port *port)
 	return ret;
 }
 
+static int ccci_scp_mmio_send_pair(struct ccci_scp_mmio_port *port, u32 offset,
+				    u32 irq, u32 first, u32 second)
+{
+	struct ccci_scp_mmio *mmio = port->owner;
+	u32 pending, i, mask = BIT(irq);
+	int ret;
+
+	ret = ccci_scp_mmio_check(port);
+	if (ret)
+		return ret;
+	/* Vendor reads the SET alias itself; there is no separate status page. */
+	pending = readl(port->base + 0x100);
+	mmio->register_reads++;
+	if (pending & mask)
+		return -EBUSY;
+	writel(first, port->base + offset * sizeof(u32));
+	writel(second, port->base + (offset + 1) * sizeof(u32));
+	/* Publish the complete two-word message before notifying SCP. */
+	mb();
+	writel(mask, port->base + 0x100);
+	/* Complete notification before sampling its consumption. */
+	mb();
+	mmio->register_writes += 3;
+	for (i = 0; i < 100; i++) {
+		pending = readl(port->base + 0x100);
+		mmio->register_reads++;
+		if (!(pending & mask))
+			return ccci_scp_mmio_check(port);
+		usleep_range(1000, 1200);
+	}
+	/* Uncertain consumption: never retry or clear SCP's receive bit from AP. */
+	return -ETIMEDOUT;
+}
+
 int ccci_scp_mmio_apccci(struct ccci_scp_mmio *mmio,
 			 const struct ccci_scp_layout *layout, u64 generation, u16 op, u32 data)
 {
 	const struct ccci_scp_pin *tx, *rx;
-	struct ccci_scp_mmio_port *port;
 	u8 message[8];
-	u32 pending, i;
 	int ret;
 
 	if (!mmio || !generation || generation != mmio->generation)
@@ -136,39 +171,37 @@ int ccci_scp_mmio_apccci(struct ccci_scp_mmio *mmio,
 	ret = ccci_scp_apccci_pins(layout, &tx, &rx);
 	if (ret)
 		return ret;
-	/* Exact same-board APCCCI_0 geometry, not a general raw TX interface. */
 	if (tx->mbox != 1 || tx->offset || tx->irq || tx->words != 2)
 		return -EPROTO;
-	port = &mmio->ports[1];
 	ret = ccci_scp_encode(message, sizeof(message), 2, op, data);
 	if (ret != sizeof(message))
 		return ret < 0 ? ret : -EPROTO;
-	ret = ccci_scp_mmio_check(port);
-	if (ret)
-		return ret;
-	/* Vendor has no separate send-status resource: read the SET alias itself. */
-	pending = readl(port->base + 0x100);
-	mmio->register_reads++;
-	if (pending & 1)
-		return -EBUSY;
-	writel(get_unaligned_le32(message), port->base);
-	writel(get_unaligned_le32(message + 4), port->base + 4);
-	/* Publish the complete two-word message before notifying SCP. */
-	mb();
-	writel(1, port->base + 0x100);
-	/* Complete notification before sampling its consumption. */
-	mb();
-	mmio->register_writes += 3;
+	ret = ccci_scp_mmio_send_pair(&mmio->ports[1], 0, 0,
+				     get_unaligned_le32(message), get_unaligned_le32(message + 4));
 	memzero_explicit(message, sizeof(message));
-	for (i = 0; i < 100; i++) {
-		pending = readl(port->base + 0x100);
-		mmio->register_reads++;
-		if (!(pending & 1))
-			return ccci_scp_mmio_check(port);
-		usleep_range(1000, 1200);
+	return ret;
+}
+
+/* SCP_SLEEP_OFF on the same-board DVFS channel, with the unused word zeroed. */
+int ccci_scp_mmio_sleep_off(struct ccci_scp_mmio *mmio,
+			    const struct ccci_scp_layout *layout, u64 generation)
+{
+	const struct ccci_scp_pin *tx;
+
+	if (!mmio || !generation || generation != mmio->generation)
+		return -ESTALE;
+	if (!layout || layout->tx_count > CCCI_SCP_MAX_CHANNELS)
+		return -EINVAL;
+	for (u32 i = 0; i < layout->tx_count; i++) {
+		tx = &layout->tx[i];
+		if (tx->channel != CCCI_SCP_SLEEP_TX)
+			continue;
+		if (tx->mbox != 1 || tx->offset != 4 ||
+		    tx->irq != CCCI_SCP_SLEEP_IRQ || tx->words != 2)
+			return -EPROTO;
+		return ccci_scp_mmio_send_pair(&mmio->ports[1], tx->offset, tx->irq, 0, 0);
 	}
-	/* Uncertain consumption: never retry or clear SCP's receive bit from AP. */
-	return -ETIMEDOUT;
+	return -ENOENT;
 }
 
 int ccci_scp_mmio_md_invalid(struct ccci_scp_mmio *mmio,

@@ -41,6 +41,8 @@ int ccci_scp_mmio_tx_idle(struct ccci_scp_mmio *mmio);
 /* Owner holds READY, AP awake and serialization; bounded MD1 APCCCI messages. */
 int ccci_scp_mmio_apccci(struct ccci_scp_mmio *mmio,
 			 const struct ccci_scp_layout *layout, u64 generation, u16 op, u32 data);
+int ccci_scp_mmio_sleep_off(struct ccci_scp_mmio *mmio,
+			    const struct ccci_scp_layout *layout, u64 generation);
 /* Compatibility entry for the original one-shot MD-invalid test. */
 int ccci_scp_mmio_md_invalid(struct ccci_scp_mmio *mmio,
 			     const struct ccci_scp_layout *layout, u64 generation);

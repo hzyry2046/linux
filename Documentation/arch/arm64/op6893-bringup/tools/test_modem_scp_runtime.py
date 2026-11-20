@@ -70,6 +70,7 @@ int ccci_scp_awake_put(struct ccci_scp_awake *a){assert(lock->held && a->users);
 int ccci_scp_awake_init(struct ccci_scp_awake *a,struct regmap *infra)
 { *a=(struct ccci_scp_awake){.infra=infra};return 0; }
 void ccci_scp_awake_invalidate(struct ccci_scp_awake *a){assert(lock->held);a->fault=true;}
+static int ccci_scp_mmio_sleep_off(void *m,const void *l,u64 gen){return 0;}
 static int ccci_scp_mmio_md_invalid(void *m,const void *l,u64 gen){(void)m;(void)l;assert(lock->held && gen==1 && gets>put_calls);tx_calls++;return tx_error;}
 '''
 owner = initial['owner'].replace('int boot_error,boot_cleanup_error;',
@@ -109,7 +110,7 @@ int main(void){
  assert(o.runtime.logger_events==1 && o.boot_events==2 && gets==1 && put_calls==1 && o.runtime.awake_pairs==1);
  assert(!restore_checks);
  unsigned old=writes;assert(start(&o)==-EALREADY && writes==old);
- mutex_lock(lock);assert(!ccci_scp_runtime_awake(&o,true));mutex_unlock(lock);
+ mutex_lock(lock);assert(!ccci_scp_runtime_awake(&o,true,false));mutex_unlock(lock);
  assert(tx_calls==1 && o.runtime.tx_completed==1 && gets==2 && put_calls==2);
  struct ccci_scp_event e={.generation=1,.pin={.channel=7},.bytes=8,.data={3}};
  mutex_lock(lock);assert(!ccci_scp_runtime_consume(&o,&e,0));mutex_unlock(lock);
@@ -147,7 +148,7 @@ int main(void){
   ccci_scp_runtime_fault_work(&o.runtime.fault_work);failed(&o);
  }
  setup(&o);assert(!start(&o));tx_error=-ETIMEDOUT;
- mutex_lock(lock);assert(ccci_scp_runtime_awake(&o,true)==-ETIMEDOUT);mutex_unlock(lock);
+ mutex_lock(lock);assert(ccci_scp_runtime_awake(&o,true,false)==-ETIMEDOUT);mutex_unlock(lock);
  assert(put_calls==2 && !o.runtime.awake.users && !o.runtime.tx_completed);stop(&o);
  puts("PASS: actual runtime start/READY/awake/TX/stop; continuous logger/APCCCI consume, shared one-shot, GPR restore, timeout/stale/malformed/awake/RX faults, deferred cleanup and TX failure put");
 }
@@ -162,12 +163,14 @@ def test_tx():
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#define BIT(n) (1U << (n))
 typedef uint8_t u8;typedef uint16_t u16;typedef uint32_t u32;typedef uint64_t u64;
 #define CCCI_SCP_OP_MD_STATE 1
 #define CCCI_SCP_OP_SHM_INIT 2
 struct ccci_scp_pin {unsigned mbox,offset,irq,words;};
 struct ccci_scp_layout {struct ccci_scp_pin tx,rx;};
-struct ccci_scp_mmio_port {void *base;};
+struct ccci_scp_mmio;
+struct ccci_scp_mmio_port {void *base;struct ccci_scp_mmio *owner;};
 struct ccci_scp_mmio {u64 generation;struct ccci_scp_mmio_port ports[5];unsigned register_reads,register_writes;};
 static unsigned char page[4096];
 static unsigned writes,barriers,polls,checks,fail_check;
@@ -193,7 +196,7 @@ static void usleep_range(unsigned a,unsigned b){assert(a==1000 && b==1200);}
     tests = r"""
 int main(void){
  for(unsigned f=0;f<7;f++){
-  struct ccci_scp_mmio m={.generation=1};m.ports[1].base=page;
+  struct ccci_scp_mmio m={.generation=1};m.ports[1].base=page;m.ports[1].owner=&m;
   struct ccci_scp_layout l={.tx={.mbox=1,.words=2}};
   writes=barriers=polls=checks=fail_check=0;busy=retain=false;
   if(f==1)busy=true;
@@ -211,7 +214,7 @@ int main(void){
   if(f==6)assert(r==-ESTALE && !writes && !polls);
  }
  for(unsigned f=0;f<4;f++){
-  struct ccci_scp_mmio m={.generation=1};m.ports[1].base=page;
+  struct ccci_scp_mmio m={.generation=1};m.ports[1].base=page;m.ports[1].owner=&m;
   struct ccci_scp_layout l={.tx={.mbox=1,.words=2}};
   writes=barriers=polls=checks=fail_check=0;busy=retain=false;
   txop=f==0?1:f==3?4:2;txdata=f==0?2:f==2?3:0x80120000;
@@ -224,7 +227,7 @@ int main(void){
 """
     source = (D / 'ccci-scp-mmio.c').read_text()
     codec = block((D / 'ccci-scp-protocol.c').read_text(), 'int ccci_scp_encode(')
-    compile_run(prefix + codec + block(source, 'int ccci_scp_mmio_apccci(') + block(source, 'int ccci_scp_mmio_md_invalid(') + tests)
+    compile_run(prefix + codec + block(source, 'static int ccci_scp_mmio_send_pair(') + block(source, 'int ccci_scp_mmio_apccci(') + block(source, 'int ccci_scp_mmio_md_invalid(') + tests)
 
 
 def main():

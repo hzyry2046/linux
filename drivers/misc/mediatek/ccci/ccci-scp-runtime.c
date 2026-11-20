@@ -150,7 +150,8 @@ static int ccci_scp_runtime_asserted(void *context)
 }
 
 /* control and owner mutex held; hardware acknowledgment needs no AP RX work. */
-static int ccci_scp_runtime_awake(struct ccci_scp_resource_owner *owner, bool send)
+static int ccci_scp_runtime_awake(struct ccci_scp_resource_owner *owner,
+				   bool send, bool sleep_off)
 {
 	struct ccci_scp_runtime *runtime = &owner->runtime;
 	int ret, put_ret;
@@ -164,8 +165,12 @@ static int ccci_scp_runtime_awake(struct ccci_scp_resource_owner *owner, bool se
 	ret = ccci_scp_awake_get(&runtime->awake);
 	if (ret)
 		return ret;
-	ret = send ? ccci_scp_mmio_md_invalid(owner->mmio, &owner->layout,
-					      owner->reset_generation) : 0;
+	if (send)
+		ret = ccci_scp_mmio_md_invalid(owner->mmio, &owner->layout,
+					      owner->reset_generation);
+	else if (sleep_off)
+		ret = ccci_scp_mmio_sleep_off(owner->mmio, &owner->layout,
+					      owner->reset_generation);
 	put_ret = ccci_scp_awake_put(&runtime->awake);
 	if (!put_ret)
 		runtime->awake_pairs++;
@@ -300,7 +305,7 @@ discard:
 		goto fail;
 	}
 	mutex_lock(&owner->lock);
-	ret = runtime->error ? runtime->error : ccci_scp_runtime_awake(owner, false);
+	ret = runtime->error ? runtime->error : ccci_scp_runtime_awake(owner, false, false);
 	if (!ret)
 		runtime->step = "ready";
 	mutex_unlock(&owner->lock);
@@ -327,6 +332,7 @@ static ssize_t runtime_store(struct device *dev, struct device_attribute *attr,
 	struct ccci_scp_resource_owner *owner = dev_get_drvdata(dev);
 	struct ccci_scp_runtime *runtime = &owner->runtime;
 	bool send = sysfs_streq(buf, "md-invalid");
+	bool sleep_off = sysfs_streq(buf, "sleep-off");
 	int ret;
 
 	mutex_lock(&runtime->control);
@@ -347,15 +353,15 @@ static ssize_t runtime_store(struct device *dev, struct device_attribute *attr,
 				ret = ccci_scp_inspect_restore_check(owner->inspect, false);
 		}
 		mutex_unlock(&owner->lock);
-	} else if (send || sysfs_streq(buf, "awake")) {
+	} else if (send || sleep_off || sysfs_streq(buf, "awake")) {
 		mutex_lock(&owner->lock);
-		if (send && runtime->client) {
+		if ((send || sleep_off) && runtime->client) {
 			ret = -EBUSY;
 			mutex_unlock(&owner->lock);
 			goto unlock;
 		}
 		ret = send && runtime->tx_completed ? -EALREADY :
-			ccci_scp_runtime_awake(owner, send);
+			ccci_scp_runtime_awake(owner, send, sleep_off);
 		if (ret && ret != -EALREADY) {
 			runtime->error = ret;
 			owner->boot_error = ret;
