@@ -229,3 +229,29 @@ CCISM RUNNING，最后关电并关闭服务 FD。第三轮在 HS2 后保持 20 �
 为 0。此前的 `-EBADMSG` 未复现，诊断保留，不能据此认定已修复。
 蜂窝数据面跨 MD 重启待验。证据见
 `backup/boot-write-md-rearm-716809b113d6/{booted,two-md,third-md,ring}.log`。
+
+### 重建后的 AT、PDP 和 HS2 对照
+
+仍用 `716809b113d6`，在上述同一 AP 启动内继续到 MD 6714–6717、
+SCP 第 4–7 代。SCP 每轮都到 READY；前三轮也到 HS2 和 CCISM RUNNING。
+MD 6714/6715 的 basic MUX 都收到 DLCI 3 的 UA，但读取 SIM1 的
+`CFUN?` 超时；第二次在 HS2 后延迟 12 秒并重试，结果不变。
+MD 6716 的旧版 AT 通道能应答并读回 `CFUN: 1`，DPMAIF DL 环启动，
+随后采集脚本把 sysfs 的 `net` 目录误当作文件，未发出 PDP 激活命令。
+
+MD 6717 接受了 HS1，完成 3525 次 FS/RPC 服务发送，之后等不到 HS2，
+dispatch 和 CCIF 均记录 `-ETIMEDOUT`。为做对照，同镜像重启 AP，
+重新下发测试用 FS/RPC 数据。首轮 MD 6801 到达 HS2/CCISM RUNNING，
+旧版 AT 正常、射频打开、DL 环启动；立即激活 PDP 时 `CGACT` 失败，
+该次未先确认 packet attach。第二轮 MD 6802 再次在 HS1 后停在同样的
+3525 次发送，等不到 HS2，尚未进入 AT 测试。两次 HS2 超时均能正常
+关电并停止 SCP。各轮均未记录 CCIF ring `-EBADMSG`；部分成功到达 HS2
+的样本记录了服务 TX `-EBUSY`，该错误允许重试，与 ring 拒绝分开看。
+
+这轮仅确认重建后旧版 AT 和 DPMAIF DL 初始化可以工作，未验收 PDP 或
+双栈流量。优先比较 HS2 成功和失败两条路径在第 3525 次服务发送前后的
+请求类别及回复状态（只记录类别、计数和错误码），并确认 MD 是否继续
+发请求。随后在确认 packet attach 后再做 PDP 对照。未测试 IMS/VoLTE
+发信或拨出。日志见 `backup/boot-write-md-rearm-716809b113d6/` 下的
+`fourth-md-data.log` 至 `seventh-md-data.log`、`ap-control.log`、
+`ap-second-data.log` 和 `ap-second-final.log`。
