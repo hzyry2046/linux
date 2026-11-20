@@ -71,6 +71,7 @@
 #define CCCI_DPMAIF_AO_DL_PKTINFO_CON1	0x04
 #define CCCI_DPMAIF_AO_DL_PKTINFO_CON2	0x08
 #define CCCI_DPMAIF_AO_DL_RDY_CHK_THRES	0x0c
+#define CCCI_DPMAIF_AO_DL_BAT_STA0	0x10
 #define CCCI_DPMAIF_AO_DL_BAT_STA1	0x14
 #define CCCI_DPMAIF_AO_DL_BAT_STA2	0x18
 #define CCCI_DPMAIF_AO_DL_PIT_STA0	0x20
@@ -78,6 +79,7 @@
 #define CCCI_DPMAIF_AO_DL_PIT_STA2	0x28
 #define CCCI_DPMAIF_AO_DL_PIT_STA3	0x2c
 #define CCCI_DPMAIF_AO_DL_RDY_CHK_FRG_THRES	0x30
+#define CCCI_DPMAIF_AO_DL_FRGBAT_STA0	0x40
 #define CCCI_DPMAIF_AO_DL_FRGBAT_STA1	0x44
 #define CCCI_DPMAIF_AO_DL_FRGBAT_STA2	0x48
 #define CCCI_DPMAIF_AO_DL_PIT_STA4	0x54
@@ -352,6 +354,7 @@ struct ccci_dpmaif;
 struct ccci_dpmaif *ccci_dpmaif_find(struct device *consumer);
 void ccci_dpmaif_allow_start(struct ccci_dpmaif *dpmaif);
 int ccci_dpmaif_quiesce(struct ccci_dpmaif *dpmaif);
+int ccci_dpmaif_reset_after_off(struct ccci_dpmaif *dpmaif);
 /* Pure formatter, no I/O: one line per sampled register plus the masks. */
 ssize_t ccci_dpmaif_format(const struct ccci_dpmaif_sample *sample, char *buf, size_t size);
 /* Same idea for the downlink counters and the retained packet head. */
@@ -360,6 +363,7 @@ ssize_t ccci_dpmaif_format_dl(const struct ccci_dpmaif_dl_state *dl, char *buf, 
 static inline struct ccci_dpmaif *ccci_dpmaif_find(struct device *consumer) { return NULL; }
 static inline void ccci_dpmaif_allow_start(struct ccci_dpmaif *dpmaif) { }
 static inline int ccci_dpmaif_quiesce(struct ccci_dpmaif *dpmaif) { return 0; }
+static inline int ccci_dpmaif_reset_after_off(struct ccci_dpmaif *dpmaif) { return 0; }
 
 static inline ssize_t
 ccci_dpmaif_format(const struct ccci_dpmaif_sample *sample, char *buf, size_t size)

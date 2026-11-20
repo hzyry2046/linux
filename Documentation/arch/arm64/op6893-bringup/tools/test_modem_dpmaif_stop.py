@@ -139,7 +139,7 @@ with tempfile.TemporaryDirectory() as directory:
         code.index('static void dpmaif_put_device(')
     ] + code[
         code.index('int ccci_dpmaif_quiesce('):
-        code.index('static struct ccci_dpmaif *dpmaif_net_priv(')
+        code.index('static int dpmaif_reset_readback(')
     ] + test)
     binary = work / 'test'
     subprocess.run(['cc', '-I', str(driver), '-fsanitize=address,undefined',

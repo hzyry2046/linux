@@ -300,6 +300,8 @@ static int md_platform_off(struct ccci_md_platform *md)
 			ret = ccci_md_power_off(&md->power);
 		if (!ret)
 			ret = ccci_md_boot_stop(md->boot, true);
+		if (!ret)
+			ret = ccci_dpmaif_reset_after_off(md->dpmaif);
 		return ret;
 	}
 	ret = ccci_md_boot_offline(md->boot);
@@ -317,6 +319,8 @@ static int md_platform_off(struct ccci_md_platform *md)
 		ret = ccci_md_power_off(&md->power);
 	if (!ret)
 		ret = ccci_nvram_cache_stop(md->cache);
+	if (!ret && md->power.state == CCCI_MD_STOPPED)
+		ret = ccci_dpmaif_reset_after_off(md->dpmaif);
 	return ret;
 }
 

@@ -133,6 +133,7 @@ struct ccci_dpmaif {
 	bool net_tx;
 	bool net_rx;
 	bool power_blocked;
+	bool reset_pending;
 	u8 net_channel;
 	struct ccci_dpmaif_ul ul;
 	struct ccci_dpmaif_dl dl;
@@ -469,6 +470,9 @@ static int dpmaif_ul_start(struct ccci_dpmaif *dpmaif, u32 queue)
 	}
 	ul->queue = queue;
 	dpmaif_ul_reset_counters(dpmaif);
+	dpmaif->reset_pending = true;
+	writel(readl(dpmaif_infra_ao_mem(dpmaif)) | CCCI_DPMAIF_INFRA_PROT,
+	       dpmaif_infra_ao_mem(dpmaif));
 	dpmaif_ul_program(dpmaif);
 	ret = dpmaif_ul_irq_enable(dpmaif);
 	if (ret)
@@ -1155,6 +1159,7 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries, u32 pit_
 	for (i = 0; i < dl->frg.entries - 1; i++)
 		dpmaif_dl_publish(&dl->frg, i);
 	dl->fail_reg = 0;
+	dpmaif->reset_pending = true;
 	dpmaif_dl_hw_prepare(dpmaif);
 	dpmaif_dl_tune(dpmaif);
 	ret = dpmaif_dl_bat_program(dpmaif, &dl->bat, false);
@@ -1314,6 +1319,88 @@ int ccci_dpmaif_quiesce(struct ccci_dpmaif *dpmaif)
 	dl_ret = dpmaif_dl_stop(dpmaif);
 	mutex_unlock(&dpmaif->lock);
 	return ul_ret ?: dl_ret;
+}
+
+static int dpmaif_reset_readback(struct ccci_dpmaif *dpmaif)
+{
+	void __iomem *ao = dpmaif_ao_ul(dpmaif);
+	void __iomem *dl = dpmaif_ao_dl(dpmaif);
+
+	for (unsigned int q = 0; q < 4; q++) {
+		if (readl(ao + CCCI_DPMAIF_UL_QSAR(q)) ||
+		    (readl(ao + CCCI_DPMAIF_UL_STA0(q)) >> 16))
+			return -EIO;
+	}
+	if (readl(dl + CCCI_DPMAIF_AO_DL_PIT_STA0) ||
+	    readl(dl + CCCI_DPMAIF_AO_DL_BAT_STA0) ||
+	    readl(dl + CCCI_DPMAIF_AO_DL_FRGBAT_STA0) ||
+	    readl(dl + CCCI_DPMAIF_AO_DL_PIT_STA2) ||
+	    (readl(dl + CCCI_DPMAIF_AO_DL_PIT_STA3) & CCCI_DPMAIF_PIT_EN_MSK) ||
+	    (readl(dl + CCCI_DPMAIF_AO_DL_BAT_STA2) & CCCI_DPMAIF_BAT_SIZE_MSK) ||
+	    (readl(dl + CCCI_DPMAIF_AO_DL_FRGBAT_STA2) & CCCI_DPMAIF_BAT_SIZE_MSK))
+		return -EIO;
+	return 0;
+}
+
+static int dpmaif_reset(struct ccci_dpmaif *dpmaif, bool restore_prot)
+{
+	void __iomem *prot = dpmaif_infra_ao_mem(dpmaif);
+	u32 value;
+	int ret;
+
+	if (dpmaif->ul.drb || dpmaif->dl.pit || dpmaif->irq_refs)
+		return -EBUSY;
+	ret = clk_prepare_enable(dpmaif->clk_main);
+	if (ret)
+		return ret;
+	ret = clk_prepare_enable(dpmaif->clk_bus);
+	if (ret)
+		goto disable_main;
+
+	value = readl(prot);
+	writel(value & ~CCCI_DPMAIF_INFRA_PROT, prot);
+	if (readl(prot) & CCCI_DPMAIF_INFRA_PROT) {
+		ret = -EIO;
+		goto disable_bus;
+	}
+	ret = regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST0_AO, CCCI_DPMAIF_AO_RST_MASK);
+	if (!ret)
+		ret = regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST1_AO,
+				   CCCI_DPMAIF_AO_RST_MASK);
+	if (!ret)
+		ret = regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST0_PD,
+				   CCCI_DPMAIF_PD_RST_MASK);
+	if (!ret)
+		ret = regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST1_PD,
+				   CCCI_DPMAIF_PD_RST_MASK);
+	if (!ret)
+		ret = dpmaif_reset_readback(dpmaif);
+	if (!ret && restore_prot && (value & CCCI_DPMAIF_INFRA_PROT))
+		writel(readl(prot) | CCCI_DPMAIF_INFRA_PROT, prot);
+disable_bus:
+	clk_disable_unprepare(dpmaif->clk_bus);
+disable_main:
+	clk_disable_unprepare(dpmaif->clk_main);
+	return ret;
+}
+
+/* Caller holds the MD lifecycle lock and has read back MD1 OFF. */
+int ccci_dpmaif_reset_after_off(struct ccci_dpmaif *dpmaif)
+{
+	int ret = 0;
+
+	if (!dpmaif)
+		return 0;
+	mutex_lock(&dpmaif->lock);
+	if (!dpmaif->power_blocked)
+		ret = -EBUSY;
+	else if (dpmaif->reset_pending) {
+		ret = dpmaif_reset(dpmaif, false);
+		if (!ret)
+			dpmaif->reset_pending = false;
+	}
+	mutex_unlock(&dpmaif->lock);
+	return ret;
 }
 
 static struct ccci_dpmaif *dpmaif_net_priv(struct net_device *net)
@@ -1971,39 +2058,12 @@ static ssize_t reset_store(struct device *dev, struct device_attribute *attr,
 			   const char *buf, size_t count)
 {
 	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
-	u32 value;
 	int ret;
 
 	mutex_lock(&dpmaif->lock);
-	if (dpmaif->power_blocked) {
-		ret = -ESHUTDOWN;
-		goto out;
-	}
-	if (dpmaif->ul.drb || dpmaif->dl.pit) {
-		ret = -EBUSY;
-		goto out;
-	}
-	ret = clk_prepare_enable(dpmaif->clk_main);
-	if (ret)
-		goto out;
-	ret = clk_prepare_enable(dpmaif->clk_bus);
-	if (ret) {
-		clk_disable_unprepare(dpmaif->clk_main);
-		goto out;
-	}
-	value = readl(dpmaif_infra_ao_mem(dpmaif));
-	writel(value & ~CCCI_DPMAIF_INFRA_PROT, dpmaif_infra_ao_mem(dpmaif));
-	regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST0_AO, CCCI_DPMAIF_AO_RST_MASK);
-	regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST1_AO, CCCI_DPMAIF_AO_RST_MASK);
-	regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST0_PD, CCCI_DPMAIF_PD_RST_MASK);
-	regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST1_PD, CCCI_DPMAIF_PD_RST_MASK);
-	writel(value, dpmaif_infra_ao_mem(dpmaif));
-	clk_disable_unprepare(dpmaif->clk_bus);
-	clk_disable_unprepare(dpmaif->clk_main);
-	ret = count;
-out:
+	ret = dpmaif->power_blocked ? -ESHUTDOWN : dpmaif_reset(dpmaif, true);
 	mutex_unlock(&dpmaif->lock);
-	return ret;
+	return ret ?: count;
 }
 static DEVICE_ATTR_WO(reset);
 
