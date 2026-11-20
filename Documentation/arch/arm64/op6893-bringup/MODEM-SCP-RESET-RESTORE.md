@@ -187,7 +187,9 @@ CRC 只用于识别内容变化，没有导出 CRC、header 原文或固件字�
 GPR；HALT 等待成功，但 loader 起始处仍读回不一致。这两项实验未合入。
 停机本身的 CCIF BUSY 竞态通过推迟硬件 reset 到下一次 prepare 处理。
 
-下次应对比 SCP-only 与 MD 停机后的 TCM 访问条件，重点核查 4.19 的
+同一镜像在另一次 AP 启动内仅启动 SCP、确认 READY、STOP 并复核备份，
+未接管或启动 MD；重新启动 SCP 仍在同一位置失败（`scp-only.log`）。
+因此 MD 会话不是该故障的必要条件。下一步重点核查 4.19 的
 SCP SRAM power-down 状态、时钟和互连资源。保留源 CRC、目标读回及
 失败时不 release 的检查。证据见构建目录下
 `backup/boot-write-md-rearm-v2/` 与 `backup/boot-write-md-rearm-178ecc2ce674/`。
