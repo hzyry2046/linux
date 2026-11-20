@@ -74,6 +74,20 @@ RX 关闭、controller 故障、generation 变化或 SPM 单 bit 都不被接受
 当前电源、启动和 CCISM 路径的单次放行限制仍然有效。这次复测覆盖
 关电后重启 AP 的恢复；同一次 AP 启动中再次放行 MD 尚未验证。
 
+### CCISM 停机确认竞态修复
+
+2026-11-20，旧镜像 `57e6fb81cf4b` 再次复现了首次关电返回
+`-EBUSY`，稍后手动 `md_boot stop` 成功。修复后，session 在发送
+STOP 后等待 worker 处理同代确认，最多等待 3 秒；等待期间不持有
+session 或 SCP provider 的锁。超时或协议错误仍拒绝释放保留的资源，
+不会重发 STOP。聚焦测试覆盖延后确认、超时、跨代确认和重复停机。
+
+主线直写并重启到 `8603d61ce3cc` 后，新一代基带到达 HS2 和 CCISM
+RUNNING。启用 DL 后，先停 UL/DL，再执行一次 `md_power off`：
+写入成功，MD 电源和启动状态均为 stopped，CCISM/dispatcher 均为
+STOPPED，SCP 收包入口和桥接时钟引用均已关闭，内核 taint 为 0。
+无需再执行 `md_boot stop`。本轮未重跑蜂窝拨号，也未改变单次放行限制。
+
 ## 32k 事实来源（本轮核实）
 
 - 本机 A `eccci/ccci_rtc.c` 读取 nvmem cell `external-32k` 的首字节；

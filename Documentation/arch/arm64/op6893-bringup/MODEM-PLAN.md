@@ -1,7 +1,13 @@
 <!-- SPDX-License-Identifier: GPL-2.0-only -->
 # op6893 基带：内核对比与搭建计划
 
-更新：2026-11-17。**已真机实测**：SCP 常驻/READY1/awake；MD 继承 ON 接管与
+2026-11-20 接续：已实测 HS2、CCISM RUNNING、SIM2 LTE/NR 双栈和
+PDP 重连。最新镜像已验证一次 `md_power off` 完成 MD/CCISM 停机。
+接下来梳理同次 AP 启动内再次放行 MD 的条件：先确认 SCP lease、CCIF
+与 DPMAIF 的代际隔离和复位，再考虑解除各层单次门槛。
+参见 [停机实测](MODEM-BOOT-RELEASE.md#ccism-停机确认竞态修复)。
+
+历史记录：更新：2026-11-17。**已真机实测**：SCP 常驻/READY1/awake；MD 继承 ON 接管与
 冷上电；普通 CCIF prepare/stop/off；唯一一次 `(6,0)` MD CPU 放行；HS1 被接受、
 runtime 发布、endpoint arm；真实 NVRAM 下的完整 FS 扫描（859 请求 / 964 次
 发送 / `tx_error=0` / 105 个路径 / 84 次写回）；审计后的用户 RPC 属性应答。
