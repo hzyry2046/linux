@@ -28,6 +28,7 @@
 	/* Mutually exclusive with modem-handoff; explicit cold power cycle only. */
 	modem-platform@10209000 {
 		compatible = "realme,op6893-modem-platform";
+		mediatek,dpmaif = <&dpmaif>;
 		reg = <0 0x10209000 0 0x1000>, <0 0x1020a000 0 0x1000>,
 		      <0 0x1023c000 0 0x1000>, <0 0x1023d000 0 0x1000>;
 		reg-names = "ccif-ap", "ccif-md", "ccif2-ap", "ccif2-md";
