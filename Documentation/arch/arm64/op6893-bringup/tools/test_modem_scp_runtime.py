@@ -22,6 +22,15 @@ struct completion {bool done;};
 static int (*consume_fn)(void *,const struct ccci_scp_event *,int);
 static void *consume_ctx;
 static unsigned gets,put_calls,tx_calls;
+static unsigned restore_checks;
+static int restore_error;
+static int ccci_scp_inspect_restore_check(void *inspect, bool capture)
+{
+ (void)inspect;
+ assert(lock->held && capture && !released);
+ restore_checks++;
+ return restore_error;
+}
 static int get_error,put_error,tx_error;
 static bool inject_fault;
 static void complete_all(struct completion *c){assert(lock->held);c->done=true;}
@@ -56,10 +65,17 @@ static void setup(struct ccci_scp_resource_owner *o){
  o->core_tcm[0]=cores[0];o->core_tcm[1]=cores[1];o->runtime.owner=o;
  u32 a=0x11223344,b=0x55667788;memcpy(cores[0]+0x44,&a,4);memcpy(cores[0]+0x48,&b,4);
  checks=fail_at=stops=resets=starts=events=writes=released=0;jiffies=0;
- gets=put_calls=tx_calls=0;get_error=put_error=tx_error=0;
+ gets=put_calls=tx_calls=restore_checks=0;get_error=put_error=tx_error=restore_error=0;
  start_error=pop_error=0;bad_ready=timeout=stale=inject_fault=false;channel=22;
 }
-static int start(struct ccci_scp_resource_owner *o){mutex_lock(&o->runtime.control);int ret=ccci_scp_runtime_start(o);mutex_unlock(&o->runtime.control);return ret;}
+static int start_with_check(struct ccci_scp_resource_owner *o, bool check)
+{
+ mutex_lock(&o->runtime.control);
+ int ret=ccci_scp_runtime_start(o,check);
+ mutex_unlock(&o->runtime.control);
+ return ret;
+}
+static int start(struct ccci_scp_resource_owner *o){return start_with_check(o,false);}
 static void stop(struct ccci_scp_resource_owner *o){mutex_lock(&o->runtime.control);assert(!ccci_scp_runtime_stop(o));mutex_unlock(&o->runtime.control);}
 static void failed(struct ccci_scp_resource_owner *o){
  assert(o->runtime.error && !o->runtime.active && !o->runtime.ready && !o->reset_generation && !o->boot_running && o->reset.latched);
@@ -69,6 +85,7 @@ int main(void){
  struct ccci_scp_resource_owner o;
  setup(&o);assert(!start(&o));assert(o.runtime.active && o.runtime.ready && o.reset_generation==1);
  assert(o.runtime.logger_events==1 && o.boot_events==2 && gets==1 && put_calls==1 && o.runtime.awake_pairs==1);
+ assert(!restore_checks);
  unsigned old=writes;assert(start(&o)==-EALREADY && writes==old);
  mutex_lock(lock);assert(!ccci_scp_runtime_awake(&o,true));mutex_unlock(lock);
  assert(tx_calls==1 && o.runtime.tx_completed==1 && gets==2 && put_calls==2);
@@ -78,6 +95,10 @@ int main(void){
  stop(&o);assert(!o.runtime.active && o.reset.latched && !o.reset_generation && !consume_fn);
  assert(!memcmp(cores[0]+0x44,"\x44\x33\x22\x11\x88\x77\x66\x55",8));
  old=writes;stop(&o);assert(writes==old);
+ setup(&o);assert(!start_with_check(&o,true) && restore_checks==1);stop(&o);
+ setup(&o);restore_error=-ENODATA;
+ assert(start_with_check(&o,true)==-ENODATA && restore_checks==1 && !released && !starts);
+ failed(&o);
  for(unsigned f=0;f<6;f++){
   setup(&o);if(f==0)timeout=true;if(f==1)stale=true;if(f==2)bad_ready=true;
   if(f==3)get_error=-ETIMEDOUT;

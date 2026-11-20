@@ -24,5 +24,6 @@ int ccci_scp_inspect_reset_check(void *context);
 void ccci_scp_inspect_record_reset(struct ccci_scp_inspect *inspect, u32 writes);
 /* Asserted cores and valid LK header; returns this boot's trusted share span. */
 int ccci_scp_inspect_boot(struct ccci_scp_inspect *inspect, u32 *base, u32 *size);
+int ccci_scp_inspect_restore_check(struct ccci_scp_inspect *inspect, bool capture);
 
 #endif

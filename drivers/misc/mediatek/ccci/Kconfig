@@ -311,6 +311,7 @@ config OP6893_CCCI_SCP_INITIAL_BOOT
 config OP6893_CCCI_SCP_RUNTIME
 	bool "Allow explicit op6893 SCP runtime, AP awake and MD-invalid notification"
 	depends on OP6893_CCCI_SCP_INITIAL_BOOT && OP6893_CCCI_SCP_AWAKE
+	select CRC32
 	help
 	  Start one SCP generation with an IRQ-worker CPU event consumer, accept
 	  READY0/1 and test a paired AP awake lock/unlock. Keep SCP running until

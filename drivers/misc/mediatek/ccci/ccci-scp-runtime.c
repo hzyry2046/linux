@@ -172,7 +172,7 @@ static int ccci_scp_runtime_awake(struct ccci_scp_resource_owner *owner, bool se
 	return ret;
 }
 
-static int ccci_scp_runtime_start(struct ccci_scp_resource_owner *owner)
+static int ccci_scp_runtime_start(struct ccci_scp_resource_owner *owner, bool check_restore)
 {
 	struct ccci_scp_runtime *runtime = &owner->runtime;
 	u32 base, size;
@@ -206,6 +206,13 @@ static int ccci_scp_runtime_start(struct ccci_scp_resource_owner *owner)
 	ret = ccci_scp_inspect_boot(owner->inspect, &base, &size);
 	if (ret)
 		goto unlock_fail;
+	if (check_restore) {
+		ret = ccci_scp_runtime_asserted(owner);
+		if (!ret)
+			ret = ccci_scp_inspect_restore_check(owner->inspect, true);
+		if (ret)
+			goto unlock_fail;
+	}
 	ret = ccci_scp_mmio_discard(owner->mmio, &owner->layout,
 				    ccci_scp_runtime_asserted, owner, &owner->boot_discarded);
 	if (ret)
@@ -266,10 +273,21 @@ static ssize_t runtime_store(struct device *dev, struct device_attribute *attr,
 	int ret;
 
 	mutex_lock(&runtime->control);
-	if (sysfs_streq(buf, "start")) {
-		ret = ccci_scp_runtime_start(owner);
+	if (sysfs_streq(buf, "start") || sysfs_streq(buf, "start-check")) {
+		ret = ccci_scp_runtime_start(owner, sysfs_streq(buf, "start-check"));
 	} else if (sysfs_streq(buf, "stop")) {
 		ret = runtime->client ? -EBUSY : ccci_scp_runtime_stop(owner);
+	} else if (sysfs_streq(buf, "restore-check")) {
+		mutex_lock(&owner->lock);
+		if (runtime->client || runtime->active || !owner->reset.latched ||
+		    runtime->error || runtime->cleanup_error) {
+			ret = -EBUSY;
+		} else {
+			ret = ccci_scp_runtime_asserted(owner);
+			if (!ret)
+				ret = ccci_scp_inspect_restore_check(owner->inspect, false);
+		}
+		mutex_unlock(&owner->lock);
 	} else if (send || sysfs_streq(buf, "awake")) {
 		mutex_lock(&owner->lock);
 		if (send && runtime->client) {

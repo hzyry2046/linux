@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Explicit, bounded observations through the unique SCP resource owner. */
 #include <linux/bitops.h>
+#include <linux/crc32.h>
 #include <linux/mfd/syscon.h>
 #include <linux/mutex.h>
 #include <linux/of_reserved_mem.h>
@@ -23,6 +24,10 @@ struct ccci_scp_inspect {
 	void *context;
 	struct ccci_scp_span firmware;
 	struct ccci_scp_span share;
+	struct ccci_scp_restore_plan saved_plan;
+	u8 saved_header[CCCI_SCP_REGION_BYTES];
+	u32 restore_crc[2];
+	bool restore_captured;
 	u64 core_reads;
 	u64 core_writes;
 	u64 header_reads;
@@ -223,6 +228,82 @@ int ccci_scp_inspect_boot(struct ccci_scp_inspect *inspect, u32 *base, u32 *size
 	}
 	return ret;
 }
+
+#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_RUNTIME)
+static int scp_restore_source_crc(const struct ccci_scp_span *span, u32 *result)
+{
+	u8 buffer[128], any = 0, all = 0xff;
+	void __iomem *source;
+	u32 crc = ~0U;
+	size_t offset = 0;
+
+	source = ioremap_wc(span->base, span->size);
+	if (!source)
+		return -ENOMEM;
+	while (offset < span->size) {
+		size_t bytes = min_t(u64, sizeof(buffer), span->size - offset);
+
+		memcpy_fromio(buffer, source + offset, bytes);
+		crc = crc32_le(crc, buffer, bytes);
+		for (size_t i = 0; i < bytes; i++) {
+			any |= buffer[i];
+			all &= buffer[i];
+		}
+		offset += bytes;
+	}
+	memzero_explicit(buffer, sizeof(buffer));
+	iounmap(source);
+	if (!any || all == 0xff)
+		return -ENODATA;
+	*result = crc;
+	return 0;
+}
+
+/* Both cores held in reset by the runtime owner; never write firmware memory. */
+int ccci_scp_inspect_restore_check(struct ccci_scp_inspect *inspect, bool capture)
+{
+	const struct ccci_scp_span tcm = { .base = 0x10500000, .size = 0x180000 };
+	struct ccci_scp_restore_plan plan;
+	u8 snapshot[CCCI_SCP_REGION_BYTES];
+	u32 crc[2];
+	size_t length;
+	int ret;
+
+	if (!capture && !inspect->restore_captured)
+		return -ENODATA;
+	ret = ccci_scp_inspect_check(inspect);
+	if (ret)
+		return ret;
+	if (capture) {
+		ret = ccci_scp_inspect_copy(inspect, snapshot, &length);
+		if (!ret)
+			ret = ccci_scp_plan_restore(snapshot, length, 2, &inspect->firmware,
+						    &inspect->share, &tcm, &plan);
+		if (ret)
+			goto out;
+	} else {
+		plan = inspect->saved_plan;
+	}
+	ret = scp_restore_source_crc(&plan.loader_source, &crc[0]);
+	if (!ret)
+		ret = scp_restore_source_crc(&plan.dram_source, &crc[1]);
+	if (!ret)
+		ret = ccci_scp_inspect_check(inspect);
+	if (ret)
+		goto out;
+	if (capture) {
+		inspect->saved_plan = plan;
+		memcpy(inspect->saved_header, snapshot, sizeof(snapshot));
+		memcpy(inspect->restore_crc, crc, sizeof(crc));
+		inspect->restore_captured = true;
+	} else if (memcmp(inspect->restore_crc, crc, sizeof(crc))) {
+		ret = -ESTALE;
+	}
+out:
+	memzero_explicit(snapshot, sizeof(snapshot));
+	return ret;
+}
+#endif
 
 static int ccci_scp_inspect_reservation(struct device_node *np, unsigned int index,
 					struct ccci_scp_span *span)
