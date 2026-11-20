@@ -24,6 +24,8 @@ int ccci_ccism_bridge_port(void *context, const struct ccci_ccif_event *event);
 int ccci_ccism_bridge_stop(struct ccci_ccism_bridge *bridge, bool md_stopped);
 /* Parent lock held: gate CCIF reset/MD power-off, no I/O or fabricated STOP. */
 int ccci_ccism_bridge_offline(struct ccci_ccism_bridge *bridge);
+/* After offline has joined callbacks and released the SCP lease. */
+int ccci_ccism_bridge_rearm(struct ccci_ccism_bridge *bridge);
 ssize_t ccci_ccism_bridge_status(struct ccci_ccism_bridge *bridge, char *buf);
 #else
 static inline struct ccci_ccism_bridge *

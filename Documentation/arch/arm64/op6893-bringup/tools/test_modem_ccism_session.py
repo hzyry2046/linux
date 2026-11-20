@@ -15,9 +15,11 @@ base['main'].__globals__['GLUE'] = base['GLUE'].replace(
 TEST = r'''
 #define kzalloc_obj(obj) calloc(1,sizeof(obj))
 #define kfree(p) free(p)
+#define memzero_explicit(ptr, size) memset(ptr, 0, size)
 #define min_t(type,a,b) ((type)(a)<(type)(b)?(type)(a):(type)(b))
 struct completion { bool done; };
 static void init_completion(struct completion *c) { c->done = false; }
+static void reinit_completion(struct completion *c) { c->done = false; }
 static void complete_all(struct completion *c) { c->done = true; }
 static void (*during_wait)(void);
 static unsigned long wait_for_completion_timeout(struct completion *c, unsigned long timeout);
@@ -28,7 +30,7 @@ static int s_context;
 static struct ccci_ccism_session *sess;
 static bool s_fault_during_check;
 static int s_check(void *ctx,u64 gen){
- assert(!s_in_notify && ctx==&s_context && gen==61);
+ assert(!s_in_notify && ctx==&s_context && (gen==61 || gen==62));
  if(s_fault_during_check){s_fault_during_check=false;ccci_ccism_session_scp_notify(sess,gen,0,-EIO);}
  return s_provider?0:-ESHUTDOWN;
 }
@@ -150,6 +152,14 @@ static void session_tests(void){
  s_running();s_state(61,0,-EIO);assert(!s_begin_stop());
  assert(sess->core.error==-EIO && s_faults==1);s_state(61,CCCI_SCP_STATE_STOP,0);s_run();
  assert(sess->core.state==CCCI_CCISM_STOPPED);assert(!ccci_ccism_session_destroy(sess));
+ /* Rearm consumes clean STOP only and cannot reuse the old SCP epoch. */
+ s_running();assert(ccci_ccism_session_rearm(sess)==-EBUSY);
+ during_wait=s_stop_reply;assert(!ccci_ccism_session_stop(sess,true));during_wait=NULL;
+ assert(!ccci_ccism_session_quiesce(sess));assert(sess->stop_done.done);
+ assert(!ccci_ccism_session_rearm(sess) && !sess->stop_done.done);
+ assert(ccci_ccism_session_arm(sess,61)==-ESTALE);
+ assert(!ccci_ccism_session_arm(sess,62));
+ assert(!ccci_ccism_session_stop(sess,true));assert(!ccci_ccism_session_destroy(sess));
  /* Quiesce cancels armed work, closes all ingress, and cannot be rearmed. */
  s_new();assert(!ccci_ccism_session_quiesce(sess));assert(!sess->work.work.pending);
  s_provider=false;ccism_session_work(&sess->work.work);assert(!sess->core.error);

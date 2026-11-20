@@ -238,6 +238,10 @@ int ccci_ccism_session_arm(struct ccci_ccism_session *session, u64 generation)
 		ret = -EINVAL;
 		goto unlock;
 	}
+	if (generation <= session->generation) {
+		ret = -ESTALE;
+		goto unlock;
+	}
 	spin_lock_irqsave(&session->queue_lock, flags);
 	ret = session->queue_error;
 	spin_unlock_irqrestore(&session->queue_lock, flags);
@@ -415,6 +419,30 @@ int ccci_ccism_session_quiesce(struct ccci_ccism_session *session)
 	mutex_unlock(&session->lock);
 	if (!ret)
 		cancel_delayed_work_sync(&session->work);
+	return ret;
+}
+
+int ccci_ccism_session_rearm(struct ccci_ccism_session *session)
+{
+	unsigned long flags;
+	int ret = 0;
+
+	mutex_lock(&session->lock);
+	spin_lock_irqsave(&session->queue_lock, flags);
+	if (!session->quiesced || session->core.state != CCCI_CCISM_STOPPED ||
+	    session->core.error || session->core.cleanup_error || session->queue_error) {
+		ret = -EBUSY;
+	} else {
+		memset(&session->core, 0, sizeof(session->core));
+		memzero_explicit(session->queue, sizeof(session->queue));
+		session->head = 0;
+		session->quiesced = false;
+		session->armed = false;
+		session->fault_notified = false;
+		reinit_completion(&session->stop_done);
+	}
+	spin_unlock_irqrestore(&session->queue_lock, flags);
+	mutex_unlock(&session->lock);
 	return ret;
 }
 

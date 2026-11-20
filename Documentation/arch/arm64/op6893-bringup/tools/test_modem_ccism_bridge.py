@@ -159,6 +159,7 @@ void ccci_ccism_session_scp_notify(void *context,u64 generation,u32 state,int er
  assert(context==&session);scp_events++;notified_generation=generation;notified_state=state;notified_error=error;
 }
 int ccci_ccism_session_stop(struct ccci_ccism_session *s,bool stopped){assert(s==&session && stopped);stops++;return stop_error;}
+int ccci_ccism_session_rearm(struct ccci_ccism_session *s){assert(s==&session);return 0;}
 int ccci_ccism_session_quiesce(struct ccci_ccism_session *s){assert(s==&session);quiesces++;return quiesce_error;}
 void ccci_ccism_session_status(struct ccci_ccism_session *s,struct ccci_ccism_session_status *out){assert(s==&session);*out=s->snapshot;}
 int ccci_ccism_session_destroy(struct ccci_ccism_session *s){assert(s==&session);destroys++;return 0;}

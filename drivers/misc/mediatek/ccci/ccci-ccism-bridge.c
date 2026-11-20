@@ -213,6 +213,24 @@ out:
 	return ret;
 }
 
+int ccci_ccism_bridge_rearm(struct ccci_ccism_bridge *bridge)
+{
+	int ret;
+
+	mutex_lock(&bridge->lifecycle);
+	if (bridge->leased) {
+		ret = -EBUSY;
+	} else {
+		ret = ccci_ccism_session_rearm(bridge->session);
+		if (!ret) {
+			bridge->attempted = false;
+			bridge->smc_attempted = false;
+		}
+	}
+	mutex_unlock(&bridge->lifecycle);
+	return ret;
+}
+
 ssize_t ccci_ccism_bridge_status(struct ccci_ccism_bridge *bridge, char *buf)
 {
 	struct ccci_ccism_session_status status;
