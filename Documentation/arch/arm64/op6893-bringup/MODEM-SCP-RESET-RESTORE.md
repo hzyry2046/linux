@@ -221,3 +221,11 @@ rearm，未做第二代数据面或 IMS/VoLTE 发信和拨出测试。
 恢复只读。外部证据：
 `backup/boot-write-md-rearm-b34941e0b420/{booted,two-md}.log`，
 以及 `backup/boot-write-md-rearm-2281dbab1768/{scp-clock,after-md-failure}.log`。
+
+后续用带 CCIF 控制字诊断的 `716809b113d6` 在同一次 AP 启动内完成
+MD 6711、6712、6713 三轮（SCP 第 1、2、3 代），每轮均达到 HS2 和
+CCISM RUNNING，最后关电并关闭服务 FD。第三轮在 HS2 后保持 20 秒，
+完成 5879 次服务发送，最终 CCIF RX/TX 和服务错误均为零；设备 taint
+为 0。此前的 `-EBADMSG` 未复现，诊断保留，不能据此认定已修复。
+蜂窝数据面跨 MD 重启待验。证据见
+`backup/boot-write-md-rearm-716809b113d6/{booted,two-md,third-md,ring}.log`。
