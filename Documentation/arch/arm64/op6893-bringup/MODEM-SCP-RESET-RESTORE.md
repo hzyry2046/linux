@@ -304,3 +304,36 @@ rearm，日志见 `rf-off-ring-fault.log`。
 5120，busy bit 4 已清。已确认的射频关闭、分离及 MD sleep
 不足以避免此故障。最终 MD 与 SCP 均停止，taint 为 0。
 日志见同一备份目录的 `rf-confirm-{first,second,final}.log`。
+
+### 还原用户态 FS 副本的对照
+
+同一镜像、同一 AP 启动内，首轮 LTE 双栈通过并确认射频关闭和
+packet detach。确认 MD1 OFF、旧服务 FD 断开和 SCP 停止后，
+从与首轮相同的私有快照重建 `/tmp/op6893-fs`，聚合文件内容
+哈希相同；保留内核与固件的正常热启路径，未清共享 NVRAM cache。
+第二轮仍接受 HS1 后超时，服务发送计数 3525，FS TX 读写指针
+均为 5120，busy 为 0。上一轮写回用户态 FS 文件不是该样本
+超时的必要条件。MD、SCP 正常停止，taint 为 0。
+见同一备份目录的 `fs-reseed-{first,second,final}.log`。
+
+同板 6.6 的 `ap_md_mem.c` 在 `BOOT_WAITING_FOR_HS1` 执行
+共享内存清理；其表项没有设置 `SMF_CLR_RESET`，额外清理仍只针对
+CCB DHL 和 RAW DHL 前 1 KiB。另一个待核对的区别是 6.6 的
+`md_cd_topclkgen_on/off()`：板上保存的 ACK DTB 没有
+`mediatek,power-flow-config`，6.6 的默认值不跳过这两个操作；
+主线没有相应的 MD clock-mode 处理。这个差异尚未在实机上与
+HS2 超时建立关联。6.6 还接收独立 MD WDT IRQ，当前主线未接入。
+
+同一镜像再做纯握手对照，两轮均不打开 AT、不启用射频，也不启动
+DPMAIF。第一次首轮到 HS2 后约 705 ms 再现 FS TX queue 4 读指针
+未对齐，值为 `0xadc`，错误锁存后 rearm 被拒，设备正常关停。
+重做时，首轮和热启轮都到达 HS2/CCISM RUNNING，各保持 20 秒
+再关电；热启轮完成 5789 次服务发送，最终 CCIF RX/TX 错误为零，
+MD、SCP 均正常停止，taint 为 0。
+
+因此该镜像在纯握手条件下仍可热启成功，但这既不能证明前一代
+DPMAIF 使用是 HS2 超时的必要条件，也不能证明它足以触发超时。
+下一组对照可只在首轮启停 DL 环、不打开射频，并保持相同的
+HS2 后停留时间。读指针错误可独立出现于首轮、无需数据面。
+证据见同一备份目录的 `hs-only-final.log` 和
+`hs-only-repeat-{first,second,final}.log`。
