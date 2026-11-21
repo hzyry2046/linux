@@ -337,3 +337,13 @@ DPMAIF 使用是 HS2 超时的必要条件，也不能证明它足以触发超�
 HS2 后停留时间。读指针错误可独立出现于首轮、无需数据面。
 证据见同一备份目录的 `hs-only-final.log` 和
 `hs-only-repeat-{first,second,final}.log`。
+
+在纯握手复测成功的同一次 AP 启动内继续跑 MD 6803 和 6804。
+6803 到 HS2/CCISM RUNNING 后只启用 DPMAIF DL（BAT 8192、PIT
+16384），UL 未启动、网口保持 down，未打开 AT、射频或 PDP。
+保持 20 秒后正常关电，走常规 DPMAIF 停环及 AO/PD 复位。
+紧接着的 6804 在 HS1 后重现 `-ETIMEDOUT`：服务发送 3525 次，
+FS TX 读写指针均为 5120，busy 为 0，随后 MD 和 SCP 正常停止。
+在该对照样本中，无需注册或实际 IP 流量即可复现；下一步区分
+DL 自身的停环与关电后 AO/PD 复位的影响。证据见
+`dl-only-{6803,6804,final}.log`。
