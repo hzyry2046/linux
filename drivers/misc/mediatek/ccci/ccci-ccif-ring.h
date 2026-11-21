@@ -36,6 +36,9 @@ struct ccci_ccif_ring_ops {
 	int (*zero)(void *context, u32 offset, u32 size);
 	void (*fence)(void *context, bool publish);
 	void (*bad_control)(void *context, bool tx, u32 offset, u32 value, u32 expected);
+	void (*bad_tx_read)(void *context, u32 offset, u32 read, u32 write,
+			    u32 length, int sample_error, u32 sample, unsigned int retries);
+	void (*wait_tx_read)(void *context);
 };
 
 struct ccci_ccif_ring {

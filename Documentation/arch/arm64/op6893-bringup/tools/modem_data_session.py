@@ -59,6 +59,33 @@ def set_rat_profile(at, profile):
         raise AtError('configured RAT policy did not match the request')
 
 
+def enable_legacy_radio(exchange, stopping):
+    def enabled(lines):
+        modes = [match[1] for line in lines
+                 if (match := re.fullmatch(r'\+CFUN:\s*(\d+)(?:,\s*\d+)?', line))]
+        return modes == ['1'] and 'OK' in lines
+
+    if stopping():
+        return
+    if enabled(exchange('AT+CFUN?')):
+        print('RF mode 1 confirmed', flush=True)
+        return
+    for attempt in range(1, 5):
+        if stopping():
+            return
+        exchange('AT+CFUN=1')
+        if stopping():
+            return
+        # A missing or negative terminal response does not prove RF stayed off.
+        if enabled(exchange('AT+CFUN?')):
+            print(f'RF mode 1 confirmed after enable attempt {attempt}', flush=True)
+            return
+        if attempt < 4 and not stopping():
+            time.sleep(2)
+    if not stopping():
+        raise AtError('RF mode 1 could not be confirmed')
+
+
 def wait_for_rat(at, mode, stopping):
     allowed = {7} if mode == 'lte-only' else {7, 10, 11, 12, 13}
     deadline = time.monotonic() + 45
@@ -337,6 +364,8 @@ def main():
                         help='temporarily set the selected SIM radio access policy')
     parser.add_argument('--radio-status', action='store_true',
                         help='report serving RAT and band at session start and completion')
+    parser.add_argument('--enable-rf', action='store_true',
+                        help='enable RF in the default AT context and wait for attach; leaves RF enabled')
     parser.add_argument('--activation-mapping', action='store_true',
                         help='select the channel reported by a unique LHIF request during activation')
     parser.add_argument('--ipv4-only', action='store_true',
@@ -358,6 +387,8 @@ def main():
         parser.error('--policy-routing and --target are mutually exclusive')
     if args.rat and args.slot is None:
         parser.error('--rat requires --slot')
+    if args.enable_rf and args.slot is not None:
+        parser.error('--enable-rf requires the default AT context (omit --slot)')
     if args.restore_slot is not None and args.slot is None:
         parser.error('--restore-slot requires --slot')
     if args.ipv4_only and (not args.apn or any(x.version == 6 for x in args.target)):
@@ -432,8 +463,11 @@ def run_modem(fd, args, stopping):
         def write(data):
             return os.write(fd, data)
 
+        def exchange(text, timeout=8):
+            return command(reader, write, text, timeout)
+
         def at(text, timeout=8):
-            lines = command(reader, write, text, timeout)
+            lines = exchange(text, timeout)
             if 'OK' not in lines:
                 # Do not emit response payloads, which can contain carrier addresses.
                 raise AtError(f'{text.split("=")[0]} failed')
@@ -444,6 +478,9 @@ def run_modem(fd, args, stopping):
         with ExitStack() as stack:
             if args.slot is None:
                 establish(reader, write, 8)
+                if args.enable_rf:
+                    enable_legacy_radio(exchange, stopping)
+                    wait_for_rat(at, None, stopping)
             else:
                 at = select_data_slot(reader, write, args, stack)
             if args.rat and not stopping():

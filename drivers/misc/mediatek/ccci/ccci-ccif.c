@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /* Ordinary CCIF owner: bounded mappings, preparation and explicit receive lifecycle. */
+#include <linux/delay.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irq.h>
@@ -113,6 +114,23 @@ static void ccif_bank_bad_control(void *context, bool tx, u32 offset, u32 value,
 			   tx ? "TX" : "RX", offset, value, expected);
 }
 
+static void ccif_bank_bad_tx_read(void *context, u32 offset, u32 read, u32 write,
+				  u32 length, int sample_error, u32 sample, unsigned int retries)
+{
+	if (!sample_error && sample == (read + 4 == length ? 0 : read + 4)) {
+		pr_info_ratelimited("ccci: CCIF TX read recovered offset=%#x read=%#x reread=%#x retries=%u\n",
+				    offset, read, sample, retries);
+		return;
+	}
+	pr_err_ratelimited("ccci: invalid CCIF TX read offset=%#x read=%#x write=%#x length=%#x reread=%#x reread_error=%d retries=%u\n",
+			   offset, read, write, length, sample, sample_error, retries);
+}
+
+static void ccif_bank_wait_tx_read(void *context)
+{
+	udelay(10);
+}
+
 static const struct ccci_ccif_ring_ops ccif_ring_ops = {
 	.read32 = ccif_bank_read,
 	.write32 = ccif_bank_write,
@@ -121,6 +139,8 @@ static const struct ccci_ccif_ring_ops ccif_ring_ops = {
 	.zero = ccif_bank_zero,
 	.fence = ccif_bank_barrier,
 	.bad_control = ccif_bank_bad_control,
+	.bad_tx_read = ccif_bank_bad_tx_read,
+	.wait_tx_read = ccif_bank_wait_tx_read,
 };
 
 static int ccif_hw_write(void *context, u32 bank, u32 offset, u32 value)

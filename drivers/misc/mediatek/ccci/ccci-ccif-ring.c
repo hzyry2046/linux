@@ -11,6 +11,7 @@
 #define RING_OVERHEAD	40
 #define PACKET_HEADER	0xaabbaabb
 #define PACKET_FOOTER	0xccddeeff
+#define TX_READ_RETRIES	4
 
 /* KiB, including zero-sized slots. 6298 uses a different table. */
 static const u16 ccif_sizes[CCCI_CCIF_BANKS][2][CCCI_CCIF_QUEUES] = {
@@ -170,10 +171,36 @@ static int ring_control(struct ccci_ccif_ring *r, bool tx, u32 *read, u32 *write
 		return ret;
 	if (value != length)
 		return ring_bad_control(r, tx, control + 8, value, length);
-	if (*read >= length || (*read & 7))
-		return ring_bad_control(r, tx, control, *read, length);
 	if (*write >= length || (*write & 7))
 		return ring_bad_control(r, tx, control + 4, *write, length);
+	if (*read >= length || (*read & 7)) {
+		if (tx && *read < length && (*read & 7) == 4 &&
+		    *read - 4 != *write) {
+			unsigned int retries = 0;
+			u32 sample = 0;
+			u32 next = *read + 4;
+
+			/* Accept only the next slot boundary actually read from MD. */
+			if (next == length)
+				next = 0;
+			ret = ring_get(r, control, &sample);
+			/* A changing but unexpected value is not safe to retry. */
+			while (!ret && sample == *read && r->ops->wait_tx_read &&
+			       retries < TX_READ_RETRIES) {
+				r->ops->wait_tx_read(r->context);
+				retries++;
+				ret = ring_get(r, control, &sample);
+			}
+			if (r->ops->bad_tx_read)
+				r->ops->bad_tx_read(r->context, r->slot.offset + control,
+						    *read, *write, length, ret, sample, retries);
+			if (ret || sample != next)
+				return -EBADMSG;
+			*read = sample;
+		} else {
+			return ring_bad_control(r, tx, control, *read, length);
+		}
+	}
 	r->ops->fence(r->context, false);
 	return 0;
 }

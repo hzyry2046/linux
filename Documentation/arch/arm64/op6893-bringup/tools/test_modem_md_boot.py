@@ -29,6 +29,7 @@ TEST = r'''
 #define __CCCI_RTC32K_H
 #define __CCCI_MD_BOOT_H
 #define __CCCI_CCIF_H
+#define __CCCI_DPMAIF_H
 #define __CCCI_PORT_DISPATCH_H
 
 #define BIT(n) (1UL << (n))
@@ -56,6 +57,7 @@ struct ccci_ccif { int unused; };
 struct ccci_port_dispatch { int unused; };
 struct ccci_nvram_cache;
 struct ccci_md_boot;
+struct ccci_dpmaif { int error; };
 
 struct ccci_lk_region { u64 base, size; };
 static inline bool ccci_lk_contains(const struct ccci_lk_region *r, u64 base, u64 size)
@@ -108,6 +110,13 @@ static int nvmem_get_error, nvmem_read_error;
 static enum ccci_runtime_crystal expect_crystal;
 
 static void note(char c) { assert(logn + 1 < sizeof(order)); order[logn++] = c; order[logn] = 0; }
+
+static int ccci_dpmaif_release_with_dl(struct ccci_dpmaif *dpmaif,
+                                      int (*release)(void *), void *data)
+{
+	note('D');
+	return dpmaif->error ? dpmaif->error : release(data);
+}
 
 static void mutex_init(struct mutex *m) { m->held = false; }
 static void mutex_lock(struct mutex *m) { assert(!m->held); m->held = true; }
@@ -453,11 +462,11 @@ static void test_boot(void)
 	assert(ccci_md_boot_offline(f.boot) == -EBUSY);
 	assert(ccci_md_boot_prepare(f.boot, &f.layout, 0x1234, CCCI_RUNTIME_CRYSTAL_ABSENT) == -EALREADY);
 
-	assert(ccci_md_boot_release(f.boot) == 0);
+	assert(ccci_md_boot_release(f.boot, NULL) == 0);
 	assert(!strcmp(order, "CMRPS"));
 	assert(smc_calls == 1);
 	assert(smc_seen[1] == 6 && smc_seen[2] == 0);
-	assert(ccci_md_boot_release(f.boot) == -EALREADY);
+	assert(ccci_md_boot_release(f.boot, NULL) == -EALREADY);
 
 	/* Operator mask: frozen after the attempt, applied before publication. */
 	assert(ccci_md_boot_set_feature_mask(f.boot, BIT_ULL(0)) == -EBUSY);
@@ -487,12 +496,12 @@ static void test_boot(void)
 	assert(!strcmp(order, "CMRPSTab"));
 	deny_dispatch_rearm = 0;
 	assert(!ccci_md_boot_rearm(f.boot));
-	assert(ccci_md_boot_release(f.boot) == -EAGAIN);
+	assert(ccci_md_boot_release(f.boot, NULL) == -EAGAIN);
 	assert(ccci_md_boot_prepare(f.boot, &f.layout, 0x1234,
 				    CCCI_RUNTIME_CRYSTAL_ABSENT) == -ESTALE);
 	assert(ccci_md_boot_prepare(f.boot, &f.layout, 0x1235,
 				    CCCI_RUNTIME_CRYSTAL_ABSENT) == 0);
-	assert(!ccci_md_boot_release(f.boot));
+	assert(!ccci_md_boot_release(f.boot, NULL));
 	assert(smc_calls == 2);
 	assert(!ccci_md_boot_stop(f.boot, true));
 	assert(!strcmp(order, "CMRPSTababABCDRPST"));
@@ -513,7 +522,7 @@ static void test_boot(void)
 	assert(ccci_md_boot_prepare(f.boot, &f.layout, 0x1234, CCCI_RUNTIME_CRYSTAL_PRESENT) == -EIO);
 	assert(!strcmp(order, "C"));
 	assert(ccci_md_boot_prepare(f.boot, &f.layout, 0x1234, CCCI_RUNTIME_CRYSTAL_PRESENT) == -EIO);
-	assert(ccci_md_boot_release(f.boot) == -EAGAIN);
+	assert(ccci_md_boot_release(f.boot, NULL) == -EAGAIN);
 	assert(ccci_md_boot_stop(f.boot, true) == 0);
 	assert(!strcmp(order, "C"));
 	boot_free(&f);
@@ -522,7 +531,7 @@ static void test_boot(void)
 	fail_runtime = -ENODATA;
 	assert(ccci_md_boot_prepare(f.boot, &f.layout, 0x1234, CCCI_RUNTIME_CRYSTAL_PRESENT) == -ENODATA);
 	assert(!strcmp(order, "CMR"));
-	assert(ccci_md_boot_release(f.boot) == -EAGAIN);
+	assert(ccci_md_boot_release(f.boot, NULL) == -EAGAIN);
 	assert(ccci_md_boot_stop(f.boot, true) == 0);
 	assert(!strcmp(order, "CMR"));
 	boot_free(&f);
@@ -539,23 +548,55 @@ static void test_boot(void)
 	boot_init(&f, CCCI_RUNTIME_CRYSTAL_ABSENT);
 	smc_a0 = SMCCC_RET_NOT_SUPPORTED;
 	assert(ccci_md_boot_prepare(f.boot, &f.layout, 0x1234, CCCI_RUNTIME_CRYSTAL_ABSENT) == 0);
-	assert(ccci_md_boot_release(f.boot) == -EOPNOTSUPP);
+	assert(ccci_md_boot_release(f.boot, NULL) == -EOPNOTSUPP);
 	assert(ccci_md_boot_status(f.boot, buf) > 0 && strstr(buf, "state=failed"));
-	assert(ccci_md_boot_release(f.boot) == -EAGAIN);
+	assert(ccci_md_boot_release(f.boot, NULL) == -EAGAIN);
 	assert(ccci_md_boot_stop(f.boot, true) == 0);
 	boot_free(&f);
 
 	boot_init(&f, CCCI_RUNTIME_CRYSTAL_ABSENT);
 	smc_a0 = 5;
 	assert(ccci_md_boot_prepare(f.boot, &f.layout, 0x1234, CCCI_RUNTIME_CRYSTAL_ABSENT) == 0);
-	assert(ccci_md_boot_release(f.boot) == -EIO);
+	assert(ccci_md_boot_release(f.boot, NULL) == -EIO);
 	assert(ccci_md_boot_status(f.boot, buf) > 0 && strstr(buf, "boot_ret=5"));
 	assert(ccci_md_boot_stop(f.boot, true) == 0);
 	boot_free(&f);
 }
 
+static void test_release_with_dl(void)
+{
+	struct ccci_dpmaif dpmaif = { .error = -ETIMEDOUT };
+	struct boot_fixture f;
+	char buf[512];
+
+	boot_init(&f, CCCI_RUNTIME_CRYSTAL_ABSENT);
+	assert(ccci_md_boot_release(f.boot, &dpmaif) == -EAGAIN);
+	assert(!logn && !smc_calls);
+	assert(!ccci_md_boot_prepare(f.boot, &f.layout, 0x1234, CCCI_RUNTIME_CRYSTAL_ABSENT));
+	assert(ccci_md_boot_release(f.boot, &dpmaif) == -ETIMEDOUT);
+	assert(!strcmp(order, "CMRPD") && !smc_calls);
+	assert(ccci_md_boot_status(f.boot, buf) > 0 && strstr(buf, "released=0"));
+	assert(ccci_md_boot_release(f.boot, NULL) == -EAGAIN);
+	assert(ccci_md_boot_release(f.boot, &dpmaif) == -EAGAIN);
+	assert(!strcmp(order, "CMRPD") && !smc_calls);
+	assert(!ccci_md_boot_stop(f.boot, true));
+	assert(ccci_md_boot_rearm(f.boot) == -EBUSY);
+	boot_free(&f);
+
+	boot_init(&f, CCCI_RUNTIME_CRYSTAL_ABSENT);
+	assert(!ccci_md_boot_prepare(f.boot, &f.layout, 0x1235, CCCI_RUNTIME_CRYSTAL_ABSENT));
+	dpmaif.error = 0;
+	assert(!ccci_md_boot_release(f.boot, &dpmaif));
+	assert(!strcmp(order + logn - 4, "RPDS") && smc_calls == 1);
+	assert(ccci_md_boot_release(f.boot, &dpmaif) == -EALREADY);
+	assert(smc_calls == 1);
+	assert(!ccci_md_boot_stop(f.boot, true));
+	boot_free(&f);
+}
+
 int main(void)
 {
+	test_release_with_dl();
 	test_cache();
 	test_rtc32k();
 	test_boot();

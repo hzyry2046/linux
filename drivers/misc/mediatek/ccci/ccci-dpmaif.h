@@ -355,6 +355,10 @@ struct ccci_dpmaif *ccci_dpmaif_find(struct device *consumer);
 void ccci_dpmaif_allow_start(struct ccci_dpmaif *dpmaif);
 int ccci_dpmaif_quiesce(struct ccci_dpmaif *dpmaif);
 int ccci_dpmaif_reset_after_off(struct ccci_dpmaif *dpmaif);
+int ccci_dpmaif_release_with_dl(struct ccci_dpmaif *dpmaif,
+			       int (*release)(void *), void *data);
+int ccci_dpmaif_power_with_dl(struct ccci_dpmaif *dpmaif,
+			     int (*power_on)(void *), void *data);
 /* Pure formatter, no I/O: one line per sampled register plus the masks. */
 ssize_t ccci_dpmaif_format(const struct ccci_dpmaif_sample *sample, char *buf, size_t size);
 /* Same idea for the downlink counters and the retained packet head. */
@@ -364,6 +368,18 @@ static inline struct ccci_dpmaif *ccci_dpmaif_find(struct device *consumer) { re
 static inline void ccci_dpmaif_allow_start(struct ccci_dpmaif *dpmaif) { }
 static inline int ccci_dpmaif_quiesce(struct ccci_dpmaif *dpmaif) { return 0; }
 static inline int ccci_dpmaif_reset_after_off(struct ccci_dpmaif *dpmaif) { return 0; }
+
+static inline int ccci_dpmaif_release_with_dl(struct ccci_dpmaif *dpmaif,
+					     int (*release)(void *), void *data)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline int ccci_dpmaif_power_with_dl(struct ccci_dpmaif *dpmaif,
+					   int (*power_on)(void *), void *data)
+{
+	return -EOPNOTSUPP;
+}
 
 static inline ssize_t
 ccci_dpmaif_format(const struct ccci_dpmaif_sample *sample, char *buf, size_t size)

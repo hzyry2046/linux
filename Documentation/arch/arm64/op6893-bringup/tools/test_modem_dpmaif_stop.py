@@ -8,6 +8,7 @@ import tempfile
 root = Path(__file__).resolve().parents[5]
 driver = root / 'drivers/misc/mediatek/ccci'
 code = (driver / 'ccci-dpmaif.c').read_text()
+platform = (driver / 'ccci-md-platform.c').read_text()
 prelude = r'''
 #include <assert.h>
 #include <stdbool.h>
@@ -86,10 +87,66 @@ static void dpmaif_irq_put(struct ccci_dpmaif *d) { assert(ul_test ? !d->ul.star
 #define dma_free_coherent(...) (++releases)
 #define dpmaif_dl_ring_free(...) (++releases)
 #define clk_disable_unprepare(...) (++releases)
+#include "ccci-md-power.h"
+struct ccci_md_platform {
+ struct ccci_md_power power;
+ struct ccci_dpmaif *dpmaif;
+ bool dpmaif_preboot_failed, dpmaif_off_reset;
+};
+static int checks, bad_check, reset_error;
+static int md_domain_check(struct ccci_md_platform *md, bool on)
+{
+ assert(!on && !md->power.domain);
+ return ++checks == bad_check ? -EBUSY : 0;
+}
+'''
+recovery = r'''
+/* Model a verified reset after the real quiesce/stop has released the rings. */
+static int md_platform_stop(struct ccci_md_platform *md)
+{
+ int ret = ccci_dpmaif_quiesce(md->dpmaif);
+
+ if (ret)
+  return ret;
+ assert(!md->dpmaif->dl.pit && !md->dpmaif->ul.drb);
+ md->dpmaif_off_reset = !reset_error;
+ return reset_error;
+}
 '''
 test = r'''
+static void test_preboot_recovery(void)
+{
+ int buffer;
+ struct ccci_dpmaif d = {.power_blocked = true, .dl = {.pit = &buffer}};
+ struct ccci_md_platform md = {
+  .power = {.state = CCCI_MD_STOPPED}, .dpmaif = &d,
+  .dpmaif_preboot_failed = true, .dpmaif_off_reset = true,
+ };
+
+ md.power.state = CCCI_MD_FAULT;
+ assert(md_platform_off(&md) == -EIO && !checks && d.dl.pit);
+ md.power.state = CCCI_MD_STOPPED;
+ bad_check = 1;
+ assert(md_platform_off(&md) == -EBUSY && d.dl.pit);
+ assert(md.dpmaif_preboot_failed && !md.dpmaif_off_reset);
+ step = releases = 0;
+ fail_at = 1;
+ assert(md_platform_off(&md) == -ETIMEDOUT && d.dl.pit && !releases);
+ assert(md.dpmaif_preboot_failed && !md.dpmaif_off_reset);
+ step = fail_at = 0;
+ reset_error = -EIO;
+ assert(md_platform_off(&md) == -EIO && !d.dl.pit && releases == 5);
+ assert(md.dpmaif_preboot_failed && !md.dpmaif_off_reset);
+ reset_error = 0;
+ bad_check = checks + 2;
+ assert(md_platform_off(&md) == -EBUSY && md.dpmaif_preboot_failed);
+ assert(!md_platform_off(&md));
+ assert(!md.dpmaif_preboot_failed && md.dpmaif_off_reset && d.power_blocked);
+}
+
 int main(void)
 {
+ test_preboot_recovery();
  int buffer;
  for (int failure = 1; failure <= 5; ++failure) {
   struct ccci_dpmaif d = {.dl = {.pit = &buffer, .started = true, .rx_head = true}};
@@ -140,9 +197,12 @@ with tempfile.TemporaryDirectory() as directory:
     ] + code[
         code.index('int ccci_dpmaif_quiesce('):
         code.index('static int dpmaif_reset_readback(')
+    ] + recovery + platform[
+        platform.index('static int md_platform_off('):
+        platform.index('static int md_power_on_after_dl(')
     ] + test)
     binary = work / 'test'
     subprocess.run(['cc', '-I', str(driver), '-fsanitize=address,undefined',
                     '-no-pie', str(source), '-o', str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
-print('PASS: DPMAIF UL/DL stop retains DMA on timeout; quiesce veto and retry')
+print('PASS: DPMAIF stop retains DMA on timeout; prepower retry requires verified OFF and reset')

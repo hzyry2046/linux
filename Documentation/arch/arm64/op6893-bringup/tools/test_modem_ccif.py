@@ -22,13 +22,42 @@ static u8 memory[2048];
 static unsigned calls,fail,publishes,acquires;
 static int event(void){return ++calls==fail?-EACCES:0;}
 static void bounds(u32 o,u32 s){assert(o<=sizeof(memory) && s<=sizeof(memory)-o);}
-static int rd(void *c,u32 o,u32 *v){(void)c;bounds(o,4);int r=event();if(!r)*v=get_unaligned_le32(memory+o);return r;}
+static bool repair_peer_read;
+static int rd(void *c,u32 o,u32 *v)
+{
+ (void)c;
+ bounds(o,4);
+ int r=event();
+ if(!r) {
+  *v=get_unaligned_le32(memory+o);
+  if(repair_peer_read && o==36)
+   put_unaligned_le32(8,memory+o);
+ }
+ return r;
+}
 static int wr(void *c,u32 o,u32 v){(void)c;bounds(o,4);int r=event();if(!r)put_unaligned_le32(v,memory+o);return r;}
 static int from(void *c,u32 o,void *p,u32 s){(void)c;bounds(o,s);int r=event();if(!r)memcpy(p,memory+o,s);return r;}
 static int to(void *c,u32 o,const void *p,u32 s){(void)c;bounds(o,s);int r=event();if(!r)memcpy(memory+o,p,s);return r;}
 static int zero(void *c,u32 o,u32 s){(void)c;bounds(o,s);int r=event();if(!r)memset(memory+o,0,s);return r;}
 static void fence(void *c,bool publish){(void)c;if(publish)publishes++;else acquires++;}
-static const struct ccci_ccif_ring_ops ops={rd,wr,from,to,zero,fence,NULL};
+static unsigned bad_reads, waits, repair_at, observed_retries;
+static u32 observed_read;
+static void bad_tx_read(void *ctx,u32 off,u32 read,u32 write,u32 length,int err,u32 sample,unsigned retries)
+{
+ (void)ctx;
+ assert(off==36 && read==4 && write==32 && length==256 && !err);
+ observed_read=sample;
+ observed_retries=retries;
+ bad_reads++;
+}
+static void wait_tx_read(void *ctx)
+{
+ (void)ctx;
+ assert(!publishes);
+ if (++waits==repair_at)
+  put_unaligned_le32(8,memory+36);
+}
+static const struct ccci_ccif_ring_ops ops={rd,wr,from,to,zero,fence,NULL,bad_tx_read,wait_tx_read};
 static struct ccci_ccif_slot slot={16,256,256,552};
 static void clear(void){calls=fail=publishes=acquires=0;}
 static void setup(struct ccci_ccif_ring *r){
@@ -130,6 +159,22 @@ static void rings(void){
  assert(ccci_ccif_ring_receive(&r,out,240,&size)==-EBADMSG);
  setup(&r);put_unaligned_le32(1,memory+40);
  assert(ccci_ccif_ring_transmit(&r,payload,16)==-EBADMSG);
+ setup(&r);put_unaligned_le32(4,memory+36);put_unaligned_le32(32,memory+40);
+ assert(ccci_ccif_ring_transmit(&r,payload,16)==-EBADMSG);
+ assert(bad_reads==1 && observed_read==4 && get_unaligned_le32(memory+40)==32);
+ assert(!publishes && waits==4 && observed_retries==4);
+ setup(&r);put_unaligned_le32(4,memory+36);put_unaligned_le32(32,memory+40);
+ repair_peer_read=true;
+ assert(!ccci_ccif_ring_transmit(&r,payload,16));
+ repair_peer_read=false;
+ assert(bad_reads==2 && observed_read==8 && get_unaligned_le32(memory+40)==64);
+ assert(publishes==1 && observed_retries==0);
+ setup(&r);put_unaligned_le32(4,memory+36);put_unaligned_le32(32,memory+40);
+ waits=0;repair_at=3;
+ assert(!ccci_ccif_ring_transmit(&r,payload,16));
+ assert(bad_reads==3 && waits==3 && observed_retries==3 && publishes==1);
+ assert(observed_read==8 && get_unaligned_le32(memory+40)==64);
+ repair_at=0;
  setup(&r);put_unaligned_le32(40,memory+36);put_unaligned_le32(0,memory+40);
  assert(ccci_ccif_ring_transmit(&r,payload,24)==-ENOSPC && !get_unaligned_le32(memory+40));
  struct ccci_ccif_slot empty={0,0,0,40};

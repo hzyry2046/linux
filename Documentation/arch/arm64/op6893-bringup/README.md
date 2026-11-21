@@ -13,6 +13,9 @@ remain in mt6893-direct; boot images, rootfs, proprietary firmware and device
 private data are not included here. The external build/initramfs workspace is
 not a Git repository and is not made reproducible by this kernel checkpoint.
 
+For the current modem architecture, lifecycle, userspace tools and test limits,
+see [MODEM-CONTROL-STACK.md](MODEM-CONTROL-STACK.md).
+
 Fourteen existing host tests passed at checkpoint time; output is recorded in
 evidence/attempt-50/commit-tests.log. No new hardware test occurred during
 this checkpoint. Historical experiments and retained inherited-resource paths

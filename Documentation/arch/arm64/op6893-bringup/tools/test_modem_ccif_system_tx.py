@@ -45,7 +45,7 @@ static void destroy_sender(struct ccci_ccif *c){assert(!pthread_mutex_destroy(&c
 static int published_failure(void *c,u32 o,u32 v){
  int ret=wr(c,o,v);return ret?ret:(o==40?-EIO:0);
 }
-static const struct ccci_ccif_ring_ops published_failure_ops={rd,published_failure,from,to,zero,fence,NULL};
+static const struct ccci_ccif_ring_ops published_failure_ops={rd,published_failure,from,to,zero,fence,NULL,NULL,NULL};
 static void tx_tests(void){
  struct ccci_ccif c;unsigned steps;
  init_sender(&c);
@@ -116,7 +116,7 @@ static void blocking_fence(void *c,bool publish){
  while(!release_sender)pthread_cond_wait(&pause_cond,&pause_lock);
  assert(!pthread_mutex_unlock(&pause_lock));
 }
-static const struct ccci_ccif_ring_ops blocking_ops={rd,wr,from,to,zero,blocking_fence,NULL};
+static const struct ccci_ccif_ring_ops blocking_ops={rd,wr,from,to,zero,blocking_fence,NULL,NULL,NULL};
 static void *sender_thread(void *p){assert(!ccci_ccif_system_send(p,0x119,0));return NULL;}
 static void *stop_thread(void *p){
  assert(!pthread_mutex_lock(&pause_lock));stop_attempted=true;pthread_cond_broadcast(&pause_cond);

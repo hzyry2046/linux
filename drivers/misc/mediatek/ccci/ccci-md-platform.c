@@ -66,6 +66,7 @@ struct ccci_md_platform {
 	struct ccci_nvram_cache *cache;
 	struct ccci_md_boot *boot;
 	bool dpmaif_off_reset;
+	bool dpmaif_preboot_failed;
 	bool restore_rails;
 	/* Read-only MD exception record header, mapped only when LK exported it. */
 	void __iomem *ee;
@@ -327,7 +328,7 @@ static ssize_t md_power_show(struct device *dev, struct device_attribute *attr, 
  * Active boot: join CCIF while clocks are held, prove MD1 OFF, then stop
  * services and SCP. Reset CCIF at the next prepare, with the MD CPU held.
  */
-static int md_platform_off(struct ccci_md_platform *md)
+static int md_platform_stop(struct ccci_md_platform *md)
 {
 	u32 r13 = 0;
 	int ret;
@@ -376,6 +377,77 @@ static int md_platform_off(struct ccci_md_platform *md)
 	return ret;
 }
 
+static int md_platform_off(struct ccci_md_platform *md)
+{
+	int ret;
+
+	if (!md->dpmaif_preboot_failed)
+		return md_platform_stop(md);
+
+	/* Only recover an attempt that never started the MD power sequence. */
+	if (md->power.state != CCCI_MD_STOPPED || md->power.attempted ||
+	    md->power.clocks || md->power.domain)
+		return -EIO;
+	md->dpmaif_off_reset = false;
+	ret = md_domain_check(md, false);
+	if (ret)
+		return ret;
+	ret = md_platform_stop(md);
+	if (ret)
+		return ret;
+	if (!md->dpmaif_off_reset)
+		return -EIO;
+	ret = md_domain_check(md, false);
+	if (ret)
+		return ret;
+	md->dpmaif_preboot_failed = false;
+	return 0;
+}
+
+static int md_power_on_after_dl(void *data)
+{
+	struct ccci_md_platform *md = data;
+
+	return ccci_md_power_on(&md->power);
+}
+
+static int md_platform_on(struct ccci_md_platform *md, bool prearm_dl)
+{
+	int ret;
+
+	if (md->dpmaif_preboot_failed)
+		return -EIO;
+	if (prearm_dl) {
+		if (!md->dpmaif || !md->boot)
+			return -EOPNOTSUPP;
+		/* Require a clean stop, a completed off reset and explicit rearm. */
+		if (md->power.state != CCCI_MD_STOPPED || md->power.attempted ||
+		    md->power.domain || md->power.clocks || !md->dpmaif_off_reset)
+			return -EBUSY;
+		ret = md_domain_check(md, false);
+		if (ret)
+			return ret;
+	}
+	ret = md->restore_rails ? md_restore_rails(md) : 0;
+	if (ret)
+		return ret;
+
+	if (prearm_dl) {
+		ret = ccci_dpmaif_power_with_dl(md->dpmaif, md_power_on_after_dl, md);
+		/* Latch failures so regular power-on cannot bypass this attempt. */
+		md->dpmaif_preboot_failed = !!ret;
+	} else {
+		ret = ccci_md_power_on(&md->power);
+		if (!ret)
+			ccci_dpmaif_allow_start(md->dpmaif);
+	}
+	if (!ret) {
+		md->restore_rails = false;
+		md->dpmaif_off_reset = false;
+	}
+	return ret;
+}
+
 static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 			      const char *buf, size_t count)
 {
@@ -384,15 +456,9 @@ static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 
 	mutex_lock(&md->lock);
 	if (sysfs_streq(buf, "on")) {
-		ret = md->restore_rails ? md_restore_rails(md) : 0;
-		if (ret)
-			goto unlock;
-		ret = ccci_md_power_on(&md->power);
-		if (!ret) {
-			md->restore_rails = false;
-			md->dpmaif_off_reset = false;
-			ccci_dpmaif_allow_start(md->dpmaif);
-		}
+		ret = md_platform_on(md, false);
+	} else if (sysfs_streq(buf, "on-with-dl")) {
+		ret = md_platform_on(md, true);
 	} else if (sysfs_streq(buf, "takeover")) {
 		if (md->power.state == CCCI_MD_INHERITED)
 			ret = ccci_dpmaif_quiesce(md->dpmaif);
@@ -405,7 +471,6 @@ static ssize_t md_power_store(struct device *dev, struct device_attribute *attr,
 	} else {
 		ret = -EINVAL;
 	}
-unlock:
 	if (ret)
 		dev_err(dev, "MD platform request failed at %s: %d\n", md->power.step, ret);
 	mutex_unlock(&md->lock);
@@ -462,7 +527,20 @@ static ssize_t md_boot_store(struct device *dev, struct device_attribute *attr,
 			md->restore_rails = true;
 		}
 	} else if (sysfs_streq(buf, "release")) {
-		ret = ccci_md_boot_release(md->boot);
+		ret = ccci_md_boot_release(md->boot, NULL);
+	} else if (sysfs_streq(buf, "release-with-dl")) {
+		if (!md->dpmaif) {
+			ret = -EOPNOTSUPP;
+			goto out;
+		}
+		if (md->power.state != CCCI_MD_POWERED || !md->power.clocks ||
+		    !md->power.domain) {
+			ret = -EHOSTDOWN;
+			goto out;
+		}
+		ret = md_domain_check(md, true);
+		if (!ret)
+			ret = ccci_md_boot_release(md->boot, md->dpmaif);
 	} else if (sysfs_streq(buf, "stop")) {
 		/* Parent must have independently read MD1 OFF. */
 		ret = ccci_md_boot_stop(md->boot, md->power.state == CCCI_MD_STOPPED);

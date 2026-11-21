@@ -12,6 +12,39 @@ import modem_data_session as modem
 
 
 class SessionTest(unittest.TestCase):
+    @patch.object(modem.time, 'sleep')
+    def test_enable_rf_confirms_mode_before_waiting_for_attach(self, _sleep):
+        exchange = Mock(side_effect=[
+            [], [], ['+CFUN: 0', 'OK'],
+            ['ERROR'], ['+CFUN: 1,0', 'OK'],
+            ['+CGATT: 0', 'OK'], ['+CGATT: 1', 'OK'],
+        ])
+        args = SimpleNamespace(slot=None, enable_rf=True, rat=None, reconnects=0)
+        with (patch.object(modem, 'establish'),
+              patch.object(modem, 'command',
+                           side_effect=lambda _r, _w, text, _t: exchange(text)),
+              patch.object(modem, 'run_session', return_value=True) as session,
+              contextlib.redirect_stdout(io.StringIO())):
+            self.assertEqual(modem.run_modem(0, args, lambda: False), 0)
+        self.assertEqual([call.args[0] for call in exchange.call_args_list],
+                         ['AT+CFUN?', 'AT+CFUN=1', 'AT+CFUN?',
+                          'AT+CFUN=1', 'AT+CFUN?', 'AT+CGATT?', 'AT+CGATT?'])
+        session.assert_called_once()
+
+    def test_enable_rf_leaves_confirmed_mode_alone(self):
+        exchange = Mock(return_value=['+CFUN: 1', 'OK'])
+        with contextlib.redirect_stdout(io.StringIO()):
+            modem.enable_legacy_radio(exchange, lambda: False)
+        exchange.assert_called_once_with('AT+CFUN?')
+
+    @patch.object(modem.time, 'sleep')
+    def test_enable_rf_requires_matching_readback(self, _sleep):
+        exchange = Mock(return_value=['OK'])
+        with self.assertRaisesRegex(modem.AtError, 'RF mode 1 could not be confirmed'):
+            modem.enable_legacy_radio(exchange, lambda: False)
+        self.assertEqual(sum(call.args == ('AT+CFUN=1',)
+                             for call in exchange.call_args_list), 4)
+
     def test_reconnect_waits_for_packet_attach_without_rat_override(self):
         events = []
 

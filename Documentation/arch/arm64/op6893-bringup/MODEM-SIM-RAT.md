@@ -128,6 +128,19 @@ unless an explicit `--restore-slot` is supplied. The firmware rejects
 than discovering the original setting. The no-slot invocation continues
 to use the legacy AT context.
 
+After HS2 and CCISM RUNNING, with the downlink ring already running, the
+legacy context can also enable RF and wait for packet attach:
+
+```sh
+python3 modem_data_session.py --enable-rf --apn YOUR_APN --activation-mapping --policy-routing --probe
+```
+
+The tool reads back `CFUN: 1` before waiting for attach and activating CID 1.
+If RF is already enabled it skips the write; otherwise it retries up to
+four times, checking the mode after each attempt even if the enable command
+does not return OK. This option leaves RF enabled on exit and does not
+change the radio access policy.
+
 IPv4 and its routes are installed immediately. If the PDP provides no IPv6
 interface ID or a solicitation returns no usable RA, the tool retries IPv6
 on the same PDP. A DNS miss is also diagnostic and does not tear down either

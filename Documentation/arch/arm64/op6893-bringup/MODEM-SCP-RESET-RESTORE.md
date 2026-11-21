@@ -347,3 +347,377 @@ FS TX 读写指针均为 5120，busy 为 0，随后 MD 和 SCP 正常停止。
 在该对照样本中，无需注册或实际 IP 流量即可复现；下一步区分
 DL 自身的停环与关电后 AO/PD 复位的影响。证据见
 `dl-only-{6803,6804,final}.log`。
+
+### 仅执行关电后 DPMAIF 复位的对照（2026-11-21）
+
+诊断镜像 `56728c660a71` 使用默认关闭的临时 `reset_unused` 参数。
+MD 6801 只跑握手，到 HS2 后保持约 20 秒；未打开 AT、射频或 PDP，
+未启用 DPMAIF 环。仅在关电前打开参数，日志确认执行
+`post-OFF reset: rings used=0`，随后关闭参数。MD 6802 接受 HS1，
+但等不到 HS2（`-ETIMEDOUT`），同样完成 3525 次服务发送。
+MD 与 SCP 最终均停止，内核 taint 为 0。证据见
+`backup/boot-write-md-rearm-56728c660a71/{first,after-reset,second,final}.log`。
+
+这个样本表明复现不要求上一代实际使用 DMA 环。优先比较关电后的
+AO/PD 复位、保护位和时钟顺序；单次样本还不能锁定具体操作。
+
+同板 6.6 的 `fsm/ccci_fsm.c` 先在 `WAITING_TO_STOP` 停止队列，
+调用 `ccci_md_stop()` 关电，再在 `GATED` 经
+`hif/ccci_hif.c:ccci_hif_state_notification()` 调用 `dpmaif_stop()`。
+因此最终硬件复位位于 MD 关电之后，与主线一致。v2 的 INFRA
+保护位、复位寄存器和掩码也相同；区别是 6.6 在复位脉冲前释放
+DPMAIF 两个时钟引用。另一个独立区别是 6.6 在
+`BOOT_WAITING_FOR_HS1` 就启动 DPMAIF（置保护位、初始化硬件和环、
+开 IRQ）；主线从 HS2 之后的实验流程按需启动数据面。
+
+镜像 `03d140badce2` 在 MD 6801 握手成功、保持 20 秒并关电后，
+在不持有 DPMAIF 时钟引用的情况下执行同一组 INFRA 写入，之后才
+持钟读回并校验复位结果。首轮从未启用 DMA 环，也未打开 AT、射频
+或 PDP。MD 6802 仍接受 HS1 后超时（`-110`）：服务发送 3525 次，
+FS TX 读写指针均为 5120，busy 为 0。最终 MD/SCP 停止，taint 为 0。
+证据见 `backup/boot-write-md-rearm-03d140badce2/{booted,cycle}.log`。
+调整脉冲期间的时钟引用没有解决该样本的超时。该实验没有测量脉冲
+期间的物理门控状态，也没有移植 6.6 的下一代 DPMAIF 启动顺序。
+
+下一轮优先对照复位后、放行 MD CPU 前的状态。`fsm_routine_start()`
+在 `ccci_md_start()` 之前广播 `BOOT_WAITING_FOR_HS1`，因此 6.6
+此时已重新置位 INFRA AO MEM bit 10；主线的两个置位调用都在
+DPMAIF 数据环启动路径中，当前纯握手试验不会走到。可先只在下一代
+放行前恢复这一位，并记录复位前后及放行前的值；若仍超时，再分辨
+v2 公共硬件初始化、时钟和环/IRQ 启动各自的影响。
+
+### 放行 MD 前恢复 INFRA AO MEM bit 10
+
+复用 `03d140badce2` 和既有 DPMAIF 调试接口，未刷写新镜像。
+有效对照中，6801 到 HS2/CCISM RUNNING，保持 20 秒；关电后确认
+执行无环复位。在 6802 prepare 完成且 CPU 尚未放行时，寄存器读值为
+`0x00000b3c`，只置 bit 10，读回 `0x00000f3c`。6802 接受 HS1，
+仍在 3525 次服务发送后超时，FS TX 读写指针均为 5120，busy 为 0。
+MD 和 SCP 均停止，taint 为 0。单独恢复该位未消除故障。
+
+另有两次未执行到置位：一次首轮放行前的 peek 读到 bit 10 已置位，
+随后 HS1 后同样超时。该 peek 会短暂持有 DPMAIF 时钟，不能当作
+完全无扰动的首启基线。另一次去掉首轮 peek 后，6801 到 HS2，
+停留期间触发独立的 `-EBADMSG`，按门槛终止。以上日志见
+`backup/boot-write-md-rearm-03d140badce2/` 下的
+`prot-rearm-confirm/`、`prot-rearm/` 和 `prot-rearm-no-first-peek/`。
+
+后续应对照 6.6 放行前的整套 DPMAIF 状态。优先将已有的 v2 公共
+初始化与环分配解耦，测试在放行前应用配置并持钟至 HS2；结合只读的
+MD 侧 remap 快照判断是否需要补地址重映射。独立的 CCIF `-EBADMSG`
+仍需保留锁存，不能用跳过门槛增加有效样本。
+
+### 放行前执行现有公共初始化并持钟
+
+镜像 `e94ea3ffb075` 的诊断入口复用了下行启动中的公共配置
+（INFRA AO MEM bit 10、CG_EN、WDMA、L1 掩码和 DL power 标志）。
+6801 到 HS2/CCISM RUNNING，20 秒后关电并执行无环复位；
+6802 在 prepare 后、CPU 放行前写入公共配置并持有两个时钟引用。
+启动日志确认保护寄存器为 `0xf3c`。没有启用 DMA 环、DPMAIF IRQ、
+射频或 PDP，也没有配置 MD 侧地址重映射。6802 接受 HS1，随后仍在
+3525 次服务发送后超时；FS TX 读写均为 5120，busy 为 0。
+MD/SCP 停止，taint 为 0。直写 boot 的哈希回读一致，重启后 boot
+与父盘均只读。证据见
+`backup/boot-write-md-rearm-e94ea3ffb075/{write,booted,cycle}.log`。
+
+该次结果表明现有公共配置加持钟不足以恢复热启。下一项差异是
+6.6 在 MD 放行前还会配置 MD 侧 remap 和 DMA 队列。可先对比工作
+状态下的 6.6 与主线复位后的 remap 寄存器，再决定如何复现上电序列。
+
+本轮结束、MD1 OFF 时，用既有只读调试窗口采样 AO_MD_DL：CFG1
+为 `0x02`（remap 未使能）、DOMAIN 为 `0x0707`、CACHE/ALIGN/LOCK
+及 BANK0、BANK1 的八个 MAP 寄存器均为零。LK 报告的 bank0 AP
+区为 `0xe0000000+0x1e000000`，来自 `hdr_tbl_inf`。6.6 的
+`get_md_resv_mem_info()` 返回 `md_resv_mem_addr`；其 LK 解析在
+未预设保留区大小时使用同一个 tag，另有从 DT 保留区设置地址的路径。
+因此应以运行中 6.6 的 remap 或 MD 内存日志确认实际基址，不复用
+旧试验中的 `0x40000000` 假设。快照见同目录的 `remap-off.log`。
+
+### 同板 6.6 的工作态 remap
+
+启动已知镜像 `boot-review6.img`（实机版本
+`6.6.30-4k-g061b7bdafc86`），用匹配 ABI 的临时只读模块采样
+AO_MD_DL。实测 CFG1 为 `0x03`、DOMAIN 为 `0x0101`、CACHE
+为 `0x0706`，ALIGN 和 LOCK 均为零。八个映射字依次为
+`00e300e1 00e700e5 00eb00e9 00ef00ed 00f300f1 00f700f5
+00fb00f9 00ff00fd`。用同板 v2 编码解出首窗口的 AP 基址为
+`0xe0000000`，与主线 LK tag 一致。未调用受保护的 ACK 内核符号。
+
+按 32 MiB 粒度解码后，16 个已使能窗口中 12 个与主线
+`/proc/iomem` 的 System RAM 重叠。首窗也覆盖
+`0xe1ff0000–0xe1ffffff`，最后一窗则超出 LK bank0 末端
+`0xfe000000`。因此 LK 的 bank0 基址和长度不足以证明整组映射
+可安全重放。后续先核对 DMA 可达范围与访问控制，或用现有主线
+队列在放行前做对照，暂不写 ACK 的映射值。
+
+只读模块已卸载，设备已恢复 `e94ea3ffb075`；boot 回读哈希与镜像
+一致，boot 和父盘均只读。MD 尚未由主线放行，SCP 未启动。
+记录见 `backup/boot-write-md-rearm-e94ea3ffb075/ack-remap/` 的
+`snapshot.log`、`md-reserved.log` 和 `mainline-restored.log`。
+
+### 放行前启动主线 DPMAIF 下行环
+
+在同一 `e94ea3ffb075` 镜像上，6801 不启用数据环，达到
+HS2/CCISM RUNNING 后保持 20 秒，关电并执行与前次对照相同的无环复位。
+6802 在 prepare 后、放行 CPU 前，通过现有 `dl_start` 启用 8192 项
+BAT、8192 项 fragment BAT 和 16384 项 PIT；UL、射频、PDP 和网口
+保持未启用，未写 MD 侧 remap。两次 AP 启动中，6802 均越过此前
+3525 次服务发送的卡点，到达 HS2 和 CCISM RUNNING。第一组再运行
+20 秒，服务发送 5952 次，CCIF 无锁存错误，随后正常停机。
+
+第二组达到 HS2 后，CCIF 报独立的 `-EBADMSG`，按门槛取消 6803。
+两组均停环并确认 MD1 OFF 后执行常规复位，SCP 已停，taint 为 0。
+因此提前启用下行环可重复地让这组热启到达 HS2，但尚未证明可连续
+重启，也未验证热启后的 IP 流量。见
+`backup/boot-write-md-rearm-e94ea3ffb075/` 下的
+`pre-release-dl/cycle.log` 和 `pre-release-dl-repeat/cycle.log`。
+
+第三组计划在 6802 成功后尽快关电，再验证 6803。6801 正常达到
+HS2/CCISM RUNNING 并完成无环复位；6802 的 DL 启动返回
+`-ETIMEDOUT`，终止于 CPU 放行前。自动停环和一次显式停环重试
+均超时，驱动保留 DMA 缓冲。快照显示 BAT 和 PIT 命令都仍有 busy
+位，停环失败寄存器为 `PIT_INIT (0x20)`；启动失败最初对应的寄存器
+未单独保存，不能从停环的错误位置推定。MD 仍是 prepared、未放行。
+保留缓冲直到 AP 复位，随后确认回到相同镜像，MD 为 idle、SCP 未启动、
+boot 和父盘只读。见 `pre-release-dl-three/{cycle,stop-retry,recovered}.log`。
+
+接续应分别抓取首次 BAT/PIT 初始化超时和清理失败时的状态，并核对
+放行前时钟和复位状态。提前建环已改变握手结果，但当前不宜把它设成
+默认热启流程；后续仍需通过连续启停及热启后的 LTE 双栈验证。
+
+镜像 `fc11d511bfbe` 在清理前记录首次 DL 启动错误及 BAT/PIT
+命令值。用常规生命周期做对照：6801 到 HS2 后启动下行环，20 秒后
+停环并关电、执行常规复位；6802 在放行前启动下行环，达到 HS2 和
+CCISM RUNNING，保持 20 秒，CCIF 未锁存错误，MD/SCP 正常停止。
+没有使用强制无环复位参数，也未启用射频和 PDP。该样本说明上次
+成功不依赖特殊复位选项；本轮建环成功，新增失败日志未触发。
+证据见 `backup/boot-write-md-rearm-fc11d511bfbe/cycle.log`。
+
+同一 AP boot ID 内继续跑 6803、6804、6805，每轮都在放行前启用
+DL 环，均达到 HS2 和 CCISM RUNNING，随后正常停机。6803 的
+射频回读未确认，6804 的首次射频开启命令没有得到 OK；两轮均未
+尝试激活 PDP。6805 将 `CFUN=1` 和状态读回配对，前三次分别是
+无终止应答、ERROR 且读回 0、OK 且读回 1。确认 LTE（AcT 7）
+及附着后，CID 1 按当轮 LHIF 映射使用 channel 0、UL queue 0；
+IPv4/IPv6 的接口绑定 DNS 探测都收到匹配应答。退出后 CID 1
+已去激活、测试路由已清除，USB 管理路径仍可用；MD/SCP 均停止，
+taint 为 0。日志见同目录下 `{third,fourth,fifth}-lte/cycle.log`。
+
+这验证了同一次 AP 启动中五代 MD 的连续启动，以及最后一代
+热启后的实际 LTE 双栈数据。此前的偶发 CCIF 和 DL 建环故障仍需
+单独处理，不能由成功样本推断已消失。
+
+在 `2b66a2bbed23` 上复测常规复位后的提前建环，首代成功，第二代
+在放行前失败。新增清理前日志确认第一条普通 BAT 初始化命令
+卡住：`BAT_INIT=0x80000001`，`PIT_INIT=0`；只有进入清理后
+才看到 `PIT_INIT=0x80000000`。因此应先查 BAT 命令无法完成的
+条件，不能用清理阶段的 `fail_reg=0x20` 判断启动顺序。该轮 CPU
+未放行，驱动保留 DMA 缓冲；AP 复位后回到同一镜像，MD idle、SCP
+未启动、boot 和父盘均只读。见
+`backup/boot-write-md-rearm-2b66a2bbed23/{cycle,bat-timeout,recovered}.log`。
+
+同一镜像对 CCIF 异常 TX 读指针记录原值、同组写指针和一次独立
+复读。复读只用于区分瞬态与持续异常，即使复读恢复对齐也不会在
+该次发送中写环或清除错误。主机测试覆盖复读仍错和复读恢复对齐，
+两种情况均保持 `-EBADMSG`、未发布新的写指针。
+
+恢复后另跑一次无 DMA 环、无 AT 的纯握手，到 HS2/CCISM RUNNING
+后保持 30 秒并正常关停；未复现 CCIF 指针异常，因此尚未在真机
+区分瞬态和持续异常。见同目录 `ccif-only/cycle.log`。
+
+`8dd048819259` 在 HS2 后复现了 FS TX q4 读指针异常：
+`read=0x73c write=0xa10 length=0x5000 reread=0x740`。这次异常
+在一次独立读取内消失，尚不能确定固件如何写入该值。
+候选镜像 `d87622ba2e27` 只在初值位于环内、偏离对齐边界 4 字节，
+且复读实际返回紧邻的对齐边界时接受复读值。它仍校验 AP 写指针，
+并拒绝从已判空的边界向前纠正；持续异常仍按原路径停发。主机测试
+覆盖了两种结果，本次候选镜像实机未再捕获该瞬态。
+
+候选镜像第二轮在放行前再次卡住首条 BAT 初始化。首轮成功与第二轮
+失败时记录到的两个 gate 状态、TOPCKGEN 主时钟选源及 MD 时钟模式
+均相同：`ifrao3=0x100 ifrao4=0x0 clk_cfg13=0xc030601 clk_mode=0`。
+这排除了这几个采样字段上的静态差异，不能证明时钟在整个提交区间
+持续有效。PIT 仍未开始初始化，CPU 未放行，停环失败后仍保留缓冲。
+AP 重启后回到候选镜像，MD idle、SCP 未启动、boot 和父盘均只读。
+证据见 `backup/boot-write-md-rearm-{8dd048819259,d87622ba2e27}/cycle.log`
+及候选镜像同目录的 `recovered.log`。
+
+### MD 上电后、CPU 放行前追加 DPMAIF 复位
+
+复用 `d87622ba2e27`。6801 到 HS2 后建 DL 环并正常关电；后续
+各代保留常规关电复位，另外在 `md_boot=prepare` 完成后确认 MD CPU
+未放行，通过现有 DPMAIF `reset` 入口追加一次 AO/PD 复位。每次
+复位读回通过后才启用 8192 项 BAT 和 16384 项 PIT，然后放行 CPU。
+同一 AP boot ID 内 6802、6803、6804 三次热启均完成建环、达到
+HS2 和 CCISM RUNNING，最后正常停环、关电，SCP 停止，taint 为 0。
+没有启用 UL、射频或 PDP，未修改 remap。证据在
+`backup/boot-write-md-rearm-d87622ba2e27/powered-reset/{cycle,continue}.log`。
+
+同镜像此前在仅做关电复位时曾复现首条 BAT 命令卡死。追加复位的
+三个样本支持复位时点影响建环的假设；由于原故障间歇出现，还不能
+认为该流程已修复故障。后续应跨 AP 启动比较，并验证两次真实数据
+会话之间的关停与恢复，再决定是否纳入内核生命周期。
+
+另一次 AP 启动复用同镜像，6801 和 6802 都完成 LTE（AcT 7）接入、
+CID 1 激活及接口绑定的 IPv4/IPv6 DNS 验证。首轮在 HS2 后建环；
+首个数据会话退出并清理 PDP、网口及测试路由后，正常停环、关电、
+停 SCP，再以新一代 SCP 和 FS/RPC 后端启动 6802。第二轮的追加
+复位读回及提前建环均通过。两轮均在第三次 CFUN 尝试读回 1，
+USB 管理路由保持可用，最终 MD/SCP 均停止，taint 为 0。
+
+6802 到 HS2 约 260 ms 后，FS TX q4 读指针再次短暂未对齐：
+`read=0x2d74 write=0x3058 reread=0x2d78`。候选逻辑使用了
+复读所得的下一对齐边界，CCIF 无锁存错误，后续数据和关停成功。
+这是真机对该瞬态分支的验证；未放宽对持续异常的拒绝，也不能据此
+断言 BAT 超时已根治。见
+`backup/boot-write-md-rearm-d87622ba2e27/powered-reset-dual-data/cycle.log`。
+
+### 将放行前复位和建环接入 MD 启动
+
+新入口 `md_boot=release-with-dl` 要求 MD1 已上电且读回通过，
+MD 启动状态为 prepared。驱动在同一次操作内串行执行 DPMAIF AO/PD
+复位与读回、DL 建环、CCIF RX 启动及 MD CPU 放行。手动环操作不能
+插入建环和放行之间。任一步失败均不继续放行，也不允许本代回退到
+普通 release；如果不能确认 DMA 停止，仍保留缓冲。普通 release 和
+正常关电后的复位路径保留。
+
+`820c10aab5d1` 从主线写入 boot，回读匹配，重启进入新镜像；boot 和
+父盘恢复只读。同一次 AP 启动内，6801 用普通 release，HS2 后建
+DL 环；关停后，6802 用新入口，在 CPU 放行前建立 8192 项 BAT、
+8192 项 fragment BAT 和 16384 项 PIT。两轮均到 HS2 / CCISM RUNNING，
+并通过 LTE（AcT 7）IPv4 与 IPv6 DNS；PDP、网口和策略路由按顺序清理，
+USB 管理路由保持可用。结束后 MD 和 SCP 均停止，taint 为 0。
+证据见 `backup/boot-write-md-rearm-820c10aab5d1/integrated-dual-data/cycle.log`。
+这是新入口的一次双数据会话验证，不能排除间歇性建环超时。
+
+保持同一个 AP boot ID、不重启或重刷，继续用新入口跑 6803、6804
+和 6805。三轮均在放行前完成 DL 建环、到达 HS2 / CCISM RUNNING，
+并在 LTE（AcT 7）上收到 IPv4 和 IPv6 DNS 应答。会话分别设置为
+20、20 和 45 秒；每轮均关闭 CID 1，清理网口和策略路由，再关停
+MD 和 SCP，USB 管理路由仍可用。最终 MD 已停止、SCP last_generation
+为 5，taint 为 0。同一次 AP 启动合计五轮 LTE 双栈，其中后四轮
+使用新入口。证据见同目录下 `integrated-repeat-data/cycle.log`。
+
+新增三轮中，首次 `CFUN=1` 均未收到终止应答，紧接着也没有读回
+模式；第二次返回 OK 并读回 1。这发生在 HS2 和 CCISM RUNNING
+之后。后续应区分固件尚未就绪、未送达与迟到应答，在启用 PDP 前
+以射频模式读回和 packet attach 为准。
+
+同一个 AP boot ID 继续跑 6806，沿用 `release-with-dl`，由
+`modem_data_session.py --enable-rf` 独立负责开启射频和附着等待。
+第二次开启后读回模式 1，附着后激活 CID 1。75 秒会话首尾均报告
+LTE（AcT 7），绑定 IPv4/IPv6 DNS 都收到匹配应答。退出时确认 PDP、
+网口和路由清理，随后 MD 和 SCP 停止，taint 为 0。日志见同一镜像
+备份目录的 `enable-rf/cycle.log`。本轮未重启 AP。
+
+### 跨 AP 启动复测：放行前建环仍可能失败
+
+在 `820c10aab5d1` 上，仅重启 AP 并重新下发 FS/RPC 工作副本和数据工具。
+新 boot ID 的 6901 用普通 `release`，在 HS2 后建环；`--enable-rf` 在
+第二次尝试确认模式 1。30 秒 LTE 会话通过绑定 IPv4/IPv6 DNS 和关停。
+
+同一 AP 启动的 6902 用 `release-with-dl`，通过复位读回后仍卡在首条
+BAT 命令：清理前 `BAT_INIT=0x80000001, PIT_INIT=0`，清理提交命令后
+PIT 才变为 busy。首轮和失败轮采到的门控、选源和 MD 时钟模式一致。
+驱动锁存 `-ETIMEDOUT`，未放行 CPU，CCIF IRQ 保持屏蔽；停环无法
+确认，保留 DMA，常规关机被拒绝。计划的 180 秒热启流量检查未开始。
+保存寄存器后重启 AP，确认同一镜像、MD idle、SCP 未启动、boot 和
+父盘只读。日志见 `cold-warm-soak/{cycle,bat-failure,recovered}.log`。
+
+同板 6.6 的 `fsm_routine_start()` 在 `ccci_md_start()` 前广播
+`BOOT_WAITING_FOR_HS1`；该通知已调用 DPMAIF 启动，之后
+`md_cd_start()` 才调用平台上电和 CPU 放行。因此 vendor 在 **MD
+上电前** 已开始配置 AP 侧数据面，不能把它等同于当前主线的“上电
+后、放行前”路径。v2 stop 的时钟释放、复位与主线也有顺序差异。
+下一步先验证上电边界对 BAT 初始化的影响；禁止用未审计的 remap
+替换试验，也不把“环为空”的读回当作 BAT 命令引擎已就绪。
+
+### 在 MD1 上电前建下行环
+
+`md_power=on-with-dl` 只接受已干净停机、关电复位和显式 rearm 的
+会话。核对 MD1 OFF 后，沿用关电时的 DPMAIF 复位，先建 BAT/PIT，
+再走 MD 上电；仍须 `md_boot=prepare` 和普通 `release` 才放行 CPU。
+建环和上电由同一操作串行，失败时拒绝普通 power-on 绕过。DMA 停止
+无法确认时保留缓冲。
+
+`bc1eac7959be` 从主线写入 boot 并回读，设备从新镜像启动，boot 和
+父盘只读。同一 AP 的 6901 用普通放行、HS2 后建 DL，通过 30 秒
+LTE 双栈；6902 在 MD1 OFF 时完成 8192 BAT、8192 fragment BAT 和
+16384 PIT 建环，然后上电、放行、达到 HS2 / CCISM RUNNING。
+75 秒 LTE 会话的 IPv4/IPv6 DNS 均匹配，PDP 和策略路由清理完成，
+MD/SCP 正常停止，taint 为 0。日志见
+`backup/boot-write-md-rearm-bc1eac7959be/prepower/cycle.log`。
+在同一镜像另一次 AP 启动（boot ID `69ceec9f-9e4d-4e2f-8efc-a50e2aafcb9a`）
+中，常规首轮通过 30 秒 LTE 双栈，随后再次在 MD1 OFF 时完成建环。
+第二轮跑完 180 秒 LTE 会话，禁止 PDP 自动重连；双栈就绪后第
+20、50、80、110 和 140 秒，每个采样点的接口绑定 IPv4/IPv6 DNS
+均收到匹配应答。PDP、网口和路由清理完成，MD/SCP 均停止，taint
+为 0，USB 管理路由保持可用。日志见同一镜像备份目录的
+`prepower-soak/{cycle.log,soak_dns.py}`。
+保持这个 AP boot ID，连续追加 6903、6904、6905 三轮。每轮都在
+MD1 OFF 时用 `on-with-dl` 建环，再走普通放行，达到 HS2 和
+CCISM RUNNING；15 秒 LTE 会话均通过接口绑定的 IPv4/IPv6 DNS，
+未启用 PDP 自动重连。每轮均清理 CID 1、网口和路由并正常停机。
+同一次 AP 启动累计五轮双栈，其中后四轮使用上电前建环；加上前一次
+AP 启动，上电前建环累计通过五次。最终 MD/SCP 已停止，taint 为 0。
+日志见同一镜像备份目录的 `prepower-repeat/cycle.log`。
+本轮未触发 BAT 超时，不能据此验证建环失败后的回收。
+
+### 上电前失败的显式回收
+
+`on-with-dl` 失败后仍拒绝普通上电。若上电序列尚未开始，显式
+`md_power=off` 可在确认 MD1 OFF 后停环、执行关电复位并再次确认
+MD1 OFF；全部通过才解除锁存。停环超时继续保留 DMA，若上电曾部分
+执行则仍拒绝此恢复。主机测试覆盖停环失败、复位失败和 OFF 检查
+失败，并检查失败时锁存不被清除。
+
+真机一次性测试镜像 `29193a25d8e4` 在环已建好、MD1 仍 OFF 时注入
+`-EIO`。普通 on 被拒绝；显式 off 清理环，随后同次 AP 启动内
+成功重新建环、上电放行并到达 HS1。之后停在 3525 次服务发送，
+FS TX 读写位置均为 5120，后端报告 BrokenPipeError；该签名在既往
+未注入流程中也出现过，本次未验证联网恢复。此实验未注入真正的
+BAT 命令超时。证据见 `backup/prepower-recovery-injection/cycle.log`。
+随后恢复无注入镜像 `e44320e3bbef`。
+
+无注入对照的首轮已到 HS2 / CCISM RUNNING 并完成建环，随后
+FS TX q4 的 MD 读指针为 `0x148c`，AP 写指针为 `0x1620`，
+环长 `0x5000`，复读仍为 `0x148c`。驱动按原规则锁存
+`-EBADMSG`，随后干净停机，第二轮未开始。该失败发生在 HS2 后，
+不能用来判定注入试验中 HS1 后的卡点是否由恢复流程引起。同板
+6.6 的接收端更新函数按 8 字节对齐，现有证据不足以把未对齐值
+直接向上取整计入可写空间。对照日志见
+`backup/boot-write-md-rearm-e44320e3bbef/control/cycle.log`。
+
+### CCIF 读指针的有界复读及真机对照
+
+`4bb08228f2a5` 保留原有立即复读。只有复读仍等于初次读到的
+半对齐值时，才额外复读最多四次，每次间隔 10 微秒。必须实际读到
+紧邻的对齐边界才继续发送；持续异常仍锁存 `-EBADMSG`，不会修改
+MD 的读指针或发布 AP 的写指针。日志分别记录恢复与拒绝，以及额外
+复读次数。主机模型验证立即恢复、第三次延迟复读恢复、持续异常时
+不发布，以及既有的 CCIF 收发故障路径。
+
+主线写入 boot 并回读后，新镜像首轮通过 20 秒 LTE 双栈及正常关停，
+未观察到该 CCIF 分支。第二轮用 `on-with-dl` 时，MD1 尚未开始
+上电就卡在首条 BAT 命令（`BAT_INIT=0x80000001, PIT_INIT=0`）。
+显式 off 也无法确认停环，DMA 缓冲仍保留，MD CPU 未放行。
+保存寄存器后通过 AP 重启恢复；同一镜像重新启动，MD/SCP 未运行，
+boot 和父盘只读。证据见
+`backup/boot-write-md-rearm-4bb08228f2a5/reread/{cycle,bat-failure,recovered}.log`。
+这次证实上电前建环也可能超时；不能将 MD1 已上电视为 BAT 超时的
+必要条件。延迟复读对真机未对齐事件的效果仍待观察。
+
+### DPMAIF 关电复位读回
+
+`371bc765c104` 在原有环状态读回之外，记录复位前后的 AO 阈值、
+PD 保留字和 BAT/PIT 初始化命令字；若任一命令复位后仍显示 busy，
+拒绝继续。同一 AP 启动内，首轮常规启动与四轮上电前建环均通过
+LTE IPv4/IPv6 DNS 和关停。保存到的关电复位样本一致：
+AO 阈值 `0x80be207f → 0`、PD 保留字 `0xff → 0`，BAT/PIT
+命令字在复位前后均为 0。这证实 AO/PD 中这些可观察的寄存器
+确实被清除，但没有命令 busy 跨复位的样本，不能据此确认内部
+命令状态也已复位。本轮未复现 BAT 超时。
+
+第二轮另捕获一次 CCIF TX 读指针 `0x62c → 0x630`，第一次
+立即复读即恢复（额外复读次数为 0），未影响后续数据。记录见
+`backup/boot-write-md-rearm-371bc765c104/reset-evidence/{cycle,repeat}.log`。

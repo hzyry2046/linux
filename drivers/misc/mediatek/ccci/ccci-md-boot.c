@@ -10,6 +10,7 @@
 #include <linux/sysfs.h>
 
 #include "ccci-ccif.h"
+#include "ccci-dpmaif.h"
 #include "ccci-md-boot.h"
 #include "ccci-nvram-cache.h"
 #include "ccci-port-dispatch.h"
@@ -193,9 +194,32 @@ out:
 	return ret;
 }
 
-int ccci_md_boot_release(struct ccci_md_boot *boot)
+static int md_boot_release_cpu(void *data)
 {
+	struct ccci_md_boot *boot = data;
 	struct arm_smccc_res res;
+	int ret;
+
+	/* RX/handshake must accept the first SRAM HS1 before MD runs. */
+	ret = ccci_port_dispatch_start(boot->dispatch, boot->offers);
+	if (ret)
+		return ret;
+	arm_smccc_smc(MTK_SIP_KERNEL_CCCI_CONTROL, MD_POWER_CONFIG, MD_KERNEL_BOOT_UP,
+		      0, 0, 0, 0, 0, &res);
+	boot->boot_ret = res.a0;
+	boot->boot_status0 = res.a1;
+	boot->boot_status1 = res.a2;
+	if (res.a0 == SMCCC_RET_NOT_SUPPORTED)
+		return -EOPNOTSUPP;
+	if (res.a0)
+		return -EIO;
+	boot->released = true;
+	boot->state = BOOT_RELEASED;
+	return 0;
+}
+
+int ccci_md_boot_release(struct ccci_md_boot *boot, struct ccci_dpmaif *dpmaif)
+{
 	int ret;
 
 	if (!boot)
@@ -205,28 +229,12 @@ int ccci_md_boot_release(struct ccci_md_boot *boot)
 		ret = boot->state == BOOT_RELEASED ? -EALREADY : -EAGAIN;
 		goto out;
 	}
-	/* RX/handshake must accept the first SRAM HS1 before MD runs. */
-	ret = ccci_port_dispatch_start(boot->dispatch, boot->offers);
-	if (ret) {
+	if (dpmaif)
+		ret = ccci_dpmaif_release_with_dl(dpmaif, md_boot_release_cpu, boot);
+	else
+		ret = md_boot_release_cpu(boot);
+	if (ret)
 		boot_fault(boot, ret);
-		goto out;
-	}
-	arm_smccc_smc(MTK_SIP_KERNEL_CCCI_CONTROL, MD_POWER_CONFIG, MD_KERNEL_BOOT_UP,
-		      0, 0, 0, 0, 0, &res);
-	boot->boot_ret = res.a0;
-	boot->boot_status0 = res.a1;
-	boot->boot_status1 = res.a2;
-	if (res.a0 == SMCCC_RET_NOT_SUPPORTED) {
-		ret = boot_fault(boot, -EOPNOTSUPP);
-		goto out;
-	}
-	if (res.a0) {
-		ret = boot_fault(boot, -EIO);
-		goto out;
-	}
-	boot->released = true;
-	boot->state = BOOT_RELEASED;
-	ret = 0;
 out:
 	mutex_unlock(&boot->lock);
 	return ret;
