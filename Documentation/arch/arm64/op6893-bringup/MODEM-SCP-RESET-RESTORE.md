@@ -286,3 +286,21 @@ MD 已消费 CCIF 环中的回复。下一轮对照该事务的阶段掩码、�
 队列的回复；这不能证明 MD 上层正确重组或处理了回复。设备正常
 关电、SCP 停止、taint 为 0；此时诊断入口拒绝读取。
 见 `backup/boot-write-md-rearm-cba8916a22c2/{ring-first,ring-second,final}.log`。
+
+### 关射频后再关电的对照
+
+从 Android 刷回 `cba8916a22c2`，确认运行版本和 boot 分区哈希。
+首轮到达 HS2 后、打开 AT 前复现了 FS TX queue 4 的 `-EBADMSG`：
+普通 ring bank 偏移 `0x7c0b4` 是 MD 写入的 TX 读指针，读值
+`0x5bc` 在 `0x5000` 的环内但不是 8 字节对齐。同板 6.6
+`ccci_ringbuf_move_rpointer()` 将读指针向上对齐到 8 字节；
+保留现有对齐检查，暂不推断该读值的成因。此次正常关电且未强行
+rearm，日志见 `rf-off-ring-fault.log`。
+
+另一次 AP 启动，首轮确认附着并通过 LTE IPv4/IPv6 DNS。清理 PDP
+后，`AT+CFUN=4` 收到 OK，读回复核 `CFUN: 4` 和 `CGATT: 0`；
+关电前 PCM 也采到 `pcm_md1_sleep=1`。同一 AP 启动的第二轮
+仍接受 HS1 后超时，服务发送计数为 3525，FS TX 读写指针均为
+5120，busy bit 4 已清。已确认的射频关闭、分离及 MD sleep
+不足以避免此故障。最终 MD 与 SCP 均停止，taint 为 0。
+日志见同一备份目录的 `rf-confirm-{first,second,final}.log`。
