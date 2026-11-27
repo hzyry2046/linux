@@ -98,7 +98,7 @@ static int mt6893_cs35l41_i2s_hw_params(struct snd_pcm_substream *substream,
 		ret = snd_soc_component_set_sysclk(codec_dai->component,
 						   CS35L41_CLKID_SCLK, 0,
 						   clk_freq, SND_SOC_CLOCK_IN);
-		if (ret < 0) {
+		if (ret < 0 && ret != -ENOTSUPP) {
 			dev_err(codec_dai->dev,
 				"set component sysclk failed: %d\n", ret);
 			return ret;
@@ -106,14 +106,14 @@ static int mt6893_cs35l41_i2s_hw_params(struct snd_pcm_substream *substream,
 
 		ret = snd_soc_dai_set_sysclk(codec_dai, CS35L41_CLKID_SCLK,
 					     clk_freq, SND_SOC_CLOCK_IN);
-		if (ret < 0) {
+		if (ret < 0 && ret != -ENOTSUPP) {
 			dev_err(codec_dai->dev, "set sysclk failed: %d\n", ret);
 			return ret;
 		}
 
 		ret = snd_soc_dai_set_channel_map(codec_dai, 0, NULL,
 						  1, &rx_slot[i]);
-		if (ret < 0) {
+		if (ret < 0 && ret != -ENOTSUPP) {
 			dev_err(codec_dai->dev,
 				"set channel map failed: %d\n", ret);
 			return ret;

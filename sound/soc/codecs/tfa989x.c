@@ -64,7 +64,7 @@ struct tfa989x {
 
 static bool tfa989x_writeable_reg(struct device *dev, unsigned int reg)
 {
-	return reg > TFA989X_REVISIONNUMBER;
+	return reg != TFA989X_REVISIONNUMBER;
 }
 
 static bool tfa989x_volatile_reg(struct device *dev, unsigned int reg)
@@ -264,6 +264,30 @@ static const struct tfa989x_rev tfa9897_rev = {
 	.init	= tfa9897_init,
 };
 
+static int tfa9873_init(struct regmap *regmap)
+{
+	int ret;
+
+	/* Set 48kHz sample rate (AUDFS = 8) */
+	ret = regmap_update_bits(regmap, 0x02, 0x0f, 0x08);
+	if (ret)
+		return ret;
+
+	/* Set MANSCONF (I2C configured) */
+	ret = regmap_set_bits(regmap, 0x01, BIT(2));
+	if (ret)
+		return ret;
+
+	/* Enable amplifier (AMPE) and DCDC (DCA), clear PWDN */
+	return regmap_update_bits(regmap, 0x00, BIT(0) | BIT(3) | BIT(4),
+				   BIT(3) | BIT(4));
+}
+
+static const struct tfa989x_rev tfa9873_rev = {
+	.rev	= 0x73,
+	.init	= tfa9873_init,
+};
+
 /*
  * Note: At the moment this driver bypasses the "CoolFlux DSP" built into the
  * TFA989X amplifiers. Unfortunately, there seems to be absolutely
@@ -392,10 +416,12 @@ static int tfa989x_i2c_probe(struct i2c_client *i2c)
 		return ret;
 	}
 
-	ret = tfa989x_dsp_bypass(regmap);
-	if (ret) {
-		dev_err(dev, "failed to enable DSP bypass: %d\n", ret);
-		return ret;
+	if (rev->rev != 0x73) {
+		ret = tfa989x_dsp_bypass(regmap);
+		if (ret) {
+			dev_err(dev, "failed to enable DSP bypass: %d\n", ret);
+			return ret;
+		}
 	}
 	regcache_cache_bypass(regmap, false);
 
@@ -404,6 +430,7 @@ static int tfa989x_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct of_device_id tfa989x_of_match[] = {
+	{ .compatible = "nxp,tfa9873", .data = &tfa9873_rev },
 	{ .compatible = "nxp,tfa9890", .data = &tfa9890_rev },
 	{ .compatible = "nxp,tfa9895", .data = &tfa9895_rev },
 	{ .compatible = "nxp,tfa9897", .data = &tfa9897_rev },
