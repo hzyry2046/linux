@@ -65,6 +65,12 @@
 	operating-points-v2 = <&{/opp-table-gpu-21651}>;
 };
 
+&{/soc/pwrap@10026000/pmic} {
+	rtc {
+		compatible = "mediatek,mt6359-rtc", "mediatek,mt6358-rtc";
+	};
+};
+
 &watchdog {
 	compatible = "mediatek,mt6589-wdt", "syscon", "simple-mfd";
 

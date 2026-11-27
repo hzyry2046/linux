@@ -33,6 +33,8 @@
 
 /* Cold platform owner: supplies, CCIF clocks and the MD1 domain. */
 &{/modem-platform@10209000} {
+	/* The modem can still be reading NVRAM after 60 seconds in HS2. */
+	realme,extended-hs2-timeout;
 	status = "okay";
 };
 
