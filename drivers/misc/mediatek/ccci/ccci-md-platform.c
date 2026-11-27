@@ -617,6 +617,21 @@ static ssize_t ccif_fs_tx_show(struct device *dev, struct device_attribute *attr
 }
 static DEVICE_ATTR_RO(ccif_fs_tx);
 
+static ssize_t ccif_at_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	ssize_t ret = -ENODATA;
+
+	if (!md->ccif)
+		return -EOPNOTSUPP;
+	mutex_lock(&md->lock);
+	if (md->power.state == CCCI_MD_POWERED && md->power.domain && md->power.clocks)
+		ret = ccci_ccif_at_status(md->ccif, buf);
+	mutex_unlock(&md->lock);
+	return ret;
+}
+static DEVICE_ATTR_RO(ccif_at);
+
 static ssize_t handshake_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct ccci_md_platform *md = dev_get_drvdata(dev);
@@ -1097,7 +1112,7 @@ static DEVICE_ATTR_RO(md_ee_raw);
 
 static struct attribute *md_attrs[] = {
 	&dev_attr_md_power.attr, &dev_attr_md_boot.attr, &dev_attr_ccif.attr,
-	&dev_attr_ccif_fs_tx.attr,
+	&dev_attr_ccif_fs_tx.attr, &dev_attr_ccif_at.attr,
 	&dev_attr_handshake.attr, &dev_attr_ccism.attr, &dev_attr_services.attr,
 	&dev_attr_dispatch.attr, &dev_attr_md_ee.attr, &dev_attr_md_ee_raw.attr,
 	&dev_attr_lk_regions.attr, &dev_attr_smem_users.attr,
@@ -1266,6 +1281,8 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 	md->dpmaif = ccci_dpmaif_find(dev);
 	if (IS_ERR(md->dpmaif))
 		return dev_err_probe(dev, PTR_ERR(md->dpmaif), "DPMAIF unavailable\n");
+	if (md->dpmaif && md->smem.bank0.base && md->smem.bank0.base <= U32_MAX)
+		ccci_dpmaif_set_md_base(md->dpmaif, (u32)md->smem.bank0.base);
 	ret = ccci_dpmaif_quiesce(md->dpmaif);
 	if (ret)
 		return dev_err_probe(dev, ret, "DPMAIF not quiescent\n");
@@ -1422,6 +1439,27 @@ int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem
 	dev_info(dev, "MD owner ready: step=%s, SMEM retained, four rails/clocks and MD1 attached; CPU release not issued\n",
 		 md->power.step);
 	return 0;
+}
+
+int ccci_md_platform_prepare_suspend(struct device *dev)
+{
+	struct ccci_md_platform *md = dev_get_drvdata(dev);
+	int ret;
+
+	if (!md)
+		return 0;
+	mutex_lock(&md->lock);
+	if ((md->power.state != CCCI_MD_COLD && md->power.state != CCCI_MD_STOPPED) ||
+	    md->power.clocks || md->power.domain || md->power.error ||
+	    md->dpmaif_preboot_failed || ccci_md_boot_active(md->boot))
+		ret = -EBUSY;
+	else
+		ret = md_off_check(md);
+	if (ret)
+		dev_warn(dev, "system sleep refused: MD not verified off (%s, %d)\n",
+			 md->power.step, ret);
+	mutex_unlock(&md->lock);
+	return ret;
 }
 
 void ccci_md_platform_shutdown(struct platform_device *pdev)

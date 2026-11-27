@@ -39,6 +39,7 @@ struct ccci_handshake {
 	u8 negotiated[CCCI_RUNTIME_FEATURES];
 	u64 last_ms;
 	u64 deadline_ms;
+	u32 hs2_timeout_ms;
 	u32 used;
 	u32 rejected;
 	enum ccci_handshake_state state;
@@ -49,7 +50,8 @@ struct ccci_handshake {
 
 int ccci_handshake_begin(struct ccci_handshake *hs, const struct ccci_handshake_ops *ops,
 			 void *context, const struct ccci_runtime_plan *plan,
-			 const struct ccci_runtime_offer offers[CCCI_RUNTIME_FEATURES], u64 now_ms);
+			 const struct ccci_runtime_offer offers[CCCI_RUNTIME_FEATURES],
+			 u32 hs2_timeout_ms, u64 now_ms);
 int ccci_handshake_tick(struct ccci_handshake *hs, u64 now_ms);
 int ccci_handshake_consume(struct ccci_handshake *hs, const struct ccci_ccif_event *event,
 			   u64 now_ms);

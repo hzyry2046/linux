@@ -13,9 +13,11 @@
 #include <linux/ipv6.h>
 #include <linux/iopoll.h>
 #include <linux/netdevice.h>
+#include <linux/pm.h>
 #include <linux/skbuff.h>
 #include <linux/bits.h>
 #include <linux/clk.h>
+#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/dmapool.h>
@@ -39,6 +41,11 @@
 #include "ccci-dpmaif.h"
 
 #define CCCI_DPMAIF_BLOCKS	5
+
+static bool dpmaif_off_reset = true;
+module_param(dpmaif_off_reset, bool, 0600);
+MODULE_PARM_DESC(dpmaif_off_reset,
+		 "Reset the DPMAIF engine after the modem powers off (default true)");
 
 
 struct ccci_dpmaif_ul {
@@ -135,6 +142,10 @@ struct ccci_dpmaif {
 	bool net_rx;
 	bool power_blocked;
 	bool reset_pending;
+	/* The PD power flag was written by a prior generation of this boot. */
+	bool dl_power_flag;
+	/* Physical base of the MD image region for the bus remap windows. */
+	u32 md_base;
 	u8 net_channel;
 	struct ccci_dpmaif_ul ul;
 	struct ccci_dpmaif_dl dl;
@@ -178,7 +189,14 @@ static inline void __iomem *dpmaif_infra_ao_mem(struct ccci_dpmaif *dpmaif)
 	return dpmaif->block[4];
 }
 
+static inline void __iomem *dpmaif_ao_md_dl(struct ccci_dpmaif *dpmaif)
+{
+	return dpmaif->block[0] + CCCI_DPMAIF_AO_MD_DL_BASE;
+}
+
 static irqreturn_t dpmaif_irq(int irq, void *data);
+static int dpmaif_reset(struct ccci_dpmaif *dpmaif, bool restore_prot);
+static int __dpmaif_reset(struct ccci_dpmaif *dpmaif, bool restore_prot);
 
 static void dpmaif_ul_reset_counters(struct ccci_dpmaif *dpmaif)
 {
@@ -543,23 +561,35 @@ static int dpmaif_dl_timeout(struct ccci_dpmaif *dpmaif, u32 reg)
 	return -ETIMEDOUT;
 }
 
-/* Write a deferred-update register: poll not-ready, write, poll not-ready. */
-static int dpmaif_dl_update(struct ccci_dpmaif *dpmaif, u32 reg, u32 value)
+/*
+ * Write a deferred-update register: poll not-ready, write, poll not-ready.
+ * The caller picks the poll budget: process-context startup and teardown may
+ * wait long enough for a cold or freshly reset engine to accept the command,
+ * while the hardirq refill path must stay short.
+ */
+static int __dpmaif_dl_update(struct ccci_dpmaif *dpmaif, u32 reg, u32 value,
+			      u32 limit)
 {
 	void __iomem *pd = dpmaif_pd_dl(dpmaif);
 	u32 poll = 0;
 
 	while (readl(pd + reg) & CCCI_DPMAIF_DL_ADD_NOT_READY) {
-		if (++poll >= CCCI_DPMAIF_DL_POLL_LIMIT)
+		if (++poll >= limit)
 			return dpmaif_dl_timeout(dpmaif, reg);
 	}
 	writel(value, pd + reg);
 	poll = 0;
 	while (readl(pd + reg) & CCCI_DPMAIF_DL_ADD_NOT_READY) {
-		if (++poll >= CCCI_DPMAIF_DL_POLL_LIMIT)
+		if (++poll >= limit)
 			return dpmaif_dl_timeout(dpmaif, reg);
 	}
 	return 0;
+}
+
+/* Process-context startup/teardown: the same-board driver waits 1600000. */
+static int dpmaif_dl_update(struct ccci_dpmaif *dpmaif, u32 reg, u32 value)
+{
+	return __dpmaif_dl_update(dpmaif, reg, value, CCCI_DPMAIF_DL_STARTUP_POLL_LIMIT);
 }
 
 /*
@@ -633,19 +663,19 @@ static int dpmaif_dl_pit_program(struct ccci_dpmaif *dpmaif)
 	return 0;
 }
 
-static int dpmaif_dl_add_bat(struct ccci_dpmaif *dpmaif, u32 cnt)
+static int dpmaif_dl_add_bat(struct ccci_dpmaif *dpmaif, u32 cnt, u32 limit)
 {
 	u32 value = (cnt & CCCI_DPMAIF_BAT_SIZE_MSK) | CCCI_DPMAIF_DL_ADD_UPDATE;
 
-	return dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_ADD, value);
+	return __dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_ADD, value, limit);
 }
 
-static int dpmaif_dl_add_frg_bat(struct ccci_dpmaif *dpmaif, u32 cnt)
+static int dpmaif_dl_add_frg_bat(struct ccci_dpmaif *dpmaif, u32 cnt, u32 limit)
 {
 	u32 value = (cnt & CCCI_DPMAIF_BAT_SIZE_MSK) | CCCI_DPMAIF_DL_ADD_UPDATE |
 		    CCCI_DPMAIF_DL_BAT_FRG_ADD;
 
-	return dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_ADD, value);
+	return __dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_BAT_ADD, value, limit);
 }
 
 /*
@@ -669,11 +699,11 @@ static int dpmaif_dl_queue_enable(struct ccci_dpmaif *dpmaif, bool enable, bool 
 				(frag ? CCCI_DPMAIF_DL_BAT_FRG_INIT : 0));
 }
 
-static int dpmaif_dl_add_pit(struct ccci_dpmaif *dpmaif, u32 cnt)
+static int dpmaif_dl_add_pit(struct ccci_dpmaif *dpmaif, u32 cnt, u32 limit)
 {
 	u32 value = (cnt & CCCI_DPMAIF_PIT_SIZE_MSK) | CCCI_DPMAIF_DL_ADD_UPDATE;
 
-	return dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_PIT_ADD, value);
+	return __dpmaif_dl_update(dpmaif, CCCI_DPMAIF_PD_DL_PIT_ADD, value, limit);
 }
 
 /*
@@ -682,6 +712,43 @@ static int dpmaif_dl_add_pit(struct ccci_dpmaif *dpmaif, u32 cnt)
  * outstanding limit, the level-1 timer mask, and the power flag the ring
  * programming needs before any deferred register will settle.
  */
+/*
+ * The MD-side DMA personality: security domain, cache banks and the eight
+ * 64MB remap windows covering the MD image region. The vendor writes them on
+ * every power-on because the true s2idle power-down clears them even though
+ * the AO registers themselves survive; without valid windows the engine
+ * accepts the BAT_INIT write but never completes the latch, which is exactly
+ * the warm-restart wedge observed after a real suspend.
+ */
+static void dpmaif_md_hw_bus_remap(struct ccci_dpmaif *dpmaif)
+{
+	void __iomem *md = dpmaif_ao_md_dl(dpmaif);
+	static const u32 banks[8] = {
+		CCCI_DPMAIF_AO_MD_REMAP_BANK0_A, CCCI_DPMAIF_AO_MD_REMAP_BANK0_B,
+		CCCI_DPMAIF_AO_MD_REMAP_BANK0_C, CCCI_DPMAIF_AO_MD_REMAP_BANK0_D,
+		CCCI_DPMAIF_AO_MD_REMAP_BANK1_A, CCCI_DPMAIF_AO_MD_REMAP_BANK1_B,
+		CCCI_DPMAIF_AO_MD_REMAP_BANK1_C, CCCI_DPMAIF_AO_MD_REMAP_BANK1_D,
+	};
+	u32 value, base;
+
+	value = (CCCI_DPMAIF_REMAP_DOMAIN_ID & 0xf) |
+		((CCCI_DPMAIF_REMAP_DOMAIN_ID & 0xf) << 8);
+	writel(value, md + CCCI_DPMAIF_AO_MD_REMAP_DOMAIN);
+	value = (CCCI_DPMAIF_REMAP_BANK0_ID & 0x3f) |
+		((CCCI_DPMAIF_REMAP_BANK1_ID & 0x3f) << 8);
+	writel(value, md + CCCI_DPMAIF_AO_MD_REMAP_CACHE);
+	base = dpmaif->md_base;
+	for (unsigned int i = 0; i < ARRAY_SIZE(banks); i++) {
+		value = ((base >> 24) & 0xff) + (((base + 0x2000000) >> 8) & 0xff0000);
+		value |= BIT(16) | 1;
+		writel(value, md + banks[i]);
+		base += 0x2000000 * 2;
+	}
+	value = readl(md + CCCI_DPMAIF_AO_MD_CFG1);
+	value |= CCCI_DPMAIF_AO_MD_REMAP_ENABLE;
+	writel(value, md + CCCI_DPMAIF_AO_MD_CFG1);
+}
+
 static void dpmaif_dl_hw_prepare(struct ccci_dpmaif *dpmaif)
 {
 	void __iomem *wdma = dpmaif->block[1] + CCCI_DPMAIF_PD_WDMA_BASE;
@@ -704,8 +771,11 @@ static void dpmaif_dl_hw_prepare(struct ccci_dpmaif *dpmaif)
 	writel(value, wdma + CCCI_DPMAIF_PD_WDMA_WR_CMD_CON0);
 	writel(CCCI_DPMAIF_AO_UL_L1TIMR0_VAL,
 	       dpmaif_ao_ul(dpmaif) + CCCI_DPMAIF_AO_UL_AP_L1TIMR0);
+	if (dpmaif->md_base)
+		dpmaif_md_hw_bus_remap(dpmaif);
 	writel(CCCI_DPMAIF_DL_POWER_ON,
 	       dpmaif_pd_dl(dpmaif) + CCCI_DPMAIF_PD_DL_RESERVE_RW);
+	dpmaif->dl_power_flag = true;
 }
 
 /* AO-side packet limits, thresholds and alignment, as the v2 driver sets them. */
@@ -935,11 +1005,11 @@ next:
 		dl->last_len = last_len;
 		dl->last_channel = channel;
 	}
-	if (bat_add && dpmaif_dl_add_bat(dpmaif, bat_add))
+	if (bat_add && dpmaif_dl_add_bat(dpmaif, bat_add, CCCI_DPMAIF_DL_POLL_LIMIT))
 		dl->err++;
-	if (frag_add && dpmaif_dl_add_frg_bat(dpmaif, frag_add))
+	if (frag_add && dpmaif_dl_add_frg_bat(dpmaif, frag_add, CCCI_DPMAIF_DL_POLL_LIMIT))
 		dl->err++;
-	if (dpmaif_dl_add_pit(dpmaif, pit_add))
+	if (dpmaif_dl_add_pit(dpmaif, pit_add, CCCI_DPMAIF_DL_POLL_LIMIT))
 		dl->err++;
 }
 
@@ -1153,6 +1223,25 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries,
 	ret = clk_prepare_enable(dpmaif->clk_bus);
 	if (ret)
 		goto out_main;
+	/*
+	 * The PD block loses power in s2idle even when the system sleep is
+	 * refused in prepare: the entry still powers down the domain before
+	 * the abort. The vendor driver detects the loss through the reserve
+	 * word written at initialization; a zero here means every handshake
+	 * mechanism below is dead and the engine must be reset first, or the
+	 * BAT_INIT enable bit never clears. Only a generation that previously
+	 * wrote the flag may judge its loss: a cold boot inherits the LK
+	 * engine state, where the flag was never written and an extra reset
+	 * of the live engine breaks the inherited RX path.
+	 */
+	if (dpmaif->dl_power_flag &&
+	    readl(dpmaif_pd_dl(dpmaif) + CCCI_DPMAIF_PD_DL_RESERVE_RW) !=
+	    CCCI_DPMAIF_DL_POWER_ON) {
+		dev_info(dpmaif->dev, "DL power flag lost before start; resetting engine\n");
+		ret = dpmaif_reset(dpmaif, true);
+		if (ret)
+			goto out_bus;
+	}
 	ret = dpmaif_dl_ring_alloc(dpmaif, &dl->bat, bat_entries,
 				   CCCI_DPMAIF_DL_BAT_BUF_SZ);
 	if (ret)
@@ -1177,16 +1266,36 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries,
 		dpmaif_dl_publish(&dl->frg, i);
 	dl->fail_reg = 0;
 	dpmaif->reset_pending = true;
-	dpmaif_dl_hw_prepare(dpmaif);
-	dpmaif_dl_tune(dpmaif);
-	dpmaif_dl_log_clocks(dpmaif, "before BAT");
-	ret = dpmaif_dl_bat_program(dpmaif, &dl->bat, false);
-	if (ret)
-		goto out_unprogram;
-	ret = dpmaif_dl_bat_program(dpmaif, &dl->frg, true);
-	if (ret)
-		goto out_unprogram;
-	ret = dpmaif_dl_pit_program(dpmaif);
+	/*
+	 * The engine does not always survive the reset handshake: the BAT_INIT
+	 * command write reaches the PD block but the state machine never
+	 * consumes it, even though the identical sequence succeeds on other
+	 * boots. A fresh reset of the dead engine is cheap because nothing has
+	 * been published to the modem yet, so retry the full prepare/program
+	 * sequence instead of failing the generation outright.
+	 */
+	for (unsigned int attempt = 0; attempt < 3; attempt++) {
+		if (attempt) {
+			dev_info(dpmaif->dev, "DL program attempt %u after engine reset\n",
+				 attempt + 1);
+			ret = __dpmaif_reset(dpmaif, true);
+			if (ret)
+				goto out_unprogram;
+		}
+		dpmaif_dl_hw_prepare(dpmaif);
+		dpmaif_dl_tune(dpmaif);
+		dpmaif_dl_log_clocks(dpmaif, "before BAT");
+		ret = dpmaif_dl_bat_program(dpmaif, &dl->bat, false);
+		if (ret)
+			continue;
+		ret = dpmaif_dl_bat_program(dpmaif, &dl->frg, true);
+		if (ret)
+			continue;
+		ret = dpmaif_dl_pit_program(dpmaif);
+		if (ret)
+			continue;
+		break;
+	}
 	if (ret)
 		goto out_unprogram;
 	/*
@@ -1195,10 +1304,12 @@ static int dpmaif_dl_start(struct ccci_dpmaif *dpmaif, u32 bat_entries,
 	 */
 	dl->pit_rd = (readl(ao_dl + CCCI_DPMAIF_AO_DL_PIT_STA2) >> 16) &
 		     CCCI_DPMAIF_DL_PIT_WRIDX_MSK;
-	ret = dpmaif_dl_add_frg_bat(dpmaif, dl->frg.entries - 1);
+	ret = dpmaif_dl_add_frg_bat(dpmaif, dl->frg.entries - 1,
+				    CCCI_DPMAIF_DL_STARTUP_POLL_LIMIT);
 	if (ret)
 		goto out_unprogram;
-	ret = dpmaif_dl_add_bat(dpmaif, dl->bat.entries - 1);
+	ret = dpmaif_dl_add_bat(dpmaif, dl->bat.entries - 1,
+				CCCI_DPMAIF_DL_STARTUP_POLL_LIMIT);
 	if (ret)
 		goto out_unprogram;
 	ret = dpmaif_dl_queue_enable(dpmaif, true, true);
@@ -1327,6 +1438,15 @@ void ccci_dpmaif_allow_start(struct ccci_dpmaif *dpmaif)
 	mutex_unlock(&dpmaif->lock);
 }
 
+void ccci_dpmaif_set_md_base(struct ccci_dpmaif *dpmaif, u32 md_base)
+{
+	if (!dpmaif)
+		return;
+	mutex_lock(&dpmaif->lock);
+	dpmaif->md_base = md_base;
+	mutex_unlock(&dpmaif->lock);
+}
+
 int ccci_dpmaif_quiesce(struct ccci_dpmaif *dpmaif)
 {
 	int ul_ret, dl_ret;
@@ -1390,15 +1510,13 @@ static int dpmaif_reset_readback(struct ccci_dpmaif *dpmaif,
 	return 0;
 }
 
-static int dpmaif_reset(struct ccci_dpmaif *dpmaif, bool restore_prot)
+static int __dpmaif_reset(struct ccci_dpmaif *dpmaif, bool restore_prot)
 {
 	void __iomem *prot = dpmaif_infra_ao_mem(dpmaif);
 	struct dpmaif_reset_sample before, after;
 	u32 value;
 	int ret;
 
-	if (dpmaif->ul.drb || dpmaif->dl.pit || dpmaif->irq_refs)
-		return -EBUSY;
 	ret = clk_prepare_enable(dpmaif->clk_main);
 	if (ret)
 		return ret;
@@ -1413,13 +1531,22 @@ static int dpmaif_reset(struct ccci_dpmaif *dpmaif, bool restore_prot)
 		goto disable_bus;
 	}
 	before = dpmaif_reset_sample(dpmaif);
+	/*
+	 * The vendor pulses each reset line for 500us; a back-to-back write
+	 * pair can leave the engine half-reset with readable registers and a
+	 * dead state machine.
+	 */
+	udelay(500);
 	ret = regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST0_AO, CCCI_DPMAIF_AO_RST_MASK);
+	udelay(500);
 	if (!ret)
 		ret = regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST1_AO,
 				   CCCI_DPMAIF_AO_RST_MASK);
+	udelay(500);
 	if (!ret)
 		ret = regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST0_PD,
 				   CCCI_DPMAIF_PD_RST_MASK);
+	udelay(500);
 	if (!ret)
 		ret = regmap_write(dpmaif->infra, CCCI_DPMAIF_INFRA_RST1_PD,
 				   CCCI_DPMAIF_PD_RST_MASK);
@@ -1441,6 +1568,13 @@ disable_main:
 	return ret;
 }
 
+static int dpmaif_reset(struct ccci_dpmaif *dpmaif, bool restore_prot)
+{
+	if (dpmaif->ul.drb || dpmaif->dl.pit || dpmaif->irq_refs)
+		return -EBUSY;
+	return __dpmaif_reset(dpmaif, restore_prot);
+}
+
 /* Caller holds the MD lifecycle lock and has read back MD1 OFF. */
 int ccci_dpmaif_reset_after_off(struct ccci_dpmaif *dpmaif)
 {
@@ -1452,9 +1586,14 @@ int ccci_dpmaif_reset_after_off(struct ccci_dpmaif *dpmaif)
 	if (!dpmaif->power_blocked)
 		ret = -EBUSY;
 	else if (dpmaif->reset_pending) {
-		ret = dpmaif_reset(dpmaif, false);
-		if (!ret)
+		if (!dpmaif_off_reset) {
+			dev_info(dpmaif->dev, "off reset skipped by parameter\n");
 			dpmaif->reset_pending = false;
+		} else {
+			ret = dpmaif_reset(dpmaif, false);
+			if (!ret)
+				dpmaif->reset_pending = false;
+		}
 	}
 	mutex_unlock(&dpmaif->lock);
 	return ret;
@@ -2322,6 +2461,24 @@ static const struct of_device_id dpmaif_of_ids[] = {
 };
 MODULE_DEVICE_TABLE(of, dpmaif_of_ids);
 
+static int dpmaif_prepare_suspend(struct device *dev)
+{
+	struct ccci_dpmaif *dpmaif = dev_get_drvdata(dev);
+	bool busy;
+
+	mutex_lock(&dpmaif->lock);
+	busy = dpmaif->net_tx || dpmaif->net_rx || dpmaif->ul.started ||
+	       dpmaif->dl.started || dpmaif->reset_pending || dpmaif->irq_refs;
+	mutex_unlock(&dpmaif->lock);
+	if (busy)
+		dev_warn(dev, "system sleep refused: DPMAIF not quiescent\n");
+	return busy ? -EBUSY : 0;
+}
+
+static const struct dev_pm_ops dpmaif_pm_ops = {
+	.prepare = dpmaif_prepare_suspend,
+};
+
 static struct platform_driver dpmaif_driver = {
 	.probe = dpmaif_probe,
 	.remove = dpmaif_remove,
@@ -2329,6 +2486,7 @@ static struct platform_driver dpmaif_driver = {
 		.name = "op6893-dpmaif",
 		.suppress_bind_attrs = true,
 		.of_match_table = dpmaif_of_ids,
+		.pm = pm_sleep_ptr(&dpmaif_pm_ops),
 		.dev_groups = dpmaif_groups,
 	},
 };

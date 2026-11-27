@@ -9,6 +9,7 @@
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/pm.h>
 #include <linux/sysfs.h>
 
 #include "ccci-scp-inspect.h"
@@ -641,12 +642,36 @@ static const struct of_device_id ccci_scp_resource_match[] = {
 	{}
 };
 
+static int ccci_scp_prepare_suspend(struct device *dev)
+{
+	struct ccci_scp_resource_owner *owner = dev_get_drvdata(dev);
+	bool busy;
+
+	mutex_lock(&owner->lock);
+	busy = owner->reset_generation;
+#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_INITIAL_BOOT)
+	busy |= owner->boot_running || owner->boot_cleanup_error;
+#endif
+#if IS_ENABLED(CONFIG_OP6893_CCCI_SCP_RUNTIME)
+	busy |= owner->runtime.active || owner->runtime.cleanup_error;
+#endif
+	mutex_unlock(&owner->lock);
+	if (busy)
+		dev_warn(dev, "system sleep refused: SCP not quiescent\n");
+	return busy ? -EBUSY : 0;
+}
+
+static const struct dev_pm_ops ccci_scp_pm_ops = {
+	.prepare = ccci_scp_prepare_suspend,
+};
+
 /* Boot-lifetime owner: consumer unbind must never release all SCP resources. */
 static struct platform_driver ccci_scp_resource_driver = {
 	.probe = ccci_scp_resource_probe,
 	.driver = {
 		.name = "op6893-scp-resource-hold",
 		.of_match_table = ccci_scp_resource_match,
+		.pm = pm_sleep_ptr(&ccci_scp_pm_ops),
 		.dev_groups = ccci_scp_resource_groups,
 		.suppress_bind_attrs = true,
 	},

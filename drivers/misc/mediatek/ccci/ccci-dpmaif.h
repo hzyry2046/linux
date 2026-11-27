@@ -128,6 +128,29 @@
 #define CCCI_DPMAIF_INFRA_PROT		BIT(10)
 
 /*
+ * MD-side bus remap in the AO_MD_DL block (ao_ul + 0x800). The vendor writes
+ * these on every power-on: the DMA security domain, the cache bank attributes
+ * and eight 64MB windows that map the MD image region, then enables the remap.
+ * Without them the engine accepts register writes but can never complete a
+ * ring latch, because its DMA transactions have no valid routing.
+ */
+#define CCCI_DPMAIF_AO_MD_CFG1		0x04
+#define CCCI_DPMAIF_AO_MD_REMAP_DOMAIN	0x20
+#define CCCI_DPMAIF_AO_MD_REMAP_CACHE	0x24
+#define CCCI_DPMAIF_AO_MD_REMAP_BANK0_A	0x30
+#define CCCI_DPMAIF_AO_MD_REMAP_BANK0_B	0x34
+#define CCCI_DPMAIF_AO_MD_REMAP_BANK0_C	0x38
+#define CCCI_DPMAIF_AO_MD_REMAP_BANK0_D	0x3c
+#define CCCI_DPMAIF_AO_MD_REMAP_BANK1_A	0x40
+#define CCCI_DPMAIF_AO_MD_REMAP_BANK1_B	0x44
+#define CCCI_DPMAIF_AO_MD_REMAP_BANK1_C	0x48
+#define CCCI_DPMAIF_AO_MD_REMAP_BANK1_D	0x4c
+#define CCCI_DPMAIF_AO_MD_REMAP_ENABLE	BIT(0)
+#define CCCI_DPMAIF_REMAP_DOMAIN_ID	1
+#define CCCI_DPMAIF_REMAP_BANK0_ID	6
+#define CCCI_DPMAIF_REMAP_BANK1_ID	7
+
+/*
  * Infracfg reset words for the two DPMAIF domains. The vendor pulses these to
  * recover a wedged engine; the AO word lives at 0x140/0x144 and the PD word at
  * 0x150/0x154 of the same syscon the driver already has a regmap for.
@@ -226,6 +249,12 @@
  * interrupts disabled.
  */
 #define CCCI_DPMAIF_DL_POLL_LIMIT	10000
+/*
+ * Process-context startup and teardown may wait much longer: after a power or
+ * reset cycle the engine needs time to accept the deferred update, and the
+ * same-board driver polls up to 1600000 times on this path.
+ */
+#define CCCI_DPMAIF_DL_STARTUP_POLL_LIMIT	1600000
 
 /* Two-word BAT entry, then the four-word v2 normal PIT entry. */
 struct ccci_dpmaif_bat {
@@ -353,6 +382,7 @@ struct ccci_dpmaif;
 #if IS_ENABLED(CONFIG_OP6893_CCCI_DPMAIF)
 struct ccci_dpmaif *ccci_dpmaif_find(struct device *consumer);
 void ccci_dpmaif_allow_start(struct ccci_dpmaif *dpmaif);
+void ccci_dpmaif_set_md_base(struct ccci_dpmaif *dpmaif, u32 md_base);
 int ccci_dpmaif_quiesce(struct ccci_dpmaif *dpmaif);
 int ccci_dpmaif_reset_after_off(struct ccci_dpmaif *dpmaif);
 int ccci_dpmaif_release_with_dl(struct ccci_dpmaif *dpmaif,
@@ -366,6 +396,7 @@ ssize_t ccci_dpmaif_format_dl(const struct ccci_dpmaif_dl_state *dl, char *buf, 
 #else
 static inline struct ccci_dpmaif *ccci_dpmaif_find(struct device *consumer) { return NULL; }
 static inline void ccci_dpmaif_allow_start(struct ccci_dpmaif *dpmaif) { }
+static inline void ccci_dpmaif_set_md_base(struct ccci_dpmaif *dpmaif, u32 md_base) { }
 static inline int ccci_dpmaif_quiesce(struct ccci_dpmaif *dpmaif) { return 0; }
 static inline int ccci_dpmaif_reset_after_off(struct ccci_dpmaif *dpmaif) { return 0; }
 

@@ -17,11 +17,12 @@ static int handshake_fail(struct ccci_handshake *hs, int error)
 
 int ccci_handshake_begin(struct ccci_handshake *hs, const struct ccci_handshake_ops *ops,
 			 void *context, const struct ccci_runtime_plan *plan,
-			 const struct ccci_runtime_offer offers[CCCI_RUNTIME_FEATURES], u64 now_ms)
+			 const struct ccci_runtime_offer offers[CCCI_RUNTIME_FEATURES],
+			 u32 hs2_timeout_ms, u64 now_ms)
 {
 	int ret;
 
-	if (!hs || !ops || !ops->publish || !ops->port || !plan)
+	if (!hs || !ops || !ops->publish || !ops->port || !plan || !hs2_timeout_ms)
 		return -EINVAL;
 	if (hs->state != CCCI_HANDSHAKE_IDLE)
 		return -EALREADY;
@@ -43,6 +44,7 @@ int ccci_handshake_begin(struct ccci_handshake *hs, const struct ccci_handshake_
 	hs->offers = offers;
 	hs->plan = *plan;
 	hs->last_ms = now_ms;
+	hs->hs2_timeout_ms = hs2_timeout_ms;
 	hs->deadline_ms = now_ms + CCCI_HANDSHAKE_TIMEOUT_MS;
 	hs->rejected = CCCI_RUNTIME_FEATURES;
 	hs->state = CCCI_HANDSHAKE_WAIT_HS1;
@@ -106,14 +108,14 @@ int ccci_handshake_consume(struct ccci_handshake *hs, const struct ccci_ccif_eve
 		/* v2.1 is legal only after actual negotiation of MULTI_MD_MPU. */
 		if (hs->negotiated[27] != 2 || (hs->negotiated[0] & 15) != 2)
 			return handshake_fail(hs, -EOPNOTSUPP);
-		if (now_ms > U64_MAX - CCCI_HANDSHAKE_TIMEOUT_MS)
+		if (now_ms > U64_MAX - hs->hs2_timeout_ms)
 			return handshake_fail(hs, -ERANGE);
 		hs->state = CCCI_HANDSHAKE_PUBLISH;
 		ret = hs->ops->publish(hs->context, hs->runtime, hs->used, hs->upload);
 		if (ret)
 			return handshake_fail(hs, ret);
 		hs->state = CCCI_HANDSHAKE_WAIT_HS2;
-		hs->deadline_ms = now_ms + CCCI_HANDSHAKE_TIMEOUT_MS;
+		hs->deadline_ms = now_ms + hs->hs2_timeout_ms;
 		/* Services may arm only after runtime publication entered WAIT_HS2. */
 		ret = hs->ops->port(hs->context, event);
 		return ret ? handshake_fail(hs, ret) : 0;

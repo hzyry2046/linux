@@ -7,6 +7,7 @@
 #include <linux/jiffies.h>
 #include <linux/ktime.h>
 #include <linux/mutex.h>
+#include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/workqueue.h>
@@ -19,6 +20,7 @@
 /* Same-board AP-written DBM area: two guards around a cleared body. */
 #define CCCI_DBM_GUARD	0x44444444
 #define CCCI_DBM_BODY	160
+#define CCCI_HS2_EXTENDED_TIMEOUT_MS	120000
 
 struct ccci_ccif_controller {
 	struct device *dev;
@@ -30,6 +32,7 @@ struct ccci_ccif_controller {
 	struct delayed_work timer;
 	struct ccci_handshake hs;
 	struct ccci_runtime_plan plan;
+	u32 hs2_timeout_ms;
 	struct ccci_runtime_offer offers[CCCI_RUNTIME_FEATURES];
 	ccci_ccif_consume_fn port;
 	void *context;
@@ -223,7 +226,8 @@ int ccci_ccif_control_start(struct ccci_ccif_controller *control,
 	}
 	memcpy(control->offers, offers, sizeof(control->offers));
 	ret = ccci_handshake_begin(&control->hs, &control_ops, control, &control->plan,
-				   control->offers, ktime_to_ms(ktime_get_boottime()));
+				   control->offers, control->hs2_timeout_ms,
+				   ktime_to_ms(ktime_get_boottime()));
 	if (ret)
 		goto out;
 	control->attempted = true;
@@ -321,6 +325,9 @@ struct ccci_ccif_controller *ccci_ccif_control_create(struct device *dev, void _
 	if (!control)
 		return ERR_PTR(-ENOMEM);
 	control->dev = dev;
+	control->hs2_timeout_ms = CCCI_HANDSHAKE_TIMEOUT_MS;
+	if (device_property_read_bool(dev, "realme,extended-hs2-timeout"))
+		control->hs2_timeout_ms = CCCI_HS2_EXTENDED_TIMEOUT_MS;
 	ret = ccci_runtime_plan(smem, &control->plan);
 	if (ret)
 		return ERR_PTR(ret);

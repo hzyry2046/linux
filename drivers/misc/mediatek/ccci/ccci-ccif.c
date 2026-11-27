@@ -4,6 +4,8 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/irq.h>
+#include <linux/ktime.h>
+#include <linux/moduleparam.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -18,6 +20,11 @@
 #include "ccci-ccif-rx.h"
 #include "ccci-smem.h"
 
+static bool fs_hs2_publish_first = true;
+module_param(fs_hs2_publish_first, bool, 0600);
+MODULE_PARM_DESC(fs_hs2_publish_first,
+		 "Publish FS replies before checking CCIF busy until HS2 (next MD start)");
+
 struct ccci_ccif_bank {
 	void __iomem *base;
 	u32 size;
@@ -27,8 +34,17 @@ struct ccci_ccif {
 	/* Never acquire the control or parent MD lock while holding this mutex. */
 	struct mutex tx_lock;
 	bool tx_active;
+	bool fs_hs2_publish_first;
 	u16 tx_sequence;
 	u16 service_sequence[4];
+	u32 fs_tx_successes;
+	u32 fs_tx_busy;
+	u32 fs_tx_empty_busy;
+	u32 fs_tx_ring_full;
+	u32 fs_tx_busy_publishes;
+	u64 fs_tx_empty_busy_first_ms;
+	u64 fs_tx_empty_busy_last_ms;
+	u64 fs_tx_success_last_ms;
 	int tx_error;
 	struct ccci_ccif_rx *rx;
 	struct ccci_ccif_controller *control;
@@ -115,15 +131,15 @@ static void ccif_bank_bad_control(void *context, bool tx, u32 offset, u32 value,
 }
 
 static void ccif_bank_bad_tx_read(void *context, u32 offset, u32 read, u32 write,
-				  u32 length, int sample_error, u32 sample, unsigned int retries)
+				  u32 length, int error, u32 sample, unsigned int retries)
 {
-	if (!sample_error && sample == (read + 4 == length ? 0 : read + 4)) {
+	if (!error) {
 		pr_info_ratelimited("ccci: CCIF TX read recovered offset=%#x read=%#x reread=%#x retries=%u\n",
 				    offset, read, sample, retries);
 		return;
 	}
-	pr_err_ratelimited("ccci: invalid CCIF TX read offset=%#x read=%#x write=%#x length=%#x reread=%#x reread_error=%d retries=%u\n",
-			   offset, read, write, length, sample, sample_error, retries);
+	pr_err_ratelimited("ccci: invalid CCIF TX read offset=%#x read=%#x write=%#x length=%#x reread=%#x resample_error=%d retries=%u\n",
+			   offset, read, write, length, sample, error, retries);
 }
 
 static void ccif_bank_wait_tx_read(void *context)
@@ -309,6 +325,7 @@ int ccci_ccif_prepare(struct ccci_ccif *ccif)
 	if (ret)
 		return ret;
 	ccif->attempted = true;
+	ccif->fs_hs2_publish_first = READ_ONCE(fs_hs2_publish_first);
 	ccif->step = "format-rings";
 	for (u32 bank = 0; bank < CCCI_CCIF_BANKS; bank++) {
 		for (u32 q = 0; q < CCCI_CCIF_QUEUES; q++) {
@@ -441,6 +458,14 @@ int ccci_ccif_rearm(struct ccci_ccif *ccif, bool commit)
 	mutex_lock(&ccif->tx_lock);
 	ccif->tx_sequence = 0;
 	memset(ccif->service_sequence, 0, sizeof(ccif->service_sequence));
+	ccif->fs_tx_successes = 0;
+	ccif->fs_tx_busy = 0;
+	ccif->fs_tx_empty_busy = 0;
+	ccif->fs_tx_ring_full = 0;
+	ccif->fs_tx_busy_publishes = 0;
+	ccif->fs_tx_empty_busy_first_ms = 0;
+	ccif->fs_tx_empty_busy_last_ms = 0;
+	ccif->fs_tx_success_last_ms = 0;
 	mutex_unlock(&ccif->tx_lock);
 	ccif->attempted = false;
 	ccif->quiesced_at_stop = false;
@@ -462,6 +487,7 @@ ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf)
 
 ssize_t ccci_ccif_fs_tx_status(struct ccci_ccif *ccif, char *buf)
 {
+	u64 now_ms = ktime_to_ms(ktime_get_boottime());
 	u32 read, write;
 	ssize_t ret;
 
@@ -471,11 +497,51 @@ ssize_t ccci_ccif_fs_tx_status(struct ccci_ccif *ccif, char *buf)
 	mutex_lock(&ccif->tx_lock);
 	ret = ccci_ccif_ring_tx_positions(&ccif->ring[CCCI_CCIF_NORMAL][4], &read, &write);
 	if (!ret)
-		ret = sysfs_emit(buf, "tx_read=%u tx_write=%u busy=%u next_seq=%u\n",
+		ret = sysfs_emit(buf,
+				 "tx_read=%u tx_write=%u busy=%u next_seq=%u tx_ok=%u tx_busy=%u tx_empty_busy=%u tx_ring_full=%u tx_busy_publishes=%u empty_busy_ms=%llu empty_busy_last_ms=%llu success_last_ms=%llu\n",
 				 read, write, !!(readl(ccif->ap + 4) & BIT(4)),
-				 ccif->service_sequence[0]);
+				 ccif->service_sequence[0], ccif->fs_tx_successes,
+				 ccif->fs_tx_busy, ccif->fs_tx_empty_busy,
+				 ccif->fs_tx_ring_full, ccif->fs_tx_busy_publishes,
+				 ccif->fs_tx_empty_busy_first_ms ?
+				 now_ms - ccif->fs_tx_empty_busy_first_ms : 0,
+				 ccif->fs_tx_empty_busy_last_ms ?
+				 now_ms - ccif->fs_tx_empty_busy_last_ms : 0,
+				 ccif->fs_tx_success_last_ms ?
+				 now_ms - ccif->fs_tx_success_last_ms : 0);
 	mutex_unlock(&ccif->tx_lock);
 	return ret;
+}
+
+/*
+ * AT channel (AP->MD channel 12 / queue 5, MD->AP channel 10) observability.
+ * The queue-5 TX ring positions distinguish who is stuck: tx_write is the AP
+ * producer and tx_read is the MD consumer, so commands written but never
+ * consumed point at the MD side, while consumed-but-unanswered commands point
+ * at the MD AT/RIL service. rx_write is the MD producer of channel-10 replies
+ * and rx_read the AP consumer. Read-only; never changes ring or doorbell state.
+ */
+ssize_t ccci_ccif_at_status(struct ccci_ccif *ccif, char *buf)
+{
+	u32 tx_read = 0, tx_write = 0, rx_read = 0, rx_write = 0;
+	int tx_ret, rx_ret;
+
+	if (!ccif->prepared)
+		return -ENODATA;
+
+	mutex_lock(&ccif->tx_lock);
+	tx_ret = ccci_ccif_ring_tx_positions(&ccif->ring[CCCI_CCIF_NORMAL][5],
+					     &tx_read, &tx_write);
+	rx_ret = ccci_ccif_ring_rx_positions(&ccif->ring[CCCI_CCIF_NORMAL][5],
+					     &rx_read, &rx_write);
+	mutex_unlock(&ccif->tx_lock);
+
+	return sysfs_emit(buf,
+			  "tx_read=%u tx_write=%u rx_read=%u rx_write=%u busy=%u tx_err=%d rx_err=%d\n",
+			  tx_ret ? 0 : tx_read, tx_ret ? 0 : tx_write,
+			  rx_ret ? 0 : rx_read, rx_ret ? 0 : rx_write,
+			  !!(readl(ccif->ap + 4) & BIT(5)),
+			  tx_ret, rx_ret);
 }
 
 /*
@@ -485,6 +551,8 @@ ssize_t ccci_ccif_fs_tx_status(struct ccci_ccif *ccif, char *buf)
 static int ccif_transmit(struct ccci_ccif *ccif, u8 *copy, u32 size, u32 channel,
 			 u32 queue, u32 index, bool hs2_seen)
 {
+	bool fs_queue;
+	bool publish_first;
 	u32 busy;
 	int ret;
 
@@ -499,19 +567,41 @@ static int ccif_transmit(struct ccci_ccif *ccif, u8 *copy, u32 size, u32 channel
 	ret = ccci_ccif_rx_error(ccif->rx);
 	if (ret)
 		goto out;
-	/* One read of the AP busy word: it decides the send and feeds the log. */
-	busy = readl(ccif->ap + 4);
-	if (busy & BIT(queue)) {
-		ret = -EBUSY;
-		pr_info_ratelimited("ccci: service send deferred: channel=%u queue=%u busy=%#x\n",
-				    channel, queue, busy);
-		goto out;
+	fs_queue = channel == 15 && queue == 4;
+	publish_first = ccif->fs_hs2_publish_first && !hs2_seen &&
+			fs_queue;
+	if (!publish_first) {
+		busy = readl(ccif->ap + 4);
+		if (busy & BIT(queue)) {
+			if (fs_queue) {
+				struct ccci_ccif_ring *ring = &ccif->ring[CCCI_CCIF_NORMAL][queue];
+				u32 read, write;
+				int ring_ret;
+
+				ccif->fs_tx_busy++;
+				ring_ret = ccci_ccif_ring_tx_positions(ring, &read, &write);
+				if (!ring_ret && read == write) {
+					u64 now_ms = ktime_to_ms(ktime_get_boottime());
+
+					ccif->fs_tx_empty_busy++;
+					if (!ccif->fs_tx_empty_busy_first_ms)
+						ccif->fs_tx_empty_busy_first_ms = now_ms;
+					ccif->fs_tx_empty_busy_last_ms = now_ms;
+				}
+			}
+			ret = -EBUSY;
+			pr_info_ratelimited("ccci: service send deferred: channel=%u queue=%u busy=%#x\n",
+					    channel, queue, busy);
+			goto out;
+		}
 	}
 	/* HIF owns sequence per channel; FS/RPC assert only while awaiting HS2. */
 	put_unaligned_le32(channel | ((u32)ccif->service_sequence[index] << 16) |
 			   (hs2_seen ? 0 : BIT(31)), copy + 8);
 	ret = ccci_ccif_ring_transmit(&ccif->ring[CCCI_CCIF_NORMAL][queue], copy, size);
 	if (ret == -ENOSPC) {
+		if (fs_queue)
+			ccif->fs_tx_ring_full++;
 		pr_info_ratelimited("ccci: service ring full: channel=%u queue=%u size=%u\n",
 				    channel, queue, size);
 		goto out;
@@ -527,9 +617,20 @@ static int ccif_transmit(struct ccci_ccif *ccif, u8 *copy, u32 size, u32 channel
 	ccif->service_sequence[index] = (ccif->service_sequence[index] + 1) & 0x7fff;
 	/* Complete WC payload and producer stores before ordinary queue doorbell. */
 	mb();
+	/* Do not ring an outstanding doorbell. The reply is already committed. */
+	if (publish_first && (readl(ccif->ap + 4) & BIT(queue))) {
+		ccif->fs_tx_busy_publishes++;
+		pr_info_ratelimited("ccci: FS reply published with CCIF queue 4 busy\n");
+		goto published;
+	}
 	writel(BIT(queue), ccif->ap + 4);
 	writel(queue, ccif->ap + 0xc);
+published:
 	ret = 0;
+	if (fs_queue) {
+		ccif->fs_tx_successes++;
+		ccif->fs_tx_success_last_ms = ktime_to_ms(ktime_get_boottime());
+	}
 out:
 	mutex_unlock(&ccif->tx_lock);
 	return ret;

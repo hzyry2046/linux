@@ -6,6 +6,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
+#include <linux/pm.h>
 #include <linux/slab.h>
 
 #include "ccci-lk.h"
@@ -179,12 +180,25 @@ static void ccci_lk_inspect_shutdown(struct platform_device *pdev)
 		ccci_md_platform_shutdown(pdev);
 }
 
+static int ccci_lk_inspect_prepare_suspend(struct device *dev)
+{
+	if (IS_ENABLED(CONFIG_OP6893_CCCI_MD_PLATFORM) &&
+	    of_device_is_compatible(dev->of_node, "realme,op6893-modem-platform"))
+		return ccci_md_platform_prepare_suspend(dev);
+	return 0;
+}
+
+static const struct dev_pm_ops ccci_lk_inspect_pm_ops = {
+	.prepare = ccci_lk_inspect_prepare_suspend,
+};
+
 static struct platform_driver ccci_lk_inspect_driver = {
 	.probe = ccci_lk_inspect_probe,
 	.shutdown = ccci_lk_inspect_shutdown,
 	.driver = {
 		.name = "op6893-ccci-lk",
 		.of_match_table = ccci_lk_inspect_match,
+		.pm = pm_sleep_ptr(&ccci_lk_inspect_pm_ops),
 		.suppress_bind_attrs = true,
 	},
 };

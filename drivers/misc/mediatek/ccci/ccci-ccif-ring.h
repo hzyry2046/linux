@@ -37,7 +37,7 @@ struct ccci_ccif_ring_ops {
 	void (*fence)(void *context, bool publish);
 	void (*bad_control)(void *context, bool tx, u32 offset, u32 value, u32 expected);
 	void (*bad_tx_read)(void *context, u32 offset, u32 read, u32 write,
-			    u32 length, int sample_error, u32 sample, unsigned int retries);
+			    u32 length, int error, u32 sample, unsigned int retries);
 	void (*wait_tx_read)(void *context);
 };
 
@@ -54,6 +54,7 @@ int ccci_ccif_ring_init(struct ccci_ccif_ring *ring, const struct ccci_ccif_ring
 int ccci_ccif_ring_format(struct ccci_ccif_ring *ring);
 int ccci_ccif_ring_verify_empty(struct ccci_ccif_ring *ring);
 int ccci_ccif_ring_tx_positions(struct ccci_ccif_ring *ring, u32 *read, u32 *write);
+int ccci_ccif_ring_rx_positions(struct ccci_ccif_ring *ring, u32 *read, u32 *write);
 /* Serialized SPSC operations. Caller contains non-transient failures. */
 int ccci_ccif_ring_receive(struct ccci_ccif_ring *ring, void *data, u32 capacity, u32 *size);
 int ccci_ccif_ring_transmit(struct ccci_ccif_ring *ring, const void *data, u32 size);

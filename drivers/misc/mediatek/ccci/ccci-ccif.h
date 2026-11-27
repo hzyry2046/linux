@@ -77,6 +77,8 @@ int ccci_ccif_rearm(struct ccci_ccif *ccif, bool commit);
 ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf);
 /* Caller holds the parent lifecycle lock and the MD power and clock references. */
 ssize_t ccci_ccif_fs_tx_status(struct ccci_ccif *ccif, char *buf);
+/* Read-only AT channel (queue 5) ring positions and busy state. */
+ssize_t ccci_ccif_at_status(struct ccci_ccif *ccif, char *buf);
 #else
 static inline struct ccci_ccif *ccci_ccif_create(struct platform_device *pdev,
 						 const struct ccci_smem_layout *smem,
@@ -139,6 +141,11 @@ static inline ssize_t ccci_ccif_status(struct ccci_ccif *ccif, char *buf)
 }
 
 static inline ssize_t ccci_ccif_fs_tx_status(struct ccci_ccif *ccif, char *buf)
+{
+	return -EOPNOTSUPP;
+}
+
+static inline ssize_t ccci_ccif_at_status(struct ccci_ccif *ccif, char *buf)
 {
 	return -EOPNOTSUPP;
 }

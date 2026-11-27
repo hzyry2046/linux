@@ -145,6 +145,52 @@ static int ring_bad_control(struct ccci_ccif_ring *r, bool tx, u32 offset, u32 v
 	return -EBADMSG;
 }
 
+static u32 ring_distance(u32 from, u32 to, u32 length)
+{
+	return to >= from ? to - from : length - from + to;
+}
+
+static int ring_resample_tx_read(struct ccci_ccif_ring *r, u32 control, u32 *read,
+				 u32 write, u32 length)
+{
+	unsigned int retries = 0;
+	u32 sample = 0, previous = *read;
+	int ret;
+
+	/*
+	 * The producer is serialized while we sample. MD may consume several
+	 * entries, including across wrap, but cannot go past the fixed write
+	 * pointer or backwards. Reclaim space only from an aligned sample.
+	 */
+	for (;;) {
+		ret = ring_get(r, control, &sample);
+		if (ret)
+			break;
+		if (sample >= length || (sample & 3) ||
+		    ring_distance(previous, sample, length) >
+		    ring_distance(previous, write, length)) {
+			ret = -EBADMSG;
+			break;
+		}
+		if (!(sample & 7))
+			break;
+		if (!r->ops->wait_tx_read || retries == TX_READ_RETRIES) {
+			ret = -EBADMSG;
+			break;
+		}
+		previous = sample;
+		r->ops->wait_tx_read(r->context);
+		retries++;
+	}
+	if (r->ops->bad_tx_read)
+		r->ops->bad_tx_read(r->context, r->slot.offset + control, *read,
+				    write, length, ret, sample, retries);
+	if (ret)
+		return ret;
+	*read = sample;
+	return 0;
+}
+
 static int ring_control(struct ccci_ccif_ring *r, bool tx, u32 *read, u32 *write)
 {
 	u32 value, control = tx ? 20 : 8, length = tx ? r->slot.tx : r->slot.rx;
@@ -174,32 +220,11 @@ static int ring_control(struct ccci_ccif_ring *r, bool tx, u32 *read, u32 *write
 	if (*write >= length || (*write & 7))
 		return ring_bad_control(r, tx, control + 4, *write, length);
 	if (*read >= length || (*read & 7)) {
-		if (tx && *read < length && (*read & 7) == 4 &&
-		    *read - 4 != *write) {
-			unsigned int retries = 0;
-			u32 sample = 0;
-			u32 next = *read + 4;
-
-			/* Accept only the next slot boundary actually read from MD. */
-			if (next == length)
-				next = 0;
-			ret = ring_get(r, control, &sample);
-			/* A changing but unexpected value is not safe to retry. */
-			while (!ret && sample == *read && r->ops->wait_tx_read &&
-			       retries < TX_READ_RETRIES) {
-				r->ops->wait_tx_read(r->context);
-				retries++;
-				ret = ring_get(r, control, &sample);
-			}
-			if (r->ops->bad_tx_read)
-				r->ops->bad_tx_read(r->context, r->slot.offset + control,
-						    *read, *write, length, ret, sample, retries);
-			if (ret || sample != next)
-				return -EBADMSG;
-			*read = sample;
-		} else {
+		if (!tx || *read >= length || (*read & 7) != 4 || *read - 4 == *write)
 			return ring_bad_control(r, tx, control, *read, length);
-		}
+		ret = ring_resample_tx_read(r, control, read, *write, length);
+		if (ret)
+			return ret;
 	}
 	r->ops->fence(r->context, false);
 	return 0;
@@ -208,6 +233,11 @@ static int ring_control(struct ccci_ccif_ring *r, bool tx, u32 *read, u32 *write
 int ccci_ccif_ring_tx_positions(struct ccci_ccif_ring *r, u32 *read, u32 *write)
 {
 	return ring_control(r, true, read, write);
+}
+
+int ccci_ccif_ring_rx_positions(struct ccci_ccif_ring *r, u32 *read, u32 *write)
+{
+	return ring_control(r, false, read, write);
 }
 
 static u32 ring_advance(u32 pos, u32 size, u32 length)

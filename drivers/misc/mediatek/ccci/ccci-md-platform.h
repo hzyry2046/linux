@@ -3,9 +3,11 @@
 #define __CCCI_MD_PLATFORM_H
 
 struct platform_device;
+struct device;
 struct ccci_smem_layout;
 
 int ccci_md_platform_create(struct platform_device *pdev, const struct ccci_smem_layout *layout);
 void ccci_md_platform_shutdown(struct platform_device *pdev);
+int ccci_md_platform_prepare_suspend(struct device *dev);
 
 #endif
