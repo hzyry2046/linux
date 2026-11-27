@@ -135,11 +135,17 @@ static void mtk_mipi_tx_power_on_signal(struct phy *phy)
 {
 	struct mtk_mipi_tx *mipi_tx = phy_get_drvdata(phy);
 	void __iomem *base = mipi_tx->regs;
+	bool keep_calibration = mipi_tx->driver_data->keep_boot_calibration;
 
 	/* BG_LPF_EN / BG_CORE_EN */
 	writel(RG_DSI_PAD_TIEL_SEL | RG_DSI_BG_CORE_EN, base + MIPITX_LANE_CON);
-	usleep_range(30, 100);
-	writel(RG_DSI_BG_CORE_EN | RG_DSI_BG_LPF_EN, base + MIPITX_LANE_CON);
+	if (keep_calibration) {
+		usleep_range(500, 600);
+		writel(RG_DSI_BG_CORE_EN, base + MIPITX_LANE_CON);
+	} else {
+		usleep_range(30, 100);
+		writel(RG_DSI_BG_CORE_EN | RG_DSI_BG_LPF_EN, base + MIPITX_LANE_CON);
+	}
 
 	/* Switch OFF each Lane */
 	mtk_phy_clear_bits(base + MIPITX_D0_SW_CTL_EN, DSI_SW_CTL_EN);
@@ -151,7 +157,9 @@ static void mtk_mipi_tx_power_on_signal(struct phy *phy)
 	mtk_phy_update_field(base + MIPITX_VOLTAGE_SEL, RG_DSI_HSTX_LDO_REF_SEL,
 			     (mipi_tx->mipitx_drive - 3000) / 200);
 
-	mtk_mipi_tx_config_calibration_data(mipi_tx);
+	/* MT6893 firmware programs the lane impedance; leave it intact. */
+	if (!keep_calibration)
+		mtk_mipi_tx_config_calibration_data(mipi_tx);
 
 	mtk_phy_set_bits(base + MIPITX_CK_CKMODE_EN, DSI_CK_CKMODE_EN);
 }
@@ -173,6 +181,13 @@ static void mtk_mipi_tx_power_off_signal(struct phy *phy)
 }
 
 const struct mtk_mipitx_data mt8183_mipitx_data = {
+	.mipi_tx_clk_ops = &mtk_mipi_tx_pll_ops,
+	.mipi_tx_enable_signal = mtk_mipi_tx_power_on_signal,
+	.mipi_tx_disable_signal = mtk_mipi_tx_power_off_signal,
+};
+
+const struct mtk_mipitx_data mt6893_mipitx_data = {
+	.keep_boot_calibration = true,
 	.mipi_tx_clk_ops = &mtk_mipi_tx_pll_ops,
 	.mipi_tx_enable_signal = mtk_mipi_tx_power_on_signal,
 	.mipi_tx_disable_signal = mtk_mipi_tx_power_off_signal,

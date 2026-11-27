@@ -18,6 +18,7 @@
 
 struct mtk_mipitx_data {
 	const u32 mppll_preserve;
+	bool keep_boot_calibration;
 	const struct clk_ops *mipi_tx_clk_ops;
 	void (*mipi_tx_enable_signal)(struct phy *phy);
 	void (*mipi_tx_disable_signal)(struct phy *phy);
@@ -43,4 +44,5 @@ extern const struct mtk_mipitx_data mt2701_mipitx_data;
 extern const struct mtk_mipitx_data mt8173_mipitx_data;
 extern const struct mtk_mipitx_data mt8183_mipitx_data;
 extern const struct mtk_mipitx_data mt8196_mipitx_data;
+extern const struct mtk_mipitx_data mt6893_mipitx_data;
 #endif

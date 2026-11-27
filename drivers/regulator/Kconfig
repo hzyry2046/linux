@@ -430,6 +430,13 @@ config REGULATOR_FAN53555
 	  input voltage supply of 2.5V to 5.5V. The output voltage is
 	  programmed through an I2C interface.
 
+config REGULATOR_FAN53870
+	tristate "ON Semiconductor FAN53870 regulator"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Enable the driver for LDO3 of the ON Semiconductor FAN53870 PMIC.
+
 config REGULATOR_FAN53880
 	tristate "Fairchild FAN53880 Regulator"
 	depends on I2C && OF

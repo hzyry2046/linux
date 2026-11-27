@@ -74,6 +74,7 @@ phys_addr_t __init op6893_prepare_fdt(phys_addr_t lk_phys)
 {
 	void *lk;
 	int size = 0, ret, i;
+	u32 old_start, old_size;
 
 	lk = fixmap_remap_fdt(lk_phys, &size, PAGE_KERNEL_RO);
 	if (!lk || fdt_check_header(lk) ||
@@ -89,14 +90,27 @@ phys_addr_t __init op6893_prepare_fdt(phys_addr_t lk_phys)
 					     pgprot_val(pgprot_writecombine(PAGE_KERNEL)));
 	if (!console_buffer)
 		panic("op6893: cannot map early console");
-	WRITE_ONCE(console_buffer[0], 0);
-	WRITE_ONCE(console_buffer[1], 0);
-	WRITE_ONCE(console_buffer[2], 0);
-	/* Make the empty header visible before marking it valid. */
-	wmb();
-	WRITE_ONCE(console_buffer[0], OP6893_RAM_SIG);
-	dsb(sy);
-	register_console(&op6893_console);
+	/*
+	 * Ramoops snapshots this same console zone later. Preserve a valid,
+	 * nonempty ring until then; CON_PRINTBUFFER will replay this boot.
+	 */
+	old_start = READ_ONCE(console_buffer[1]);
+	old_size = READ_ONCE(console_buffer[2]);
+	if (READ_ONCE(console_buffer[0]) == OP6893_RAM_SIG &&
+	    old_size && old_size <= OP6893_CAPACITY &&
+	    old_start < OP6893_CAPACITY && old_start <= old_size) {
+		early_memunmap(console_buffer, OP6893_CONSOLE_SIZE);
+		console_buffer = NULL;
+	} else {
+		WRITE_ONCE(console_buffer[0], 0);
+		WRITE_ONCE(console_buffer[1], 0);
+		WRITE_ONCE(console_buffer[2], 0);
+		/* Publish the empty header before marking it valid. */
+		wmb();
+		WRITE_ONCE(console_buffer[0], OP6893_RAM_SIG);
+		dsb(sy);
+		register_console(&op6893_console);
+	}
 	pr_info("OP6893-DIRECT: setup_arch reached; LK FDT=%pa\n", &lk_phys);
 	pr_info("OP6893-DIRECT: %s", linux_banner);
 

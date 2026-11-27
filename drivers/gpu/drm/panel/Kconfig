@@ -915,6 +915,18 @@ config DRM_PANEL_SAMSUNG_AMS639RQ08
 	  Say Y or M here if you want to enable support for the
 	  Samsung AMS639RQ08 FHD Plus (2340x1080@60Hz) CMD mode panel.
 
+config DRM_PANEL_SAMSUNG_AMS643YE01
+	tristate "Samsung AMS643YE01 PVT command-mode AMOLED panel"
+	depends on OF && DRM_MIPI_DSI && BACKLIGHT_CLASS_DEVICE
+	depends on GPIOLIB && REGULATOR
+	select DRM_DISPLAY_HELPER
+	select DRM_DISPLAY_DSC_HELPER
+	help
+	  Enable the Samsung AMS643YE01 PVT AMOLED panel found in
+	  some OP6893 phones. It uses four MIPI DSI data lanes, command
+	  mode and Display Stream Compression. The driver supports
+	  the 1080x2400 mode at 60 Hz and standard brightness control.
+
 config DRM_PANEL_SAMSUNG_S6E88A0_AMS427AP24
 	tristate "Samsung AMS427AP24 panel with S6E88A0 controller"
 	depends on GPIOLIB && OF && REGULATOR

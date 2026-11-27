@@ -12,6 +12,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/soc/mediatek/mtk-cmdq.h>
+#include <drm/display/drm_dsc.h>
 #include <drm/drm_print.h>
 
 #include "mtk_crtc.h"
@@ -46,6 +47,22 @@
 #define DSC_BYPASS				BIT(4)
 #define DSC_UFOE_SEL				BIT(16)
 
+/* MT6893 uses the DSC 1.1 register layout. */
+#define MT6893_DSC_PIC_W			0x018
+#define MT6893_DSC_PIC_H			0x01c
+#define MT6893_DSC_SLICE_W		0x020
+#define MT6893_DSC_SLICE_H		0x024
+#define MT6893_DSC_CHUNK_SIZE		0x028
+#define MT6893_DSC_BUF_SIZE		0x02c
+#define MT6893_DSC_MODE			0x030
+#define MT6893_DSC_CFG			0x034
+#define MT6893_DSC_PAD			0x038
+#define MT6893_DSC_OBUF			0x070
+#define MT6893_DSC_PPS(n)		(0x080 + (n) * 4)
+#define MT6893_DSC_SHADOW		0x200
+#define MT6893_DSC_SHADOW_DSC_11	BIT(5)
+#define MT6893_DSC_SHADOW_FORCE_COMMIT	BIT(1)
+
 #define DISP_REG_OD_EN				0x0000
 #define DISP_REG_OD_CFG				0x0020
 #define OD_RELAYMODE				BIT(0)
@@ -61,6 +78,9 @@
 #define UFO_BYPASS				BIT(2)
 
 struct mtk_ddp_comp_dev {
+	const struct drm_dsc_config *dsc;
+	bool mt6893_dsc;
+	bool dsc_command_mode;
 	struct clk *clk;
 	void __iomem *regs;
 	struct cmdq_client_reg cmdq_reg;
@@ -187,11 +207,103 @@ static void mtk_dither_set(struct device *dev, unsigned int bpc,
 			      DISP_DITHERING, cmdq_pkt);
 }
 
+void mtk_ddp_comp_dsc_set_config(struct device *dev,
+				 const struct drm_dsc_config *config,
+				 bool command_mode)
+{
+	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
+
+	if (priv->mt6893_dsc) {
+		priv->dsc = config;
+		priv->dsc_command_mode = command_mode;
+	}
+}
+
+static u32 mt6893_dsc_rc_range(const struct drm_dsc_rc_range_parameters *rc)
+{
+	return ((rc->range_bpg_offset & DSC_RANGE_BPG_OFFSET_MASK) << 10) |
+	       (rc->range_max_qp << 5) | rc->range_min_qp;
+}
+
+static bool mt6893_dsc_config(struct mtk_ddp_comp_dev *priv, unsigned int w,
+			      unsigned int h, struct cmdq_pkt *pkt)
+{
+	const struct drm_dsc_config *cfg = priv->dsc;
+	struct cmdq_client_reg *cmdq = &priv->cmdq_reg;
+	void __iomem *regs = priv->regs;
+	unsigned int slice_rows, pad, i;
+	u32 pps[20] = {};
+
+	if (!cfg || cfg->dsc_version_major != 1 || cfg->dsc_version_minor != 1 ||
+	    !cfg->slice_width || !cfg->slice_height || !cfg->slice_chunk_size ||
+	    !cfg->slice_count || cfg->slice_count > 2 ||
+	    cfg->slice_width * cfg->slice_count != w ||
+	    cfg->pic_width != w || cfg->pic_height != h || !h ||
+	    !cfg->convert_rgb || cfg->simple_422 || cfg->native_420 || cfg->native_422)
+		return false;
+
+	slice_rows = DIV_ROUND_UP(h, cfg->slice_height);
+	pad = roundup(cfg->slice_chunk_size * cfg->slice_count, 3) -
+	      cfg->slice_chunk_size * cfg->slice_count;
+
+	mtk_ddp_write(pkt, DSC_UFOE_SEL | BIT(14), cmdq, regs, DISP_REG_DSC_CON);
+	mtk_ddp_write(pkt, ((DIV_ROUND_UP(w, 3) - 1) << 16) | w,
+		      cmdq, regs, MT6893_DSC_PIC_W);
+	mtk_ddp_write(pkt, ((slice_rows * cfg->slice_height - 1) << 16) | (h - 1),
+		      cmdq, regs, MT6893_DSC_PIC_H);
+	mtk_ddp_write(pkt, ((DIV_ROUND_UP(cfg->slice_width, 3) - 1) << 16) | cfg->slice_width,
+		      cmdq, regs, MT6893_DSC_SLICE_W);
+	mtk_ddp_write(pkt, ((u32)(cfg->slice_width % 3) << 30) |
+		      ((slice_rows - 1) << 16) | (cfg->slice_height - 1),
+		      cmdq, regs, MT6893_DSC_SLICE_H);
+	mtk_ddp_write(pkt, cfg->slice_chunk_size, cmdq, regs, MT6893_DSC_CHUNK_SIZE);
+	mtk_ddp_write(pkt, cfg->slice_chunk_size * cfg->slice_height, cmdq, regs,
+		      MT6893_DSC_BUF_SIZE);
+	mtk_ddp_write_mask(pkt, (cfg->slice_count - 1) |
+			   ((priv->dsc_command_mode ? 4 : 1) << 8), cmdq, regs,
+			   MT6893_DSC_MODE, GENMASK(15, 0));
+	mtk_ddp_write(pkt, 0x22, cmdq, regs, MT6893_DSC_CFG);
+	mtk_ddp_write(pkt, pad ? pad | BIT(2) : 0, cmdq, regs, MT6893_DSC_PAD);
+
+	/* Use the FHD output buffer to prevent packet starvation in command mode. */
+	mtk_ddp_write(pkt, priv->dsc_command_mode && w == 1080 ? 0x800002c2 : 0,
+		      cmdq, regs, MT6893_DSC_OBUF);
+
+	/* The hardware packs RC ranges differently from the panel's DSI PPS. */
+	pps[0] = cfg->line_buf_depth | (cfg->bits_per_component << 4) |
+		 (cfg->bits_per_pixel << 8) | BIT(18) | (cfg->block_pred_enable << 19);
+	pps[1] = cfg->initial_xmit_delay | ((u32)cfg->initial_dec_delay << 16);
+	pps[2] = cfg->initial_scale_value | ((u32)cfg->scale_increment_interval << 16);
+	pps[3] = cfg->scale_decrement_interval | ((u32)cfg->first_line_bpg_offset << 16);
+	pps[4] = cfg->nfl_bpg_offset | ((u32)cfg->slice_bpg_offset << 16);
+	pps[5] = cfg->initial_offset | ((u32)cfg->final_offset << 16);
+	pps[6] = cfg->flatness_min_qp | (cfg->flatness_max_qp << 8) |
+		 ((u32)cfg->rc_model_size << 16);
+	pps[7] = cfg->rc_edge_factor | (cfg->rc_quant_incr_limit0 << 8) |
+		 (cfg->rc_quant_incr_limit1 << 16) | ((u32)cfg->rc_tgt_offset_high << 24) |
+		 ((u32)cfg->rc_tgt_offset_low << 28);
+	for (i = 0; i < ARRAY_SIZE(cfg->rc_buf_thresh); i++)
+		pps[8 + i / 4] |= (u32)cfg->rc_buf_thresh[i] << ((i % 4) * 8);
+	for (i = 0; i < ARRAY_SIZE(cfg->rc_range_params); i++)
+		pps[12 + i / 2] |= mt6893_dsc_rc_range(&cfg->rc_range_params[i]) <<
+				   ((i % 2) * 16);
+	for (i = 0; i < ARRAY_SIZE(pps); i++)
+		mtk_ddp_write(pkt, pps[i], cmdq, regs, MT6893_DSC_PPS(i));
+
+	mtk_ddp_write_mask(pkt, MT6893_DSC_SHADOW_DSC_11, cmdq, regs, MT6893_DSC_SHADOW,
+			   GENMASK(6, 5));
+
+	return true;
+}
+
 static void mtk_dsc_config(struct device *dev, unsigned int w,
 			   unsigned int h, unsigned int vrefresh,
 			   unsigned int bpc, struct cmdq_pkt *cmdq_pkt)
 {
 	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
+
+	if (priv->mt6893_dsc && mt6893_dsc_config(priv, w, h, cmdq_pkt))
+		return;
 
 	/* dsc bypass mode */
 	mtk_ddp_write_mask(cmdq_pkt, DSC_BYPASS, &priv->cmdq_reg, priv->regs,
@@ -205,6 +317,10 @@ static void mtk_dsc_config(struct device *dev, unsigned int w,
 static void mtk_dsc_start(struct device *dev)
 {
 	struct mtk_ddp_comp_dev *priv = dev_get_drvdata(dev);
+
+	if (priv->mt6893_dsc)
+		mtk_ddp_write_mask(NULL, MT6893_DSC_SHADOW_FORCE_COMMIT, &priv->cmdq_reg,
+				   priv->regs, MT6893_DSC_SHADOW, MT6893_DSC_SHADOW_FORCE_COMMIT);
 
 	/* write with mask to reserve the value set in mtk_dsc_config */
 	mtk_ddp_write_mask(NULL, DSC_EN, &priv->cmdq_reg, priv->regs, DISP_REG_DSC_CON, DSC_EN);
@@ -689,6 +805,8 @@ int mtk_ddp_comp_init(struct device *dev, struct device_node *node, struct mtk_d
 	priv->regs = devm_of_iomap(dev, node, 0, NULL);
 	if (IS_ERR(priv->regs))
 		return PTR_ERR(priv->regs);
+
+	priv->mt6893_dsc = of_device_is_compatible(node, "mediatek,mt6893-disp-dsc");
 
 	priv->clk = of_clk_get(node, 0);
 	if (IS_ERR(priv->clk))

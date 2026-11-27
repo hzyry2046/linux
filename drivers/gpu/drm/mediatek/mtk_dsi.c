@@ -8,6 +8,7 @@
 #include <linux/component.h>
 #include <linux/iopoll.h>
 #include <linux/irq.h>
+#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/phy/phy.h>
@@ -18,6 +19,7 @@
 #include <video/mipi_display.h>
 #include <video/videomode.h>
 
+#include <drm/display/drm_dsc.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_bridge_connector.h>
@@ -32,24 +34,6 @@
 #include "mtk_disp_drv.h"
 #include "mtk_disp_trace.h"
 #include "mtk_drm_drv.h"
-
-/*
- * Plan A for chopin: the bootloader (LK) already drives this panel in the mode
- * it needs (DSC-compressed video) and its logo is visible on screen.  Resetting
- * the DSI engine, forcing command mode and re-initialising the panel throws that
- * working state away and replaces it with an uncompressed stream the panel
- * cannot decode - which is why the screen goes black once we take over.
- *
- * With this enabled the driver only powers the PHY/clocks (like the MT6895
- * mainline port's "assume DSI0 enable already in LK" path) and leaves the video
- * timing, PSCTRL and the panel state exactly as LK left them.
- *
- * Set mtk_dsi.adopt_lk_display=0 for the previous re-initialising behaviour.
- */
-static bool adopt_lk_display = true;
-module_param(adopt_lk_display, bool, 0644);
-MODULE_PARM_DESC(adopt_lk_display,
-		 "Keep the bootloader's DSI video/DSC stream and panel state (default: on)");
 
 #define DSI_START		0x00
 
@@ -91,6 +75,9 @@ MODULE_PARM_DESC(adopt_lk_display,
 #define DSI_PSCTRL		0x1c
 #define DSI_PS_WC			GENMASK(13, 0)
 #define DSI_PS_SEL			GENMASK(17, 16)
+#define MT6893_DSI_PS_WC		GENMASK(14, 0)
+#define MT6893_DSI_PS_SEL		GENMASK(18, 16)
+#define MT6893_DSI_PS_DSC		5
 #define PACKED_PS_16BIT_RGB565		0
 #define PACKED_PS_18BIT_RGB666		1
 #define LOOSELY_PS_24BIT_RGB666		2
@@ -111,6 +98,7 @@ MODULE_PARM_DESC(adopt_lk_display,
 #define HFP_HS_EN			BIT(31)
 
 #define DSI_CMDQ_SIZE		0x60
+#define MT6893_DSI_MEM_CONTI	0x90
 #define CMDQ_SIZE			0x3f
 #define CMDQ_SIZE_SEL		BIT(15)
 
@@ -169,6 +157,7 @@ MODULE_PARM_DESC(adopt_lk_display,
 /* CMDQ related bits */
 #define CONFIG				GENMASK(7, 0)
 #define SHORT_PACKET			0
+#define PIXEL_STREAM_PACKET		1
 #define LONG_PACKET			2
 #define BTA				BIT(2)
 #define HSTX				BIT(3)
@@ -213,6 +202,7 @@ struct mtk_dsi_driver_data {
 	bool has_size_ctl;
 	bool cmdq_long_packet_ctl;
 	bool support_per_frame_lp;
+	bool has_dsc_command_mode;
 };
 
 struct mtk_dsi {
@@ -232,6 +222,9 @@ struct mtk_dsi {
 
 	u32 data_rate;
 
+	const struct drm_dsc_config *dsc;
+	unsigned long hs_rate;
+	struct mutex cmdq_lock;
 	unsigned long mode_flags;
 	enum mipi_dsi_pixel_format format;
 	unsigned int lanes;
@@ -414,9 +407,27 @@ static void mtk_dsi_rxtx_control(struct mtk_dsi *dsi)
 	writel(regval, dsi->regs + DSI_TXRX_CTRL);
 }
 
+static bool mtk_dsi_uses_dsc_command_mode(const struct mtk_dsi *dsi)
+{
+	return dsi->driver_data->has_dsc_command_mode && dsi->dsc &&
+	       !(dsi->mode_flags & MIPI_DSI_MODE_VIDEO);
+}
+
+static u32 mtk_dsi_dsc_word_count(const struct mtk_dsi *dsi)
+{
+	return dsi->dsc->slice_chunk_size * dsi->dsc->slice_count;
+}
+
 static void mtk_dsi_ps_control(struct mtk_dsi *dsi, bool config_vact)
 {
 	u32 dsi_buf_bpp, ps_val, ps_wc, vact_nl;
+
+	if (mtk_dsi_uses_dsc_command_mode(dsi)) {
+		ps_val = FIELD_PREP(MT6893_DSI_PS_WC, mtk_dsi_dsc_word_count(dsi)) |
+			 FIELD_PREP(MT6893_DSI_PS_SEL, MT6893_DSI_PS_DSC);
+		mtk_dsi_mask(dsi, DSI_PSCTRL, MT6893_DSI_PS_WC | MT6893_DSI_PS_SEL, ps_val);
+		return;
+	}
 
 	if (dsi->format == MIPI_DSI_FMT_RGB565)
 		dsi_buf_bpp = 2;
@@ -590,6 +601,14 @@ static void mtk_dsi_config_vdo_timing(struct mtk_dsi *dsi)
 {
 	struct videomode *vm = &dsi->vm;
 
+	if (mtk_dsi_uses_dsc_command_mode(dsi)) {
+		writel(FIELD_PREP(VACT_NL, vm->vactive), dsi->regs + DSI_VACT_NL);
+		writel(FIELD_PREP(DSI_HEIGHT, vm->vactive) |
+		       FIELD_PREP(DSI_WIDTH, DIV_ROUND_UP(mtk_dsi_dsc_word_count(dsi), 3)),
+		       dsi->regs + DSI_SIZE_CON);
+		return;
+	}
+
 	writel(vm->vsync_len, dsi->regs + DSI_VSA_NL);
 	writel(vm->vback_porch, dsi->regs + DSI_VBP_NL);
 	writel(vm->vfront_porch, dsi->regs + DSI_VFP_NL);
@@ -612,6 +631,49 @@ static void mtk_dsi_start(struct mtk_dsi *dsi)
 {
 	writel(0, dsi->regs + DSI_START);
 	writel(1, dsi->regs + DSI_START);
+}
+
+static int mtk_dsi_wait_frame_idle(struct mtk_dsi *dsi)
+{
+	u32 status;
+
+	return readl_poll_timeout(dsi->regs + DSI_INTSTA, status,
+				  !(status & DSI_BUSY), 100, 50000);
+}
+
+int mtk_dsi_ddp_send_frame(struct device *dev, struct mtk_mutex *mutex)
+{
+	struct mtk_dsi *dsi = dev_get_drvdata(dev);
+	u32 cmd;
+	int ret;
+
+	if (mtk_drm_adopt_lk_display() || !mtk_dsi_uses_dsc_command_mode(dsi))
+		return 0;
+
+	guard(mutex)(&dsi->cmdq_lock);
+
+	if (!dsi->enabled)
+		return -EPIPE;
+
+	ret = mtk_dsi_wait_frame_idle(dsi);
+	if (ret)
+		return ret;
+
+	/* TE gates pixel transfers. Leave it off for LP panel commands. */
+	mtk_dsi_mask(dsi, DSI_TXRX_CTRL, EXT_TE_EN, EXT_TE_EN);
+
+	cmd = FIELD_PREP(CONFIG, PIXEL_STREAM_PACKET | HSTX) |
+	      FIELD_PREP(DATA_ID, MIPI_DSI_DCS_LONG_WRITE) |
+	      FIELD_PREP(DATA_0, MIPI_DCS_WRITE_MEMORY_START);
+	writel(cmd, dsi->regs + dsi->driver_data->reg_cmdq_off);
+	writel(1, dsi->regs + DSI_CMDQ_SIZE);
+
+	/* In single mode EN must make a new 0-to-1 transition for each frame. */
+	mtk_mutex_disable(mutex);
+	mtk_mutex_enable(mutex);
+	mtk_dsi_start(dsi);
+
+	return 0;
 }
 
 static void mtk_dsi_stop(struct mtk_dsi *dsi)
@@ -647,7 +709,6 @@ static s32 mtk_dsi_wait_for_irq_done(struct mtk_dsi *dsi, u32 irq_flag,
 				     unsigned int timeout)
 {
 	s32 ret = 0;
-	unsigned long jiffies = msecs_to_jiffies(timeout);
 	struct drm_device *drm = dsi->bridge.dev;
 
 	/*
@@ -935,12 +996,24 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 	ret = mipi_dsi_pixel_format_to_bpp(dsi->format);
 	if (ret < 0) {
 		dev_err(dev, "Unknown MIPI DSI format %d\n", dsi->format);
-		return ret;
+		goto err_refcount;
 	}
 	bit_per_pixel = ret;
 
 	dsi->data_rate = DIV_ROUND_UP_ULL(dsi->vm.pixelclock * bit_per_pixel,
 					  dsi->lanes);
+
+	if (mtk_dsi_uses_dsc_command_mode(dsi)) {
+		/*
+		 * The panel specifies the validated command-mode link rate.
+		 * The uncompressed RGB rate does not describe this stream.
+		 */
+		if (!dsi->hs_rate || dsi->hs_rate > 1500000000) {
+			ret = -EINVAL;
+			goto err_refcount;
+		}
+		dsi->data_rate = dsi->hs_rate;
+	}
 
 	ret = clk_set_rate(dsi->hs_clk, dsi->data_rate);
 	if (ret < 0) {
@@ -948,7 +1021,9 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 		goto err_refcount;
 	}
 
-	phy_power_on(dsi->phy);
+	ret = phy_power_on(dsi->phy);
+	if (ret)
+		goto err_refcount;
 
 	ret = clk_prepare_enable(dsi->engine_clk);
 	if (ret < 0) {
@@ -972,7 +1047,7 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 		       readl(dsi->regs + DSI_MODE_CTRL),
 		       readl(dsi->regs + DSI_INTSTA),
 		       readl(dsi->regs + DSI_START));
-	if (adopt_lk_display) {
+	if (mtk_drm_adopt_lk_display()) {
 		mtk_disp_trace("dsi poweron: adopting LK state (no reset, no forced command mode)");
 	} else {
 		mtk_dsi_force_cmd_mode(dsi);
@@ -988,6 +1063,16 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 
 	mtk_dsi_reset_engine(dsi);
 	mtk_dsi_phy_timconfig(dsi);
+
+	if (mtk_dsi_uses_dsc_command_mode(dsi) && !mtk_drm_adopt_lk_display()) {
+		/*
+		 * Command-mode starts do not latch all geometry from the
+		 * shadow bank on MT6893. Program the working bank directly.
+		 */
+		mtk_dsi_mask(dsi, dsi->driver_data->reg_shadow_dbg_off,
+			     BYPASS_SHADOW, BYPASS_SHADOW);
+		writel(MIPI_DCS_WRITE_MEMORY_CONTINUE, dsi->regs + MT6893_DSI_MEM_CONTI);
+	}
 
 	mtk_dsi_ps_control(dsi, true);
 	mtk_dsi_set_vm_cmd(dsi);
@@ -1006,7 +1091,7 @@ err_refcount:
 
 static void mtk_dsi_poweroff(struct mtk_dsi *dsi)
 {
-	if (adopt_lk_display) {
+	if (mtk_drm_adopt_lk_display()) {
 		mtk_disp_trace("dsi poweroff: adopt mode, keeping the LK stream and PHY PLL alive");
 		return;
 	}
@@ -1049,7 +1134,7 @@ static void mtk_output_dsi_enable(struct mtk_dsi *dsi)
 	if (dsi->enabled)
 		return;
 
-	if (adopt_lk_display) {
+	if (mtk_drm_adopt_lk_display()) {
 		/*
 		 * LK's video mode (with DSC) is already running: do not touch
 		 * MODE_CTRL/PSCTRL/timings, just record that the output is up.
@@ -1060,8 +1145,10 @@ static void mtk_output_dsi_enable(struct mtk_dsi *dsi)
 	}
 
 	mtk_dsi_set_mode(dsi);
-	mtk_dsi_start(dsi);
-	mtk_dsi_trace(dsi, "output enable (video mode started)");
+	/* A command-mode DSC frame needs a memory-write queue entry. */
+	if (!mtk_dsi_uses_dsc_command_mode(dsi))
+		mtk_dsi_start(dsi);
+	mtk_dsi_trace(dsi, "output enable");
 
 	/*
 	 * One-shot bring-up log.  arm64 has no usable /dev/mem, so this is the
@@ -1089,13 +1176,21 @@ static void mtk_output_dsi_enable(struct mtk_dsi *dsi)
 
 static void mtk_output_dsi_disable(struct mtk_dsi *dsi)
 {
-	if (adopt_lk_display) {
+	guard(mutex)(&dsi->cmdq_lock);
+
+	if (mtk_drm_adopt_lk_display()) {
 		mtk_disp_trace("dsi output disable: adopted LK stream (left running)");
 		return;
 	}
 
 	if (!dsi->enabled)
 		return;
+
+	if (mtk_dsi_uses_dsc_command_mode(dsi)) {
+		if (mtk_dsi_wait_frame_idle(dsi))
+			mtk_dsi_stop(dsi);
+		mtk_dsi_mask(dsi, DSI_TXRX_CTRL, EXT_TE_EN, 0);
+	}
 
 	dsi->enabled = false;
 }
@@ -1147,8 +1242,10 @@ static void mtk_dsi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 	int ret;
 
 	ret = mtk_dsi_poweron(dsi);
-	if (ret < 0)
-		drm_err(drm, "failed to power on dsi\n");
+	if (ret < 0) {
+		drm_err(drm, "failed to power on dsi: %d\n", ret);
+		return;
+	}
 
 	mtk_dsi_lane_ready(dsi);
 	mtk_dsi_clk_hs_mode(dsi, 1);
@@ -1169,6 +1266,28 @@ mtk_dsi_bridge_mode_valid(struct drm_bridge *bridge,
 {
 	struct mtk_dsi *dsi = bridge_to_dsi(bridge);
 	int bpp;
+
+	if (!dsi->lanes)
+		return MODE_ERROR;
+
+	if (mtk_dsi_uses_dsc_command_mode(dsi)) {
+		const struct drm_dsc_config *dsc = dsi->dsc;
+		u32 wc = mtk_dsi_dsc_word_count(dsi);
+		u64 rate;
+
+		if (mode->hdisplay != dsc->pic_width ||
+		    mode->vdisplay != dsc->pic_height || !wc ||
+		    !FIELD_FIT(MT6893_DSI_PS_WC, wc) || wc % 3)
+			return MODE_BAD;
+
+		/* Allow the full compressed line payload within one line time. */
+		rate = DIV_ROUND_UP_ULL((u64)mode->clock * KILO * wc * 8,
+					dsi->lanes * mode->hdisplay);
+		if (rate > dsi->hs_rate || dsi->hs_rate > 1500000000)
+			return MODE_CLOCK_HIGH;
+
+		return MODE_OK;
+	}
 
 	bpp = mipi_dsi_pixel_format_to_bpp(dsi->format);
 	if (bpp < 0)
@@ -1192,6 +1311,14 @@ static const struct drm_bridge_funcs mtk_dsi_bridge_funcs = {
 	.mode_valid = mtk_dsi_bridge_mode_valid,
 	.mode_set = mtk_dsi_bridge_mode_set,
 };
+
+const struct drm_dsc_config *mtk_dsi_get_dsc(struct device *dev, bool *command_mode)
+{
+	struct mtk_dsi *dsi = dev_get_drvdata(dev);
+
+	*command_mode = !(dsi->mode_flags & MIPI_DSI_MODE_VIDEO);
+	return dsi->dsc;
+}
 
 void mtk_dsi_ddp_start(struct device *dev)
 {
@@ -1300,12 +1427,15 @@ static int mtk_dsi_host_attach(struct mipi_dsi_host *host,
 			return PTR_ERR(dsi->next_bridge);
 	}
 
+	dsi->dsc = device->dsc;
+	dsi->hs_rate = device->hs_rate;
 	drm_bridge_add(&dsi->bridge);
 
 	ret = component_add(host->dev, &mtk_dsi_component_ops);
 	if (ret) {
 		drm_err(drm, "failed to add dsi_host component: %d\n", ret);
 		drm_bridge_remove(&dsi->bridge);
+		dsi->dsc = NULL;
 		return ret;
 	}
 
@@ -1319,6 +1449,7 @@ static int mtk_dsi_host_detach(struct mipi_dsi_host *host,
 
 	component_del(host->dev, &mtk_dsi_component_ops);
 	drm_bridge_remove(&dsi->bridge);
+	dsi->dsc = NULL;
 	return 0;
 }
 
@@ -1363,7 +1494,7 @@ static u32 mtk_dsi_recv_cnt(u8 type, u8 *read_data)
 
 static void mtk_dsi_cmdq(struct mtk_dsi *dsi, const struct mipi_dsi_msg *msg)
 {
-	const char *tx_buf = msg->tx_buf;
+	const u8 *tx_buf = msg->tx_buf;
 	u8 config, cmdq_size, cmdq_off, type = msg->type;
 	u32 reg_val, cmdq_mask, i;
 	u32 reg_cmdq_off = dsi->driver_data->reg_cmdq_off;
@@ -1391,7 +1522,7 @@ static void mtk_dsi_cmdq(struct mtk_dsi *dsi, const struct mipi_dsi_msg *msg)
 	for (i = 0; i < msg->tx_len; i++)
 		mtk_dsi_mask(dsi, (reg_cmdq_off + cmdq_off + i) & (~0x3U),
 			     (0xffUL << (((i + cmdq_off) & 3U) * 8U)),
-			     tx_buf[i] << (((i + cmdq_off) & 3U) * 8U));
+			     (u32)tx_buf[i] << (((i + cmdq_off) & 3U) * 8U));
 
 	mtk_dsi_mask(dsi, reg_cmdq_off, cmdq_mask, reg_val);
 	mtk_dsi_mask(dsi, DSI_CMDQ_SIZE, CMDQ_SIZE, cmdq_size);
@@ -1415,8 +1546,8 @@ static ssize_t mtk_dsi_host_send_cmd(struct mtk_dsi *dsi,
 		return 0;
 }
 
-static ssize_t mtk_dsi_host_transfer(struct mipi_dsi_host *host,
-				     const struct mipi_dsi_msg *msg)
+static ssize_t mtk_dsi_transfer_locked(struct mipi_dsi_host *host,
+				       const struct mipi_dsi_msg *msg)
 {
 	struct mtk_dsi *dsi = host_to_dsi(host);
 	struct drm_device *drm = dsi->bridge.dev;
@@ -1429,7 +1560,7 @@ static ssize_t mtk_dsi_host_transfer(struct mipi_dsi_host *host,
 
 	mtk_dsi_trace(dsi, "entry");
 	dsi_mode = readl(dsi->regs + DSI_MODE_CTRL);
-	if ((dsi_mode & MODE) && !adopt_lk_display) {
+	if ((dsi_mode & MODE) && !mtk_drm_adopt_lk_display()) {
 		/* do not wait for an event that never latches here */
 		mtk_dsi_force_cmd_mode(dsi);
 		mtk_dsi_trace(dsi, "video stopped, command mode forced");
@@ -1489,6 +1620,28 @@ restore_dsi_mode:
 	return ret < 0 ? ret : recv_cnt;
 }
 
+static ssize_t mtk_dsi_host_transfer(struct mipi_dsi_host *host,
+				     const struct mipi_dsi_msg *msg)
+{
+	struct mtk_dsi *dsi = host_to_dsi(host);
+
+	guard(mutex)(&dsi->cmdq_lock);
+
+	if (!mtk_drm_adopt_lk_display() && mtk_dsi_uses_dsc_command_mode(dsi)) {
+		int ret;
+
+		if (!dsi->refcount)
+			return -EPIPE;
+
+		ret = mtk_dsi_wait_frame_idle(dsi);
+		if (ret)
+			return ret;
+		mtk_dsi_mask(dsi, DSI_TXRX_CTRL, EXT_TE_EN, 0);
+	}
+
+	return mtk_dsi_transfer_locked(host, msg);
+}
+
 static const struct mipi_dsi_host_ops mtk_dsi_ops = {
 	.attach = mtk_dsi_host_attach,
 	.detach = mtk_dsi_host_detach,
@@ -1538,6 +1691,10 @@ static int mtk_dsi_probe(struct platform_device *pdev)
 
 	dsi->host.ops = &mtk_dsi_ops;
 	dsi->host.dev = dev;
+
+	ret = devm_mutex_init(dev, &dsi->cmdq_lock);
+	if (ret)
+		return ret;
 
 	init_waitqueue_head(&dsi->irq_wait_queue);
 
@@ -1599,15 +1756,16 @@ static const struct mtk_dsi_driver_data mt8183_dsi_driver_data = {
 
 /*
  * MT6893 shares the DSI IP generation of MT8183: command queue at 0x200,
- * VM command at 0x130 and the shadow debug register at 0x190.  Unlike MT8183
- * the vendor driver for this SoC never writes the shadow control bits (its
- * DSI data has no shadow support), so .has_shadow_ctl is left false.
+ * VM command at 0x130 and the shadow debug register at 0x190. Command-mode
+ * DSC requires a shadow bypass; the LK display path is left unchanged.
  */
 static const struct mtk_dsi_driver_data mt6893_dsi_driver_data = {
+	.has_dsc_command_mode = true,
 	.reg_cmdq_off = 0x200,
 	.reg_vm_cmd_off = 0x130,
 	.reg_shadow_dbg_off = 0x190,
 	.has_size_ctl = true,
+	.cmdq_long_packet_ctl = true,
 };
 
 static const struct mtk_dsi_driver_data mt8186_dsi_driver_data = {

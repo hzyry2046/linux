@@ -131,6 +131,10 @@ ifeq ($(CONFIG_ARM64_OP6893_21651_MODEM),y)
 op6893-boot-dts := mt6893-op6893-21651-modem.dts
 endif
 
+ifeq ($(CONFIG_ARM64_OP6893_21651_NATIVE_DISPLAY),y)
+op6893-boot-dts := mt6893-op6893-21651-native-display.dts
+endif
+
 $(obj)/op6893-embed.dtb: $(srctree)/arch/arm64/boot/dts/mediatek/$(op6893-boot-dts) $(DTC) FORCE
 	$(call if_changed_dep,dtc)
 $(obj)/op6893-dtb.o: $(obj)/op6893-embed.dtb

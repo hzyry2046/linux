@@ -22,6 +22,7 @@
 
 #include "mtk_crtc.h"
 #include "mtk_ddp_comp.h"
+#include "mtk_disp_drv.h"
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_dma_helper.h>
 #include "mtk_disp_trace.h"
@@ -44,6 +45,7 @@
 struct mtk_crtc {
 	struct drm_crtc			base;
 	bool				enabled;
+	bool				dsc_command_mode;
 
 	bool				pending_needs_vblank;
 	struct drm_pending_vblank_event	*event;
@@ -364,6 +366,9 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 	struct drm_encoder *encoder;
 	struct drm_connector_list_iter conn_iter;
 	struct drm_device *dev = mtk_crtc->base.dev;
+	const struct drm_dsc_config *dsc = NULL;
+	bool dsi_command_mode = false;
+	bool has_dsc = false;
 	unsigned int width, height, vrefresh, bpc = MTK_MAX_BPC;
 	int ret;
 	int i;
@@ -389,6 +394,28 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 		}
 		drm_connector_list_iter_end(&conn_iter);
 	}
+
+	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
+		struct mtk_ddp_comp *comp = mtk_crtc->ddp_comp[i];
+
+		if (comp->id == DDP_COMPONENT_DSC0 || comp->id == DDP_COMPONENT_DSC1)
+			has_dsc = true;
+		if (comp->id == DDP_COMPONENT_DSI0 || comp->id == DDP_COMPONENT_DSI1) {
+			dsc = mtk_dsi_get_dsc(comp->dev, &dsi_command_mode);
+			break;
+		}
+	}
+
+	if (dsc && dsi_command_mode && !has_dsc) {
+		drm_err(dev, "Command-mode DSC requires an encoder before DSI\n");
+		return -EINVAL;
+	}
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	if (dsc && dsi_command_mode && mtk_crtc->cmdq_client.chan) {
+		drm_err(dev, "Command-mode DSC requires CPU plane updates\n");
+		return -EOPNOTSUPP;
+	}
+#endif
 
 	ret = pm_runtime_resume_and_get(crtc->dev->dev);
 	if (ret < 0) {
@@ -420,13 +447,21 @@ static int mtk_crtc_ddp_hw_init(struct mtk_crtc *mtk_crtc)
 	}
 	if (!mtk_ddp_comp_add(mtk_crtc->ddp_comp[i], mtk_crtc->mutex))
 		mtk_mutex_add_comp(mtk_crtc->mutex, mtk_crtc->ddp_comp[i]->id);
-	mtk_mutex_enable(mtk_crtc->mutex);
+	mtk_crtc->dsc_command_mode = dsc && dsi_command_mode;
+	/* Arm the command-mode mutex only once the plane and DSI are ready. */
+	if (mtk_crtc->dsc_command_mode)
+		mtk_mutex_write_sof(mtk_crtc->mutex, MUTEX_SOF_IDX_SINGLE_MODE);
+	else
+		mtk_mutex_enable(mtk_crtc->mutex);
 
 	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
 		struct mtk_ddp_comp *comp = mtk_crtc->ddp_comp[i];
 
 		if (i == 1)
 			mtk_ddp_comp_bgclr_in_on(comp);
+
+		if (comp->id == DDP_COMPONENT_DSC0 || comp->id == DDP_COMPONENT_DSC1)
+			mtk_ddp_comp_dsc_set_config(comp->dev, dsc, dsi_command_mode);
 
 		mtk_ddp_comp_config(comp, width, height, vrefresh, bpc, NULL);
 		mtk_ddp_comp_start(comp);
@@ -832,10 +867,10 @@ static void mtk_crtc_update_config(struct mtk_crtc *mtk_crtc, bool needs_vblank)
 		 * writing our OVL0 layers as well would clobber the layers the
 		 * bootloader is displaying through (its layer 1 read 0x78416000).
 		 */
-		if (configure_now && !mtk_drm_adopt_lk_display())
+		if (mtk_drm_adopt_lk_display())
+			mtk_crtc_mirror_fb_to_lk_ovl(mtk_crtc);
+		else if (configure_now)
 			mtk_crtc_ddp_config(crtc, NULL);
-
-		mtk_crtc_mirror_fb_to_lk_ovl(mtk_crtc);
 	}
 #if IS_REACHABLE(CONFIG_MTK_CMDQ)
 	if (mtk_crtc->cmdq_client.chan) {
@@ -1083,8 +1118,12 @@ static void mtk_crtc_atomic_disable(struct drm_crtc *crtc,
 				   mtk_crtc->cmdq_vblank_cnt == 0,
 				   msecs_to_jiffies(500));
 #endif
-	/* Wait for planes to be disabled */
-	drm_crtc_wait_one_vblank(crtc);
+	/*
+	 * The DSI bridge has already drained the last command-mode transfer.
+	 * There is no periodic vblank, and teardown does not submit a frame.
+	 */
+	if (!mtk_crtc->dsc_command_mode)
+		drm_crtc_wait_one_vblank(crtc);
 
 	drm_crtc_vblank_off(crtc);
 	mtk_crtc_ddp_hw_fini(mtk_crtc);
@@ -1130,6 +1169,28 @@ static void mtk_crtc_atomic_flush(struct drm_crtc *crtc,
 			mtk_ddp_ctm_set(mtk_crtc->ddp_comp[i], crtc->state);
 		}
 	mtk_crtc_update_config(mtk_crtc, !!mtk_crtc->event);
+
+	if (mtk_drm_adopt_lk_display() || !mtk_crtc->enabled)
+		return;
+
+#if IS_REACHABLE(CONFIG_MTK_CMDQ)
+	/* This path expects the CPU, not CMDQ, to have written the planes. */
+	if (mtk_crtc->cmdq_client.chan)
+		return;
+#endif
+
+	for (i = 0; i < mtk_crtc->ddp_comp_nr; i++) {
+		struct mtk_ddp_comp *comp = mtk_crtc->ddp_comp[i];
+		int ret;
+
+		if (comp->id != DDP_COMPONENT_DSI0 && comp->id != DDP_COMPONENT_DSI1)
+			continue;
+
+		ret = mtk_dsi_ddp_send_frame(comp->dev, mtk_crtc->mutex);
+		if (ret)
+			dev_err_ratelimited(comp->dev, "Failed to send frame: %d\n", ret);
+		break;
+	}
 }
 
 static const struct drm_crtc_funcs mtk_crtc_funcs = {

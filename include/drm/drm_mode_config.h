@@ -913,6 +913,12 @@ struct drm_mode_config {
 	uint32_t preferred_depth, prefer_shadow;
 
 	/**
+	 * @fbdev_skip_damage_vblank: The display only signals a frame when
+	 * updated. Submit fbdev damage without waiting for an idle vblank.
+	 */
+	bool fbdev_skip_damage_vblank;
+
+	/**
 	 * @quirk_addfb_prefer_xbgr_30bpp:
 	 *
 	 * Special hack for legacy ADDFB to keep nouveau userspace happy. Should

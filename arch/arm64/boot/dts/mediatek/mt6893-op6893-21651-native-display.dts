@@ -1,0 +1,427 @@
+// SPDX-License-Identifier: GPL-2.0-only
+#include "mt6893-op6893-21651-usb-otg-gpio.dts"
+#include <dt-bindings/clock/mt6893-display.h>
+
+/ {
+	model = "op6893 21651 (native display bring-up)";
+
+	/delete-node/ framebuffer@76e10000;
+	/delete-node/ fbkick;
+
+	/* GPIO access to the board lines used by the vendor I2C8 bus. */
+	i2c-panel-power {
+		compatible = "i2c-gpio";
+		sda-gpios = <&pio 123 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		scl-gpios = <&pio 122 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		i2c-gpio,delay-us = <5>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		pmic@35 {
+			compatible = "onnn,fan53870";
+			reg = <0x35>;
+
+			regulators {
+				lcd_vdd: LDO3 {
+					regulator-name = "lcd-vdd";
+					regulator-min-microvolt = <1508000>;
+					regulator-max-microvolt = <1508000>;
+				};
+			};
+		};
+	};
+};
+
+&{/soc/i2c-mt6360/pmic@34/regulator} {
+	lcd_vci: ldo3 {
+		regulator-name = "lcd-vci";
+		regulator-min-microvolt = <3000000>;
+		regulator-max-microvolt = <3000000>;
+	};
+};
+
+&topckgen {
+	clocks = <&ulposc>, <&clk26m>, <&apmixedsys CLK_APMIXED_MAINPLL>,
+		 <&apmixedsys CLK_APMIXED_UNIVPLL>, <&apmixedsys CLK_APMIXED_MMPLL>;
+	clock-names = "ulposc", "clk26m", "mainpll", "univpll", "mmpll";
+};
+
+&spm {
+	power-domain@MT6893_POWER_DOMAIN_DISP {
+		reg = <MT6893_POWER_DOMAIN_DISP>;
+		clocks = <&topckgen CLK_TOP_DISP_SEL>,
+			 <&dispsys CLK_MM_SMI_INFRA>,
+			 <&dispsys CLK_MM_SMI_COMMON>,
+			 <&dispsys CLK_MM_SMI_GALS>,
+			 <&dispsys CLK_MM_SMI_IOMMU>;
+		clock-names = "disp", "disp-infra", "disp-smi",
+			      "disp-gals", "disp-iommu";
+		mediatek,infracfg = <&ufs_infracfg>;
+		#power-domain-cells = <0>;
+	};
+};
+
+&pio {
+	dsi_te: dsi-te-pins {
+		pins {
+			pinmux = <PINMUX_GPIO41__FUNC_DSI_TE>;
+			input-enable;
+		};
+	};
+};
+
+&{/soc} {
+	dispsys: syscon@14116000 {
+		compatible = "mediatek,mt6893-mmsys", "syscon";
+		reg = <0 0x14116000 0 0x1000>;
+		/* These clock gates are needed while powering up the DISP domain. */
+		#clock-cells = <1>;
+
+		port {
+			mmsys_out: endpoint {
+				remote-endpoint = <&ovl0_in>;
+			};
+		};
+	};
+
+	disp_mutex: mutex@14117000 {
+		compatible = "mediatek,mt6893-disp-mutex";
+		reg = <0 0x14117000 0 0x1000>;
+		interrupts = <GIC_SPI 251 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&dispsys CLK_MM_DISP_MUTEX>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+	};
+
+	smi_common: smi@1411f000 {
+		compatible = "mediatek,mt6893-smi-common";
+		reg = <0 0x1411f000 0 0x1000>;
+		clocks = <&dispsys CLK_MM_SMI_INFRA>, <&dispsys CLK_MM_SMI_COMMON>,
+			 <&dispsys CLK_MM_SMI_GALS>, <&dispsys CLK_MM_SMI_GALS>;
+		clock-names = "apb", "smi", "gals0", "gals1";
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+	};
+
+	larb0: larb@14118000 {
+		compatible = "mediatek,mt6893-smi-larb";
+		reg = <0 0x14118000 0 0x1000>;
+		clocks = <&dispsys CLK_MM_SMI_INFRA>, <&dispsys CLK_MM_SMI_COMMON>;
+		clock-names = "apb", "smi";
+		mediatek,smi = <&smi_common>;
+		mediatek,larb-id = <0>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+	};
+
+	disp_iommu: iommu@1411a000 {
+		compatible = "mediatek,mt6893-iommu-mm";
+		reg = <0 0x1411a000 0 0x1000>;
+		interrupts = <GIC_SPI 300 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&dispsys CLK_MM_SMI_IOMMU>;
+		clock-names = "bclk";
+		mediatek,larbs = <&larb0>;
+		#iommu-cells = <1>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+	};
+
+	mipi_tx0: dsi-phy@11e50000 {
+		compatible = "mediatek,mt6893-mipi-tx", "mediatek,mt8183-mipi-tx";
+		reg = <0 0x11e50000 0 0x1000>;
+		clocks = <&clk26m>;
+		clock-output-names = "mipi_tx0_pll";
+		#clock-cells = <0>;
+		#phy-cells = <0>;
+	};
+
+	ovl0: ovl@14000000 {
+		compatible = "mediatek,mt8192-disp-ovl";
+		reg = <0 0x14000000 0 0x1000>;
+		interrupts = <GIC_SPI 253 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&dispsys CLK_MM_DISP_OVL0>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+		iommus = <&disp_iommu 5>, <&disp_iommu 2>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				ovl0_in: endpoint {
+					remote-endpoint = <&mmsys_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				ovl0_out: endpoint {
+					remote-endpoint = <&rdma0_in>;
+				};
+			};
+		};
+	};
+
+	rdma0: rdma@14003000 {
+		compatible = "mediatek,mt8183-disp-rdma";
+		reg = <0 0x14003000 0 0x1000>;
+		interrupts = <GIC_SPI 255 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&dispsys CLK_MM_DISP_RDMA0>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+		iommus = <&disp_iommu 12>;
+		mediatek,rdma-fifo-size = <0x8c00>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				rdma0_in: endpoint {
+					remote-endpoint = <&ovl0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				rdma0_out: endpoint {
+					remote-endpoint = <&color0_in>;
+				};
+			};
+		};
+	};
+
+	color0: color@14007000 {
+		compatible = "mediatek,mt8173-disp-color";
+		reg = <0 0x14007000 0 0x1000>;
+		interrupts = <GIC_SPI 257 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&dispsys CLK_MM_DISP_COLOR0>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				color0_in: endpoint {
+					remote-endpoint = <&rdma0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				color0_out: endpoint {
+					remote-endpoint = <&ccorr0_in>;
+				};
+			};
+		};
+	};
+
+	ccorr0: ccorr@14008000 {
+		compatible = "mediatek,mt8192-disp-ccorr";
+		reg = <0 0x14008000 0 0x1000>;
+		interrupts = <GIC_SPI 258 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&dispsys CLK_MM_DISP_CCORR0>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				ccorr0_in: endpoint {
+					remote-endpoint = <&color0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				ccorr0_out: endpoint {
+					remote-endpoint = <&aal0_in>;
+				};
+			};
+		};
+	};
+
+	aal0: aal@14009000 {
+		compatible = "mediatek,mt8192-disp-aal", "mediatek,mt8183-disp-aal";
+		reg = <0 0x14009000 0 0x1000>;
+		interrupts = <GIC_SPI 259 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&dispsys CLK_MM_DISP_AAL0>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				aal0_in: endpoint {
+					remote-endpoint = <&ccorr0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				aal0_out: endpoint {
+					remote-endpoint = <&gamma0_in>;
+				};
+			};
+		};
+	};
+
+	gamma0: gamma@1400a000 {
+		compatible = "mediatek,mt8183-disp-gamma";
+		reg = <0 0x1400a000 0 0x1000>;
+		interrupts = <GIC_SPI 260 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&dispsys CLK_MM_DISP_GAMMA0>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				gamma0_in: endpoint {
+					remote-endpoint = <&aal0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				gamma0_out: endpoint {
+					remote-endpoint = <&postmask0_in>;
+				};
+			};
+		};
+	};
+
+	postmask0: postmask@1400d000 {
+		compatible = "mediatek,mt8192-disp-postmask";
+		reg = <0 0x1400d000 0 0x1000>;
+		interrupts = <GIC_SPI 277 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&dispsys CLK_MM_DISP_POSTMASK0>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				postmask0_in: endpoint {
+					remote-endpoint = <&gamma0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				postmask0_out: endpoint {
+					remote-endpoint = <&dither0_in>;
+				};
+			};
+		};
+	};
+
+	dither0: dither@1400b000 {
+		compatible = "mediatek,mt8183-disp-dither";
+		reg = <0 0x1400b000 0 0x1000>;
+		interrupts = <GIC_SPI 261 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&dispsys CLK_MM_DISP_DITHER0>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				dither0_in: endpoint {
+					remote-endpoint = <&postmask0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				dither0_out: endpoint {
+					remote-endpoint = <&dsc0_in>;
+				};
+			};
+		};
+	};
+
+	dsc0: dsc@14124000 {
+		compatible = "mediatek,mt6893-disp-dsc";
+		reg = <0 0x14124000 0 0x1000>;
+		interrupts = <GIC_SPI 281 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&dispsys CLK_MM_DISP_DSC_WRAP>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				dsc0_in: endpoint {
+					remote-endpoint = <&dither0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				dsc0_out: endpoint {
+					remote-endpoint = <&dsi0_in>;
+				};
+			};
+		};
+	};
+
+	dsi0: dsi@1400e000 {
+		compatible = "mediatek,mt6893-dsi";
+		reg = <0 0x1400e000 0 0x1000>;
+		interrupts = <GIC_SPI 262 IRQ_TYPE_LEVEL_HIGH>;
+		clocks = <&dispsys CLK_MM_DSI0_MM_CLK>, <&dispsys CLK_MM_DSI0_INTF_CLK>, <&mipi_tx0>;
+		power-domains = <&spm MT6893_POWER_DOMAIN_DISP>;
+		clock-names = "engine", "digital", "hs";
+		phys = <&mipi_tx0>;
+		phy-names = "dphy";
+		pinctrl-names = "default";
+		pinctrl-0 = <&dsi_te>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				dsi0_in: endpoint {
+					remote-endpoint = <&dsc0_out>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+				dsi0_out: endpoint {
+					remote-endpoint = <&panel_in>;
+				};
+			};
+		};
+
+		panel@0 {
+			compatible = "samsung,ams643ye01-pvt";
+			reg = <0>;
+			reset-gpios = <&pio 42 GPIO_ACTIVE_LOW>;
+			vci-supply = <&lcd_vci>;
+			vdd-supply = <&lcd_vdd>;
+
+			port {
+				panel_in: endpoint {
+					remote-endpoint = <&dsi0_out>;
+				};
+			};
+		};
+	};
+};

@@ -20,6 +20,9 @@
 #define UNIVPLL_CON0	0x308
 #define UNIVPLL_CON1	0x30c
 #define UNIVPLL_CON3	0x314
+#define MMPLL_CON0	0x360
+#define MMPLL_CON1	0x364
+#define MMPLL_CON3	0x36c
 #define PLL_PCW		GENMASK(21, 0)
 #define PLL_POSTDIV	GENMASK(26, 24)
 
@@ -135,6 +138,10 @@ static const struct mt6893_pll_desc mt6893_plls[] = {
 #ifdef CONFIG_ARM64_OP6893_21651_USB_DRD
 	{ CLK_APMIXED_UNIVPLL, "mt6893_univpll", &mt6893_pll_ops,
 	  UNIVPLL_CON0, UNIVPLL_CON1, UNIVPLL_CON3 },
+#endif
+#ifdef CONFIG_ARM64_OP6893_21651_NATIVE_DISPLAY
+	{ CLK_APMIXED_MMPLL, "mt6893_mmpll", &mt6893_pll_ops,
+	  MMPLL_CON0, MMPLL_CON1, MMPLL_CON3 },
 #endif
 };
 

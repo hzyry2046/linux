@@ -48,14 +48,12 @@
 								 BIT(29) | BIT(31))
 #define MT6893_TOP_AXI_PROT_EN_MM_2_MDP_STEP6			(BIT(1) | BIT(7) | BIT(9) | BIT(11))
 #define MT6893_TOP_AXI_PROT_EN_SUB_INFRA_VDNR_MDP_STEP7		BIT(20)
-#define MT6893_TOP_AXI_PROT_EN_MM_DISP_STEP1			(BIT(0) | BIT(6) | BIT(8) |	\
-								 BIT(10) | BIT(12) | BIT(14) |	\
-								 BIT(16) | BIT(20) | BIT(24) |	\
-								 BIT(26))
-#define MT6893_TOP_AXI_PROT_EN_DISP_STEP2			BIT(6)
-#define MT6893_TOP_AXI_PROT_EN_MM_DISP_STEP3			(BIT(1) | BIT(7) | BIT(9) |	\
-								 BIT(15) | BIT(17) | BIT(21) |	\
-								 BIT(25) | BIT(27))
+#define MT6893_TOP_AXI_PROT_EN_MM_DISP_STEP1	(BIT(0) | BIT(10) | BIT(12) | \
+						 BIT(14) | BIT(16) | BIT(20) | \
+						 BIT(24) | BIT(26))
+#define MT6893_TOP_AXI_PROT_EN_DISP_STEP2	BIT(6)
+#define MT6893_TOP_AXI_PROT_EN_MM_DISP_STEP3	(BIT(1) | BIT(15) | BIT(17) | \
+						 BIT(21) | BIT(25) | BIT(27))
 #define MT6893_TOP_AXI_PROT_EN_SUB_INFRA_VDNR_DISP_STEP4	BIT(21)
 #define MT6893_TOP_AXI_PROT_EN_2_ADSP				BIT(3)
 #define MT6893_TOP_AXI_PROT_EN_2_CAM_STEP1			BIT(1)
@@ -416,23 +414,24 @@ static const struct scpsys_domain_data scpsys_domain_data_mt6893[] = {
 		.pwr_sta2nd_offs = 0x170,
 		.sram_pdn_bits = BIT(8),
 		.sram_pdn_ack_bits = BIT(12),
+		/* The vendor sequence polls acknowledge only when setting protection. */
 		.bp_cfg = {
-			BUS_PROT_WR(INFRA,
+			BUS_PROT_WR_IGN(INFRA,
 				    MT6893_TOP_AXI_PROT_EN_MM_DISP_STEP1,
 				    MT8192_TOP_AXI_PROT_EN_MM_SET,
 				    MT8192_TOP_AXI_PROT_EN_MM_CLR,
 				    MT8192_TOP_AXI_PROT_EN_MM_STA1),
-			BUS_PROT_WR(INFRA,
+			BUS_PROT_WR_IGN(INFRA,
 				    MT6893_TOP_AXI_PROT_EN_DISP_STEP2,
 				    MT8192_TOP_AXI_PROT_EN_SET,
 				    MT8192_TOP_AXI_PROT_EN_CLR,
 				    MT8192_TOP_AXI_PROT_EN_STA1),
-			BUS_PROT_WR(INFRA,
+			BUS_PROT_WR_IGN(INFRA,
 				    MT6893_TOP_AXI_PROT_EN_MM_DISP_STEP3,
 				    MT8192_TOP_AXI_PROT_EN_MM_SET,
 				    MT8192_TOP_AXI_PROT_EN_MM_CLR,
 				    MT8192_TOP_AXI_PROT_EN_MM_STA1),
-			BUS_PROT_WR(INFRA,
+			BUS_PROT_WR_IGN(INFRA,
 				    MT6893_TOP_AXI_PROT_EN_SUB_INFRA_VDNR_DISP_STEP4,
 				    MT6893_TOP_AXI_PROT_EN_SUB_INFRA_VDNR_SET,
 				    MT6893_TOP_AXI_PROT_EN_SUB_INFRA_VDNR_CLR,

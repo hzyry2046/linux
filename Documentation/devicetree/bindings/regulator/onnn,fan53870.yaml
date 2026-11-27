@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/regulator/onnn,fan53870.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ON Semiconductor FAN53870 PMIC
+
+maintainers:
+  - hzyry2046 <hzyry2046@163.com>
+
+description:
+  The FAN53870 is an I2C PMIC with seven low dropout regulators.
+
+properties:
+  compatible:
+    const: onnn,fan53870
+
+  reg:
+    maxItems: 1
+
+  vin34-supply:
+    description: Input supply for LDO3 and LDO4.
+
+  regulators:
+    type: object
+    patternProperties:
+      "^LDO[1-7]$":
+        type: object
+        $ref: regulator.yaml#
+        unevaluatedProperties: false
+    additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - regulators
+
+additionalProperties: false

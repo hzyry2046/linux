@@ -129,6 +129,7 @@ static int __init enable_21651_display(void *dst)
 #if defined(CONFIG_ARM64_OP6893_21651) && defined(CONFIG_ARM64_OP6893_FBKICK)
 	static const char * const paths[] = { "/framebuffer@76e10000", "/fbkick" };
 	const void *reg;
+	int nodes[ARRAY_SIZE(paths)];
 	int node, len, i, ret;
 
 	node = fdt_path_offset(dst, "/reserved-memory/mblock-18-framebuffer");
@@ -138,6 +139,17 @@ static int __init enable_21651_display(void *dst)
 	if (!reg || len != 16 || get_unaligned_be64(reg) != 0x76e10000 ||
 	    get_unaligned_be64(reg + 8) != 0x1df0000)
 		return 0;
+
+	/* The native display board tree omits both LK display consumers. */
+	for (i = 0; i < ARRAY_SIZE(paths); i++)
+		nodes[i] = fdt_path_offset(dst, paths[i]);
+
+	if (nodes[0] == -FDT_ERR_NOTFOUND && nodes[1] == -FDT_ERR_NOTFOUND)
+		return 0;
+
+	for (i = 0; i < ARRAY_SIZE(paths); i++)
+		if (nodes[i] < 0)
+			return nodes[i];
 
 	for (i = 0; i < ARRAY_SIZE(paths); i++) {
 		node = fdt_path_offset(dst, paths[i]);

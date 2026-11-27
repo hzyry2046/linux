@@ -1054,7 +1054,7 @@ void mtk_mutex_enable(struct mtk_mutex *mutex)
 
 	writel(1, mtx->regs + DISP_REG_MUTEX_EN(mutex->id));
 
-	dev_info(mtx->dev, "mutex %u enabled: EN=%x MOD=%x SOF=%x\n",
+	dev_dbg(mtx->dev, "mutex %u enabled: EN=%x MOD=%x SOF=%x\n",
 		 mutex->id,
 		 readl(mtx->regs + DISP_REG_MUTEX_EN(mutex->id)),
 		 readl(mtx->regs + DISP_REG_MUTEX_MOD(mtx, mutex->id, mutex->id)),

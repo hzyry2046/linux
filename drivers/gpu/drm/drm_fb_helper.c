@@ -321,11 +321,13 @@ static void drm_fb_helper_fb_dirty(struct drm_fb_helper *helper)
 	unsigned long flags;
 	int ret;
 
-	mutex_lock(&helper->lock);
-	crtc_index = drm_fb_helper_find_crtc_index(helper);
-	if (crtc_index >= 0)
-		drm_client_modeset_wait_for_vblank(&helper->client, crtc_index);
-	mutex_unlock(&helper->lock);
+	if (!dev->mode_config.fbdev_skip_damage_vblank) {
+		mutex_lock(&helper->lock);
+		crtc_index = drm_fb_helper_find_crtc_index(helper);
+		if (crtc_index >= 0)
+			drm_client_modeset_wait_for_vblank(&helper->client, crtc_index);
+		mutex_unlock(&helper->lock);
+	}
 
 	if (drm_WARN_ON_ONCE(dev, !helper->funcs->fb_dirty))
 		return;

@@ -94,6 +94,70 @@ static struct clk_hw *mt6893_axi_register(struct device *dev)
 	return &axi->hw;
 }
 
+#ifdef CONFIG_ARM64_OP6893_21651_NATIVE_DISPLAY
+struct mt6893_disp_observer {
+	struct clk_hw hw;
+	struct regmap *map;
+	struct clk *inputs[4];
+};
+
+static unsigned long mt6893_disp_rate(struct clk_hw *hw, unsigned long parent_rate)
+{
+	struct mt6893_disp_observer *disp = container_of(hw, typeof(*disp), hw);
+	static const u8 source[] = { 0, 2, 1, 3, 2, 2, 3, 2, 1, 3 };
+	static const u8 divisor[] = { 1, 12, 10, 12, 10, 8, 7, 6, 4, 10 };
+	unsigned int before, after, sel;
+	unsigned long rate;
+
+	if (regmap_read(disp->map, 0x20, &before) || (before & BIT(7)))
+		return 0;
+
+	sel = before & GENMASK(3, 0);
+	if (sel >= ARRAY_SIZE(source))
+		return 0;
+
+	rate = clk_get_rate(disp->inputs[source[sel]]);
+	if (regmap_read(disp->map, 0x20, &after) || ((before ^ after) & 0x8f))
+		return 0;
+
+	return rate / divisor[sel];
+}
+
+static const struct clk_ops mt6893_disp_ops = {
+	.recalc_rate = mt6893_disp_rate,
+};
+
+static struct clk_hw *mt6893_disp_register(struct device *dev)
+{
+	static const char * const inputs[] = { "clk26m", "mainpll", "univpll", "mmpll" };
+	struct clk_init_data init = {
+		.name = "disp_sel",
+		.ops = &mt6893_disp_ops,
+		.flags = CLK_GET_RATE_NOCACHE,
+	};
+	struct mt6893_disp_observer *disp;
+	int i, ret;
+
+	disp = devm_kzalloc(dev, sizeof(*disp), GFP_KERNEL);
+	if (!disp)
+		return ERR_PTR(-ENOMEM);
+
+	disp->map = syscon_node_to_regmap(dev->of_node);
+	if (IS_ERR(disp->map))
+		return ERR_CAST(disp->map);
+
+	for (i = 0; i < ARRAY_SIZE(inputs); i++) {
+		disp->inputs[i] = devm_clk_get(dev, inputs[i]);
+		if (IS_ERR(disp->inputs[i]))
+			return ERR_CAST(disp->inputs[i]);
+	}
+
+	disp->hw.init = &init;
+	ret = devm_clk_hw_register(dev, &disp->hw);
+	return ret ? ERR_PTR(ret) : &disp->hw;
+}
+#endif
+
 static DEFINE_SPINLOCK(mt6893_pmif_lock);
 
 #ifdef CONFIG_COMMON_CLK_MT6893_SCP_BOOTSTRAP
@@ -418,6 +482,7 @@ static int mt6893_pmif_clk_probe(struct platform_device *pdev)
 	struct regmap *map;
 	struct clk *parent;
 	struct clk_hw *axi = NULL;
+	struct clk_hw *disp = NULL;
 	unsigned int num_clks;
 	bool top;
 	int ret;
@@ -439,6 +504,12 @@ static int mt6893_pmif_clk_probe(struct platform_device *pdev)
 	}
 
 	if (top) {
+#ifdef CONFIG_ARM64_OP6893_21651_NATIVE_DISPLAY
+		disp = mt6893_disp_register(dev);
+		if (IS_ERR(disp))
+			return dev_err_probe(dev, PTR_ERR(disp),
+					     "DISP clock observer unavailable\n");
+#endif
 		axi = mt6893_axi_register(dev);
 		if (IS_ERR(axi))
 			return dev_err_probe(dev, PTR_ERR(axi), "AXI observer unavailable\n");
@@ -470,6 +541,8 @@ static int mt6893_pmif_clk_probe(struct platform_device *pdev)
 		/* AXI is a 1:1 alias of the selector output in the vendor tree. */
 		data->hws[CLK_TOP_AXI] = axi;
 		data->hws[CLK_TOP_AXI_SEL] = axi;
+		if (disp)
+			data->hws[CLK_TOP_DISP_SEL] = disp;
 		ret = mtk_clk_register_factors(top_factors, ARRAY_SIZE(top_factors), data);
 		if (ret)
 			goto free_data;

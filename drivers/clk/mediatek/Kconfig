@@ -458,7 +458,7 @@ config COMMON_CLK_MT6893_MFGCFG
 
 config COMMON_CLK_MT6893_MMSYS
 	tristate "Clock driver for MediaTek MT6893 mmsys"
-	depends on COMMON_CLK_MT6893
+	depends on COMMON_CLK_MT6893 || COMMON_CLK_MT6893_PMIF
 	default COMMON_CLK_MT6893
 	help
 	  This driver supports MediaTek MT6893 mmsys clocks.

@@ -9,6 +9,7 @@
 #include <linux/io.h>
 #include <linux/iopoll.h>
 #include <linux/mfd/syscon.h>
+#include <linux/moduleparam.h>
 #include <linux/of.h>
 #include <linux/of_clk.h>
 #include <linux/platform_device.h>
@@ -701,6 +702,8 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 {
 	struct scpsys_domain *pd = container_of(genpd, struct scpsys_domain, genpd);
 	struct scpsys *scpsys = pd->scpsys;
+	bool trace = IS_ENABLED(CONFIG_ARM64_OP6893_21651_NATIVE_DISPLAY) &&
+		     pd->data && pd->data->name && !strcmp(pd->data->name, "disp");
 	int ret;
 
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_MT6893_MD_PWRSEQ)) {
@@ -711,6 +714,8 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 		return ret;
 	}
 
+	if (trace)
+		dev_info(scpsys->dev, "OP6893 DISP: power-on entry\n");
 	ret = scpsys_regulator_enable(pd->supply);
 	if (ret)
 		return ret;
@@ -740,6 +745,8 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 	 * into two parts, one is set before subsys clocks enabled, and another
 	 * need to enable after subsys clocks enable.
 	 */
+	if (trace)
+		dev_info(scpsys->dev, "OP6893 DISP: power acknowledged\n");
 	ret = scpsys_bus_protect_disable(pd, BUS_PROT_IGNORE_SUBCLK);
 	if (ret < 0)
 		goto err_pwr_ack;
@@ -758,15 +765,21 @@ static int scpsys_power_on(struct generic_pm_domain *genpd)
 
 	if (!MTK_SCPD_CAPS(pd, MTK_SCPD_SIMPLE_PWRSEQ) &&
 	    !MTK_SCPD_CAPS(pd, MTK_SCPD_MODEM_SECURE_PWRSEQ)) {
+		if (trace)
+			dev_info(scpsys->dev, "OP6893 DISP: requesting SRAM power-up\n");
 		ret = scpsys_sram_enable(pd);
 		if (ret < 0)
 			goto err_disable_subsys_clks;
 	}
 
+	if (trace)
+		dev_info(scpsys->dev, "OP6893 DISP: SRAM acknowledged, releasing protection\n");
 	ret = scpsys_bus_protect_disable(pd, 0);
 	if (ret < 0)
 		goto err_disable_sram;
 
+	if (trace)
+		dev_info(scpsys->dev, "OP6893 DISP: protection released\n");
 	if (MTK_SCPD_CAPS(pd, MTK_SCPD_STRICT_BUS_PROTECTION)) {
 		ret = clk_bulk_prepare_enable(pd->num_subsys_clks,
 					      pd->subsys_clks);
@@ -1042,6 +1055,29 @@ generic_pm_domain *scpsys_add_one_domain(struct scpsys *scpsys, struct device_no
 		if (ret < 0) {
 			dev_err(scpsys->dev, "%pOF: failed to power on domain: %d\n", node, ret);
 			goto err_put_subsys_clocks;
+		}
+
+		/*
+		 * On the 21651 native display path, the bootloader's running
+		 * pipeline can leave DSI waiting for pixels on the first
+		 * commit. Cycle DISP before exposing it to its consumers.
+		 */
+		if (IS_ENABLED(CONFIG_ARM64_OP6893_21651_NATIVE_DISPLAY) &&
+		    scpsys->soc_data == &mt6893_scpsys_data &&
+		    id == MT6893_POWER_DOMAIN_DISP) {
+			ret = scpsys_power_off_internal(pd);
+			if (ret) {
+				dev_err(scpsys->dev, "Failed to power off DISP for handoff: %d\n",
+					ret);
+				goto err_put_subsys_clocks;
+			}
+
+			ret = scpsys_power_on(&pd->genpd);
+			if (ret) {
+				dev_err(scpsys->dev, "Failed to power on DISP after handoff: %d\n",
+					ret);
+				goto err_put_subsys_clocks;
+			}
 		}
 
 		if (MTK_SCPD_CAPS(pd, MTK_SCPD_ALWAYS_ON))
@@ -1411,6 +1447,12 @@ static const struct of_device_id scpsys_of_match[] = {
 	{ }
 };
 
+#ifdef CONFIG_ARM64_OP6893_21651_NATIVE_DISPLAY
+static bool hold_disp_probe;
+module_param(hold_disp_probe, bool, 0644);
+MODULE_PARM_DESC(hold_disp_probe, "Hold the MT6893 power driver for a manual reprobe");
+#endif
+
 static int scpsys_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -1421,6 +1463,12 @@ static int scpsys_probe(struct platform_device *pdev)
 	int num_domains, ret;
 	u8 num_added_pds = 0;
 	u8 *added_pds_idx;
+
+#ifdef CONFIG_ARM64_OP6893_21651_NATIVE_DISPLAY
+	if (READ_ONCE(hold_disp_probe) &&
+	    of_device_is_compatible(np, "mediatek,mt6893-power-controller"))
+		return -ENODEV;
+#endif
 
 	soc = of_device_get_match_data(&pdev->dev);
 	if (!soc) {

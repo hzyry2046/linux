@@ -53,6 +53,13 @@ mtk_drm_mode_fb_create(struct drm_device *dev,
 	if (info->num_planes != 1)
 		return ERR_PTR(-EINVAL);
 
+	/*
+	 * The 21651 command-mode panel only receives pixels after a commit.
+	 * Turn fbdev damage into commits so console writes refresh the panel.
+	 */
+	if (dev->mode_config.fbdev_skip_damage_vblank)
+		return drm_gem_fb_create_with_dirty(dev, file, info, cmd);
+
 	return drm_gem_fb_create(dev, file, info, cmd);
 }
 
@@ -507,6 +514,9 @@ static int mtk_drm_kms_init(struct drm_device *drm)
 	 */
 	drm->mode_config.max_width = 4096;
 	drm->mode_config.max_height = 4096;
+	drm->mode_config.fbdev_skip_damage_vblank =
+		IS_ENABLED(CONFIG_ARM64_OP6893_21651_NATIVE_DISPLAY) &&
+		!mtk_drm_adopt_lk_display();
 	drm->mode_config.funcs = &mtk_drm_mode_config_funcs;
 	drm->mode_config.helper_private = &mtk_drm_mode_config_helpers;
 
@@ -1060,6 +1070,8 @@ static const struct of_device_id mtk_ddp_comp_dt_ids[] = {
 	  .data = (void *)MTK_DISP_DITHER },
 	{ .compatible = "mediatek,mt8183-disp-dither",
 	  .data = (void *)MTK_DISP_DITHER },
+	{ .compatible = "mediatek,mt6893-disp-dsc",
+	  .data = (void *)MTK_DISP_DSC },
 	{ .compatible = "mediatek,mt8195-disp-dsc",
 	  .data = (void *)MTK_DISP_DSC },
 	{ .compatible = "mediatek,mt8167-disp-gamma",
@@ -1389,9 +1401,17 @@ static int mtk_drm_of_ddp_path_build(struct device *dev, struct device_node *nod
 	return 0;
 }
 
+/*
+ * Keep Chopin's LK path by default. Native display images must also keep
+ * the firmware framebuffer and any board-specific refresh driver disabled.
+ */
+static bool adopt_lk_display = !IS_ENABLED(CONFIG_ARM64_OP6893_21651_NATIVE_DISPLAY);
+module_param(adopt_lk_display, bool, 0444);
+MODULE_PARM_DESC(adopt_lk_display, "Keep the bootloader display");
+
 bool mtk_drm_adopt_lk_display(void)
 {
-	return true;
+	return adopt_lk_display;
 }
 
 static int mtk_drm_probe(struct platform_device *pdev)
