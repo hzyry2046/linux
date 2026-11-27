@@ -2671,9 +2671,20 @@ config ARM64_OP6893_CONN_PREFLIGHT
 	  CONN domain cycle and guarded digital-ID reads. Neither establishes
 	  full ownership of inherited upstream inputs.
 
+config ARM64_OP6893_21651_NATIVE_DISPLAY
+	bool "Use the experimental OP6893 21651 native display"
+	depends on ARM64_OP6893_21651_USB_OTG_GPIO && !ARM64_OP6893_21651_MODEM
+	depends on DRM_MEDIATEK=y && !DRM_MEDIATEK_V2 && MTK_IOMMU=y
+	depends on PHY_MTK_MIPI_DSI=y && DRM_PANEL_SAMSUNG_AMS643YE01=y
+	depends on REGULATOR_FAN53870=y && COMMON_CLK_MT6893_PMIF
+	select COMMON_CLK_MT6893_MMSYS
+	help
+	  Use the native DRM panel and DSC path instead of the LK framebuffer.
+	  This is an opt-in bring-up image for a 21651 with the PVT panel.
+
 config ARM64_OP6893_FBKICK
 	bool "OP6893 early framebuffer using the LK display handoff"
-	depends on ARM64_OP6893_BRINGUP && FB
+	depends on ARM64_OP6893_BRINGUP && FB && !ARM64_OP6893_21651_NATIVE_DISPLAY
 
 config ARM64_OP6893_21651_MODEM
 	bool "Enable the op6893 21651 modem resource owners"
@@ -2686,6 +2697,15 @@ config ARM64_OP6893_21651_MODEM
 	  Only one owner may snapshot the LK tag buffer, so this tree disables
 	  the metadata-only handoff node. Select it only for an explicit modem
 	  bring-up image.
+
+config ARM64_OP6893_21651_WLAN_NO_IRQ_WAKE
+	bool "Suppress WLAN AXI IRQ wake for OP6893 21651 diagnostics"
+	depends on ARM64_OP6893_21651 && SUSPEND
+	help
+	  Keep the WLAN AXI interrupts operational but do not arm them as
+	  system wake sources. Enable only for controlled suspend and RTC
+	  diagnostics that need to isolate WLAN-triggered wakeups.
+	  Leave disabled to preserve the normal WLAN wake policy.
 
 endmenu # "Boot options"
 

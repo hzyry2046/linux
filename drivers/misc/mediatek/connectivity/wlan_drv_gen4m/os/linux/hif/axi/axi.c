@@ -1144,6 +1144,18 @@ void glBusRelease(void *pvData)
  */
 /*----------------------------------------------------------------------------*/
 
+static void glBusEnableIrqWake(unsigned int irq)
+{
+	int ret;
+
+	if (IS_ENABLED(CONFIG_ARM64_OP6893_21651_WLAN_NO_IRQ_WAKE) &&
+	    of_machine_is_compatible("realme,op6893"))
+		return;
+	ret = enable_irq_wake(irq);
+	if (ret)
+		DBGLOG(INIT, INFO, "enable_irq_wake(%u) ERROR(%d)\n", irq, ret);
+}
+
 int32_t glBusSetIrq(void *pvData, void *pfnIsr, void *pvCookie)
 {
 	struct net_device *prNetDevice = NULL;
@@ -1153,7 +1165,7 @@ int32_t glBusSetIrq(void *pvData, void *pfnIsr, void *pvCookie)
 #ifdef CONFIG_OF
 	struct device_node *node = NULL;
 #endif
-	int ret = 0, en_wake_ret = 0;
+	int ret = 0;
 
 	ASSERT(pvData);
 	if (!pvData)
@@ -1189,16 +1201,14 @@ int32_t glBusSetIrq(void *pvData, void *pfnIsr, void *pvCookie)
 	       prHifInfo->u4IrqId);
 #endif /*end of CFG_SUPPORT_CONNINFRA == 1*/
 	ret = request_irq(prHifInfo->u4IrqId, mtk_axi_interrupt, IRQF_SHARED,
+	
 			  prNetDevice->name, prGlueInfo);
 	if (ret != 0) {
 		DBGLOG(INIT, INFO, "request_irq(%u) ERROR(%d)\n",
 				prHifInfo->u4IrqId, ret);
 		goto exit;
 	}
-	en_wake_ret = enable_irq_wake(prHifInfo->u4IrqId);
-	if (en_wake_ret)
-		DBGLOG(INIT, INFO, "enable_irq_wake(%u) ERROR(%d)\n",
-				prHifInfo->u4IrqId, en_wake_ret);
+	glBusEnableIrqWake(prHifInfo->u4IrqId);
 #if (CFG_SUPPORT_CONNINFRA == 1)
 	ret = request_threaded_irq(prHifInfo->u4IrqId_1,
 		mtk_sw_int_top_handler,
@@ -1212,10 +1222,7 @@ int32_t glBusSetIrq(void *pvData, void *pfnIsr, void *pvCookie)
 		goto exit;
 	}
 
-	en_wake_ret = enable_irq_wake(prHifInfo->u4IrqId_1);
-	if (en_wake_ret)
-		DBGLOG(INIT, INFO, "enable_irq_wake(%u) ERROR(%d)\n",
-				prHifInfo->u4IrqId_1, en_wake_ret);
+	glBusEnableIrqWake(prHifInfo->u4IrqId_1);
 #endif
 
 exit:
